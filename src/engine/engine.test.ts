@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { fixedManager } from "../manager";
 import { seededRng } from "../random";
 import { strongVsWeak } from "../test-helpers";
 import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
-import { assignSlots } from "./formation";
+import { anchor, assignSlots, keeperPosition } from "./formation";
 import { distToSegment, moveTowards, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
-import { createMatchState, simulateEventMatch } from "./match";
-import { giveBall, type MatchState } from "./state";
+import { applyTactics, createMatchState, simulateEventMatch } from "./match";
+import { giveBall, toTeamFrame, type MatchState } from "./state";
 import { assessPass, baseXg, looseBallWinChance } from "./valuation";
 
 const world = strongVsWeak();
@@ -54,9 +55,9 @@ describe("valuation", () => {
     passer!.pos = { x: 40, y: 34 };
     receiver!.pos = { x: 60, y: 34 };
 
-    const open = assessPass(state, passer!, receiver!).success;
+    const open = assessPass(state, passer!, receiver!.pos).success;
     defender.pos = { x: 50, y: 34 };
-    const blocked = assessPass(state, passer!, receiver!);
+    const blocked = assessPass(state, passer!, receiver!.pos);
     expect(blocked.success).toBeLessThan(open);
     expect(blocked.risks.map((r) => r.player.id)).toContain(defender.id);
   });
@@ -79,6 +80,8 @@ describe("decisions", () => {
     const striker = state.players.find((p) => p.side === "home" && p.position === "FWD")!;
     striker.pos = { x: PITCH_LENGTH - 8, y: PITCH_WIDTH / 2 };
     giveBall(state, striker);
+    const keeper = state.players.find((p) => p.side === "away" && p.position === "GK")!;
+    keeper.pos = keeperPosition(state, keeper);
     const best = scoreOptions(state, striker).reduce((a, b) => (b.utility > a.utility ? b : a));
     expect(best.action.kind).toBe("shoot");
   });
@@ -125,5 +128,82 @@ describe("full match", () => {
       else if (r.homeGoals < r.awayGoals) losses++;
     }
     expect(wins).toBeGreaterThan(losses * 2);
+  });
+});
+
+describe("tactics in the engine", () => {
+  const balanced = fixedManager({ formation: "4-4-2", mentality: 0 });
+  const balancedState = () =>
+    createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), { home: balanced, away: balanced });
+
+  test("the starting lineup follows the manager's formation", () => {
+    const state = createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+      home: fixedManager({ formation: "3-4-3", mentality: 0 }),
+      away: balanced,
+    });
+    const lines = (side: "home" | "away") =>
+      state.players.filter((p) => p.side === side).reduce<Record<string, number>>((c, p) => ({ ...c, [p.position]: (c[p.position] ?? 0) + 1 }), {});
+    expect(lines("home")).toEqual({ GK: 1, DEF: 3, MID: 4, FWD: 3 });
+    expect(lines("away")).toEqual({ GK: 1, DEF: 4, MID: 4, FWD: 2 });
+  });
+
+  test("a formation change moves players between lines and is logged", () => {
+    const state = balancedState();
+    state.time = 600;
+    applyTactics(state, "home", { formation: "5-4-1", mentality: -1 });
+    const home = state.players.filter((p) => p.side === "home");
+    expect(home.filter((p) => p.position === "DEF")).toHaveLength(5);
+    expect(home.filter((p) => p.position === "FWD")).toHaveLength(1);
+    // The new back five sits deeper than the midfield
+    const depth = (pos: string) => Math.max(...home.filter((p) => p.position === pos).map((p) => p.slot.x));
+    expect(depth("DEF")).toBeLessThan(Math.min(...home.filter((p) => p.position === "MID").map((p) => p.slot.x)));
+
+    const event = state.events.at(-1)!;
+    expect(event).toMatchObject({ type: "tactics", side: "home", time: 600, formation: "5-4-1", mentality: -1 });
+    // 4-4-2 → 5-4-1: the deepest midfielder drops into defence, a forward drops into midfield
+    expect(event.type === "tactics" && event.moved.map((m) => `${m.from}->${m.to}`).sort()).toEqual(["FWD->MID", "MID->DEF"]);
+  });
+
+  test("the same tactics again change nothing", () => {
+    const state = balancedState();
+    const before = state.events.length;
+    applyTactics(state, "home", state.teams.home.tactics);
+    expect(state.events).toHaveLength(before);
+  });
+
+  test("attacking teams commit more players forward when they have the ball", () => {
+    const shapeDepth = (mentality: -2 | 2) => {
+      const state = createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+        home: fixedManager({ formation: "4-4-2", mentality }),
+      });
+      const mid = state.players.find((p) => p.side === "home" && p.position === "MID")!;
+      return toTeamFrame("home", anchor(state, mid, true)).x;
+    };
+    expect(shapeDepth(2)).toBeGreaterThan(shapeDepth(-2));
+  });
+
+  test("very defensive concedes less than very attacking against the same opponent", () => {
+    const conceded = (mentality: -2 | 2) => {
+      const rng = seededRng(21);
+      let total = 0;
+      for (let i = 0; i < 40; i++) {
+        total += simulateEventMatch(world, world.clubs.strong!, world.clubs.weak!, rng, {
+          home: fixedManager({ formation: "4-4-2", mentality }),
+          away: fixedManager({ formation: "4-4-2", mentality: 0 }),
+        }).awayGoals;
+      }
+      return total;
+    };
+    expect(conceded(-2)).toBeLessThan(conceded(2));
+  });
+
+  test("managers change tactics during a match", () => {
+    let changes = 0;
+    const rng = seededRng(9);
+    for (let i = 0; i < 10; i++) {
+      const { events } = simulateEventMatch(world, world.clubs.strong!, world.clubs.weak!, rng);
+      changes += events.filter((e) => e.type === "tactics" && e.time > 0).length;
+    }
+    expect(changes).toBeGreaterThan(0);
   });
 });

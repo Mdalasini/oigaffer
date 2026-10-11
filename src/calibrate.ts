@@ -60,6 +60,7 @@ function summarise(name: string, engine: MatchEngine) {
     console.log(`    shots           ${per(shots.length)}  (on target ${((100 * shots.filter((e) => e.type === "shot" && (e.outcome === "goal" || e.outcome === "saved")).length) / shots.length).toFixed(0)}%)`);
     console.log(`    xG              ${(shots.reduce((s, e) => s + (e.type === "shot" ? e.xg : 0), 0) / matches / 2).toFixed(2)}`);
     console.log(`    tackles won     ${per(count((e) => e.type === "tackle" && e.won))}`);
+    console.log(`    through balls   ${per(count((e) => e.type === "through_ball"))}`);
     console.log(`    carries         ${per(count((e) => e.type === "dribble" && e.defenderId === null))}`);
     console.log(`    take-ons won    ${per(count((e) => e.type === "dribble" && e.defenderId !== null))}`);
     console.log(`    clearances      ${per(count((e) => e.type === "clearance"))}`);

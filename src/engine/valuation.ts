@@ -1,12 +1,16 @@
 import {
   INTERCEPT_FALLOFF,
   INTERCEPT_MAX,
+  KEEPER_SPEED,
+  PRESS_SPEED,
   PASS_CLEAR_START,
   PASS_BASE,
   PASS_DISTANCE_PENALTY,
   PASS_SKILL,
   POSSESSION_VALUE,
   PROGRESS_VALUE,
+  RACE_SHARPNESS,
+  RUN_SPEED,
   PRESSURE_PASS_FACTOR,
   PRESSURE_RANGE,
   SHOT_PRESSURE_FACTOR,
@@ -68,15 +72,15 @@ export interface PassAssessment {
 
 // Accuracy falls with distance and pressure; every opponent near the lane
 // gets a chance to cut it out
-export function assessPass(state: MatchState, passer: MatchPlayer, receiver: MatchPlayer): PassAssessment {
-  const d = dist(passer.pos, receiver.pos);
+export function assessPass(state: MatchState, passer: MatchPlayer, target: Vec): PassAssessment {
+  const d = dist(passer.pos, target);
   let success = (PASS_BASE - PASS_DISTANCE_PENALTY * d) * (1 - PASS_SKILL * (20 - passer.attributes.passing));
   if (underPressure(state, passer)) success *= PRESSURE_PASS_FACTOR;
 
-  const laneStart = add(passer.pos, scale(normalize(sub(receiver.pos, passer.pos)), Math.min(PASS_CLEAR_START, d)));
+  const laneStart = add(passer.pos, scale(normalize(sub(target, passer.pos)), Math.min(PASS_CLEAR_START, d)));
   const risks: InterceptRisk[] = [];
   for (const o of opponents(state, passer)) {
-    const gap = distToSegment(o.pos, laneStart, receiver.pos);
+    const gap = distToSegment(o.pos, laneStart, target);
     const risk = INTERCEPT_MAX * Math.exp(-gap / INTERCEPT_FALLOFF) * (0.7 + challengeSkill(o) * 0.015);
     if (risk > 0.01) {
       risks.push({ player: o, risk });
@@ -94,4 +98,15 @@ export function looseBallWinChance(state: MatchState, p: MatchPlayer, pos: Vec):
   const dOurs = dist(ours.pos, pos) + 1;
   const dTheirs = dist(theirs.pos, pos) + 1;
   return dTheirs / (dOurs + dTheirs);
+}
+
+// Chance the runner beats every opponent (keeper included) to a ball played into space
+export function raceWinChance(state: MatchState, runner: MatchPlayer, target: Vec): number {
+  const runnerTime = dist(runner.pos, target) / RUN_SPEED;
+  let defenderTime = Infinity;
+  for (const o of opponents(state, runner)) {
+    const speed = o.position === "GK" ? KEEPER_SPEED : PRESS_SPEED;
+    defenderTime = Math.min(defenderTime, dist(o.pos, target) / speed);
+  }
+  return 1 / (1 + Math.exp(-RACE_SHARPNESS * (defenderTime - runnerTime)));
 }

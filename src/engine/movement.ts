@@ -1,6 +1,19 @@
-import { CONTROL_RADIUS, KEEPER_BOX, KEEPER_SPEED, MOVE_SPEED, PRESS_SPEED, PRESS_STAND_OFF, PRESS_TRIGGER } from "./constants";
+import {
+  CONTROL_RADIUS,
+  COVER_DROP,
+  KEEPER_BOX,
+  KEEPER_SPEED,
+  MARK_DISTANCE,
+  MARK_HALF_MARGIN,
+  MARK_RANGE,
+  MOVE_SPEED,
+  PRESS_SPEED,
+  PRESS_STAND_OFF,
+  PRESS_TRIGGER,
+  RUN_SPEED,
+} from "./constants";
 import { anchor, keeperPosition } from "./formation";
-import { dist, moveTowards, type Vec } from "./geometry";
+import { add, CENTRE, dist, moveTowards, normalize, scale, sub, type Vec } from "./geometry";
 import {
   emit,
   giveBall,
@@ -8,6 +21,7 @@ import {
   opponent,
   owner,
   ownGoal,
+  toTeamFrame,
   type MatchPlayer,
   type MatchState,
   type Side,
@@ -22,10 +36,17 @@ function chasers(state: MatchState): Set<MatchPlayer> {
   const result = new Set<MatchPlayer>();
   for (const side of sides) {
     const keeperCanCome = dist(state.ball.pos, ownGoal(side)) < KEEPER_BOX;
+    // Forwards stay up as an outlet rather than pressing; they still chase loose balls
     const candidates = state.players.filter(
-      (p) => p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome),
+      (p) =>
+        p.side === side &&
+        p.cooldown === 0 &&
+        (p.position !== "GK" || keeperCanCome) &&
+        (p.position !== "FWD" || !carrier),
     );
-    const chaser = nearest(candidates, state.ball.pos);
+    // A through ball's runner goes for it rather than whoever happens to be nearest
+    const runner = !carrier ? candidates.find((p) => p.id === state.ball.runnerId) : undefined;
+    const chaser = runner ?? nearest(candidates, state.ball.pos);
     if (!chaser) continue;
     const inZone = dist(anchor(state, chaser, false), state.ball.pos) < PRESS_TRIGGER;
     if (!carrier || inZone || chaser.position === "GK") result.add(chaser);
@@ -33,10 +54,55 @@ function chasers(state: MatchState): Set<MatchPlayer> {
   return result;
 }
 
+// Goal-side marking (the book's "interpose"): each free defender picks up the closest
+// attacker near their zone in their own half, nearest pairs first, one attacker each.
+function markingTargets(state: MatchState, defending: Side, busy: Set<MatchPlayer>): Map<MatchPlayer, Vec> {
+  const goal = ownGoal(defending);
+  const attackers = state.players.filter(
+    (p) =>
+      p.side !== defending &&
+      p.position !== "GK" &&
+      p.id !== state.ball.ownerId &&
+      toTeamFrame(defending, p.pos).x < CENTRE.x + MARK_HALF_MARGIN,
+  );
+  const markers = state.players.filter((p) => p.side === defending && p.position !== "GK" && !busy.has(p));
+
+  const pairs: { marker: MatchPlayer; attacker: MatchPlayer; d: number }[] = [];
+  for (const marker of markers) {
+    const home = anchor(state, marker, false);
+    for (const attacker of attackers) {
+      const d = dist(home, attacker.pos);
+      if (d < MARK_RANGE) pairs.push({ marker, attacker, d });
+    }
+  }
+  pairs.sort((a, b) => a.d - b.d);
+
+  const targets = new Map<MatchPlayer, Vec>();
+  const taken = new Set<MatchPlayer>();
+  for (const { marker, attacker } of pairs) {
+    if (targets.has(marker) || taken.has(attacker)) continue;
+    targets.set(marker, add(attacker.pos, scale(normalize(sub(goal, attacker.pos)), MARK_DISTANCE)));
+    taken.add(attacker);
+  }
+  return targets;
+}
+
+// Attackers can't stand beyond the second-last defender (or the ball, if it's further forward)
+function offsideLine(state: MatchState, attacking: Side): number {
+  const depths = state.players
+    .filter((p) => p.side !== attacking)
+    .map((p) => toTeamFrame(attacking, p.pos).x)
+    .sort((a, b) => b - a);
+  const ballX = toTeamFrame(attacking, state.ball.pos).x;
+  return Math.max(depths[1] ?? CENTRE.x, ballX);
+}
+
 export function moveOffBall(state: MatchState): void {
   const carrier = owner(state);
   const possessionSide = carrier?.side ?? state.ball.lastSide;
   const chasing = chasers(state);
+  const marking = markingTargets(state, opponent(possessionSide), chasing);
+  const onside = offsideLine(state, possessionSide);
 
   for (const p of state.players) {
     if (p === carrier) continue;
@@ -45,13 +111,27 @@ export function moveOffBall(state: MatchState): void {
     let standOff = 0;
     if (chasing.has(p)) {
       target = state.ball.pos;
-      speed = PRESS_SPEED;
+      speed = p.id === state.ball.runnerId ? RUN_SPEED : PRESS_SPEED;
       if (carrier) standOff = PRESS_STAND_OFF;
     } else if (p.position === "GK") {
       target = keeperPosition(state, p);
       speed = KEEPER_SPEED;
+    } else if (marking.has(p)) {
+      target = marking.get(p)!;
+      speed = MOVE_SPEED;
     } else {
       target = anchor(state, p, p.side === possessionSide);
+      if (p.side !== possessionSide && p.position === "DEF") {
+        // A spare defender covers the space behind the line
+        const t = toTeamFrame(p.side, target);
+        target = toTeamFrame(p.side, { x: Math.max(t.x - COVER_DROP, 6), y: t.y });
+      }
+      if (p.side === possessionSide) {
+        // Stay onside; forwards play right on the shoulder of the last defender
+        const t = toTeamFrame(p.side, target);
+        const x = p.position === "FWD" ? onside - 1 : Math.min(t.x, onside);
+        target = toTeamFrame(p.side, { x, y: t.y });
+      }
       speed = MOVE_SPEED;
     }
     p.pos = moveTowards(p.pos, target, speed, standOff);
@@ -67,6 +147,8 @@ export function pickUpLooseBall(state: MatchState): void {
     .filter((p) => p !== undefined);
   if (contenders.length === 0) return;
   const taker = contenders[Math.floor(state.rng() * contenders.length)]!;
-  giveBall(state, taker);
+  // A runner collecting a ball played into space is already moving and can go again straight away
+  const onTheRun = taker.id === state.ball.runnerId;
+  giveBall(state, taker, onTheRun ? 1 : undefined);
   emit(state, { type: "recovery", side: taker.side, playerId: taker.id });
 }

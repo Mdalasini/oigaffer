@@ -59,10 +59,16 @@ export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean 
   return won;
 }
 
-function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { kind: "pass" }): void {
+function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { kind: "pass" | "through" }): void {
   if (state.rng() < action.success) {
-    giveBall(state, action.receiver);
-    emit(state, { type: "pass", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
+    if (action.kind === "through") {
+      // Into space: the runner and the defence race for it
+      looseBall(state, scatter(state, action.target, 0, 3), action.receiver.id);
+      emit(state, { type: "through_ball", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
+    } else {
+      giveBall(state, action.receiver);
+      emit(state, { type: "pass", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
+    }
     return;
   }
 
@@ -76,7 +82,7 @@ function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { 
     emit(state, { type: "interception", side: interceptor.side, playerId: passer.id, interceptorId: interceptor.id });
     return;
   }
-  looseBall(state, scatter(state, action.receiver.pos, 4, 10));
+  looseBall(state, scatter(state, action.kind === "through" ? action.target : action.receiver.pos, 4, 10));
   emit(state, { type: "pass_astray", side: passer.side, playerId: passer.id });
 }
 
@@ -165,6 +171,7 @@ function resolveClear(state: MatchState, carrier: MatchPlayer, action: Action & 
 export function act(state: MatchState, carrier: MatchPlayer, action: Action): void {
   switch (action.kind) {
     case "pass":
+    case "through":
       return resolvePass(state, carrier, action);
     case "shoot":
       return resolveShot(state, carrier, action);

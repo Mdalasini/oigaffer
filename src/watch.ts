@@ -4,6 +4,7 @@ import { simulateEventMatch } from "./engine/match";
 import type { MatchEvent, Side } from "./engine/state";
 import { seededRng } from "./random";
 import { DEFAULT_CLUBS, generateWorld } from "./seed";
+import { MENTALITY_NAMES } from "./tactics";
 
 const seed = Number(process.argv[2] ?? Date.now());
 const rng = seededRng(seed);
@@ -19,6 +20,12 @@ console.log(`Seed ${seed}\n`);
 console.log(`${home!.name} ${result.homeGoals} - ${result.awayGoals} ${away!.name}\n`);
 
 for (const e of result.events) {
+  if (e.type === "tactics") {
+    const moves = e.moved.map((m) => `${playerName(m.playerId)} ${m.from}→${m.to}`).join(", ");
+    const when = e.time === 0 ? "  KO" : minute(e);
+    console.log(`${when}  ${clubName(e.side).padEnd(20)} ${e.formation}, ${MENTALITY_NAMES[e.mentality]}${moves && e.time > 0 ? `  (${moves})` : ""}`);
+    continue;
+  }
   if (e.type !== "shot") continue;
   const what = { goal: "GOAL", saved: "saved", off_target: "off target", blocked: "blocked" }[e.outcome];
   const line = `${minute(e)}  ${clubName(e.side).padEnd(20)} ${playerName(e.playerId).padEnd(18)} xG ${e.xg.toFixed(2)}  ${what}`;
@@ -46,6 +53,7 @@ const rows: [string, (s: Side) => string][] = [
   ["Tackles won", (s) => String(stat(s, (e) => e.type === "tackle" && e.won))],
   ["Interceptions", (s) => String(stat(s, (e) => e.type === "interception"))],
   ["Clearances", (s) => String(stat(s, (e) => e.type === "clearance"))],
+  ["Through balls", (s) => String(stat(s, (e) => e.type === "through_ball"))],
 ];
 
 console.log(`\n${"".padEnd(16)}${home!.name.padStart(20)}${away!.name.padStart(20)}`);
