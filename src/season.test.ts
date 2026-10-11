@@ -10,8 +10,7 @@ test("seeded clubs field eleven players with valid attributes", () => {
   for (const club of Object.values(world.clubs)) {
     expect(club.playerIds).toHaveLength(11);
     for (const id of club.playerIds) {
-      const { attacking, defending } = world.players[id]!.attributes;
-      for (const v of [attacking, defending]) {
+      for (const v of Object.values(world.players[id]!.attributes)) {
         expect(Number.isInteger(v) && v >= 1 && v <= 20).toBe(true);
       }
     }

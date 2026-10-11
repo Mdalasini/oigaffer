@@ -1,20 +1,19 @@
+import { simulateEventMatch } from "./engine/match";
+import { simulateMatch } from "./match";
 import { seededRng } from "./random";
 import { playSeason } from "./season";
-import { generateWorld } from "./seed";
+import { DEFAULT_CLUBS, generateWorld } from "./seed";
 import { clubStrength } from "./strength";
 
-const CLUBS = [
-  "Ashford Rovers", "Bramley Town", "Castleford City", "Dunmore United",
-  "Eastgate Athletic", "Fernhill Wanderers", "Greyhaven FC", "Holloway Albion",
-  "Ironbridge County", "Kingsmere Rangers",
-];
-
-const seed = Number(process.argv[2] ?? Date.now());
+// Usage: bun run season [seed] [--events]
+const args = process.argv.slice(2);
+const useEvents = args.includes("--events");
+const seed = Number(args.find((a) => !a.startsWith("--")) ?? Date.now());
 const rng = seededRng(seed);
-const world = generateWorld(CLUBS, rng);
-const season = playSeason(world, rng);
+const world = generateWorld(DEFAULT_CLUBS, rng);
+const season = playSeason(world, rng, useEvents ? simulateEventMatch : simulateMatch);
 
-console.log(`Seed ${seed}\n`);
+console.log(`Seed ${seed}, ${useEvents ? "event" : "Poisson"} engine\n`);
 console.log("Pos  Club                  P   W   D   L   GF  GA   GD  Pts   Att   Def");
 season.table.forEach((row, i) => {
   const club = world.clubs[row.clubId]!;
