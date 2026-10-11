@@ -1,5 +1,5 @@
 import { doubleRoundRobin, type Round } from "./fixtures";
-import { simulateMatch } from "./match";
+import { simulateMatch, type MatchEngine } from "./match";
 import type { GameWorld } from "./model";
 import type { Rng } from "./random";
 import { buildTable, type Result, type TableRow } from "./table";
@@ -10,14 +10,14 @@ export interface Season {
   table: TableRow[];
 }
 
-export function playSeason(world: GameWorld, rng: Rng = Math.random): Season {
+export function playSeason(world: GameWorld, rng: Rng = Math.random, engine: MatchEngine = simulateMatch): Season {
   const clubIds = Object.keys(world.clubs);
   const rounds = doubleRoundRobin(clubIds);
   const results: Result[] = [];
 
   for (const round of rounds) {
     for (const { homeId, awayId } of round) {
-      const { homeGoals, awayGoals } = simulateMatch(world, world.clubs[homeId]!, world.clubs[awayId]!, rng);
+      const { homeGoals, awayGoals } = engine(world, world.clubs[homeId]!, world.clubs[awayId]!, rng);
       results.push({ homeId, awayId, homeGoals, awayGoals });
     }
   }

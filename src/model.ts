@@ -4,8 +4,11 @@ export type Position = "GK" | "DEF" | "MID" | "FWD";
 
 // 1–20, like FM
 export interface Attributes {
-  attacking: number;
-  defending: number;
+  passing: number;
+  shooting: number;
+  dribbling: number;
+  tackling: number;
+  goalkeeping: number;
 }
 
 export interface Player {

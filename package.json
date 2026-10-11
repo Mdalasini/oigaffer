@@ -5,6 +5,8 @@
   "scripts": {
     "test": "bun test",
     "season": "bun src/main.ts",
+    "watch": "bun src/watch.ts",
+    "calibrate": "bun src/calibrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

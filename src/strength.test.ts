@@ -1,13 +1,7 @@
 import { expect, test } from "bun:test";
-import type { GameWorld, Player, Position } from "./model";
+import type { GameWorld, Player } from "./model";
 import { clubStrength } from "./strength";
-
-const player = (id: string, position: Position, attacking: number, defending: number): Player => ({
-  id,
-  name: id,
-  position,
-  attributes: { attacking, defending },
-});
+import { player } from "./test-helpers";
 
 function worldWith(players: Player[]): GameWorld {
   return {

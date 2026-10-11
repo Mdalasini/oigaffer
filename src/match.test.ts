@@ -1,32 +1,7 @@
 import { expect, test } from "bun:test";
 import { expectedGoals, simulateMatch } from "./match";
-import type { GameWorld, Player, Position } from "./model";
 import { samplePoisson, seededRng } from "./random";
-
-const player = (id: string, position: Position, attacking: number, defending: number): Player => ({
-  id,
-  name: id,
-  position,
-  attributes: { attacking, defending },
-});
-
-function squad(prefix: string, attacking: number, defending: number): Player[] {
-  return (["GK", "DEF", "DEF", "MID", "MID", "FWD"] as const).map((pos, i) =>
-    player(`${prefix}${i}`, pos, attacking, defending),
-  );
-}
-
-function world(): GameWorld {
-  const strong = squad("s", 16, 16);
-  const weak = squad("w", 8, 8);
-  return {
-    players: Object.fromEntries([...strong, ...weak].map((p) => [p.id, p])),
-    clubs: {
-      strong: { id: "strong", name: "Strong FC", playerIds: strong.map((p) => p.id) },
-      weak: { id: "weak", name: "Weak FC", playerIds: weak.map((p) => p.id) },
-    },
-  };
-}
+import { strongVsWeak as world } from "./test-helpers";
 
 test("evenly matched sides get the base xG", () => {
   expect(expectedGoals(12, 12)).toBeCloseTo(1.35);

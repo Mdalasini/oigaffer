@@ -4,6 +4,16 @@ import type { Club, GameWorld, Player, Position } from "./model";
 const ATTACK_WEIGHT: Record<Position, number> = { GK: 0, DEF: 0.2, MID: 0.6, FWD: 1 };
 const DEFENCE_WEIGHT: Record<Position, number> = { GK: 1, DEF: 1, MID: 0.6, FWD: 0.2 };
 
+// Summary ratings derived from the detailed attributes
+export function attackingRating(p: Player): number {
+  const { passing, shooting, dribbling } = p.attributes;
+  return (passing + shooting + dribbling) / 3;
+}
+
+export function defendingRating(p: Player): number {
+  return p.position === "GK" ? p.attributes.goalkeeping : p.attributes.tackling;
+}
+
 export interface ClubStrength {
   attack: number;
   defence: number;
@@ -32,7 +42,7 @@ export function clubStrength(world: GameWorld, club: Club): ClubStrength {
     return p;
   });
   return {
-    attack: weightedAverage(players, ATTACK_WEIGHT, (p) => p.attributes.attacking),
-    defence: weightedAverage(players, DEFENCE_WEIGHT, (p) => p.attributes.defending),
+    attack: weightedAverage(players, ATTACK_WEIGHT, attackingRating),
+    defence: weightedAverage(players, DEFENCE_WEIGHT, defendingRating),
   };
 }

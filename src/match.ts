@@ -14,6 +14,8 @@ export interface MatchResult {
   awayXg: number;
 }
 
+export type MatchEngine = (world: GameWorld, home: Club, away: Club, rng: Rng) => MatchResult;
+
 export function expectedGoals(attack: number, opponentDefence: number): number {
   return (BASE_GOALS * Math.max(attack, MIN_STRENGTH)) / Math.max(opponentDefence, MIN_STRENGTH);
 }
