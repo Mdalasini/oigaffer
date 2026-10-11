@@ -48,7 +48,7 @@ export const COVER_DROP = 3; // spare defenders with nobody to mark drop this fa
 export const POSSESSION_VALUE = 0.015;
 export const PROGRESS_VALUE = 0.01; // extra for having the ball at the opponent's end vs your own
 export const THREAT_SCALE = 0.6;
-export const XG_MAX = 0.87;
+export const XG_MAX = 0.95;
 export const XG_DECAY = 7;
 export const DECISION_TEMPERATURE = 0.003;
 
@@ -117,9 +117,13 @@ export const WALL_DISTANCE = 9.15; // opponents stand this far from a free kick 
 export const THROW_IN_DISTANCE = 2;
 
 // Dead-ball time before a restart is taken (ticks). The clock keeps running.
-export const SETUP_TICKS = { throw_in: 6, goal_kick: 10, corner: 18, free_kick: 10, penalty: 40, kickoff: 1 } as const;
-export const DANGEROUS_FREE_KICK_TICKS = 25; // lining up a wall in shooting range
-export const GOAL_CELEBRATION_TICKS = 40;
+export const SETUP_TICKS = { throw_in: 12.5, goal_kick: 20, corner: 27.5, free_kick: 20, penalty: 45, kickoff: 1 } as const;
+export const DANGEROUS_FREE_KICK_TICKS = 30; // seconds to line up a wall in shooting range
+export const GOAL_CELEBRATION_TICKS = 50; // seconds including the walk back for kickoff
+export const RESTART_DISTANCE_EPSILON = 1e-6; // metres: avoid pinning players to a radius through rounding
+export const RESTART_VARIATION = 0.3; // fractional variation in dead-ball duration
+export const PENALTY_EDGE_MARGIN = 1; // metres behind the penalty-area edge
+export const KICKOFF_HALF_MARGIN = 2; // metres inside a player's own half
 
 // Throw-ins only reach so far
 export const THROW_MAX_DISTANCE = 22;
@@ -174,7 +178,7 @@ export const REFEREE_STRICTNESS: [number, number] = [0.75, 1.3];
 export const OFFSIDE_TOLERANCE = 0.3;
 export const OFFSIDE_PERCEPTION = 0.8;
 export const OFFSIDE_GAMBLE = 2; // how far a forward will cheat past the line hunting space
-export const OFFSIDE_GAMBLE_CHANCE = 0.2; // per tick
+export const OFFSIDE_GAMBLE_CHANCE = 0.5; // per tick
 
 // Stoppage time (seconds added per stoppage)
 export const ADDED = { goal: 45, substitution: 25, card: 20, injury: 60, penalty: 30 } as const;

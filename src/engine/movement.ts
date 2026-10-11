@@ -1,5 +1,7 @@
 import {
   CONTROL_RADIUS,
+  BOX_DEPTH,
+  PENALTY_EDGE_MARGIN,
   COVER_DROP,
   KEEPER_BOX,
   KEEPER_SPEED,
@@ -15,15 +17,17 @@ import {
   RUN_SPEED,
   THROW_IN_DISTANCE,
   WALL_DISTANCE,
+  RESTART_DISTANCE_EPSILON,
 } from "./constants";
 import { speedFactor, tire } from "./fatigue";
-import { anchor, keeperPosition } from "./formation";
-import { add, CENTRE, clampToPitch, dist, moveTowards, normalize, scale, sub, type Vec } from "./geometry";
+import { anchor, keeperPosition, kickoffPosition } from "./formation";
+import { add, CENTRE, clampToPitch, dist, moveTowards, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition } from "./restarts";
 import {
   ballDead,
   emit,
+  fromTeamFrame,
   giveBall,
   nearest,
   opponent,
@@ -105,12 +109,32 @@ export function moveOffBall(state: MatchState): void {
   const onside = offsideLine(state, possessionSide);
 
   for (const p of state.players) {
-    if (p === carrier) continue;
+    if (p === carrier) {
+      if (state.ball.setPiece !== null) {
+        const from = p.pos;
+        p.pos = moveTowards(p.pos, state.ball.pos, MOVE_SPEED * speedFactor(p));
+        tire(p, dist(from, p.pos));
+      }
+      continue;
+    }
     let target: Vec;
     let speed: number;
     let standOff = 0;
     const setPieceSpot = cornerPosition(state, p);
-    if (setPieceSpot) {
+    if (state.ball.setPiece === "kickoff") {
+      target = kickoffPosition(p);
+      speed = MOVE_SPEED;
+    } else if (state.ball.setPiece === "penalty" && carrier) {
+      if (p.side !== carrier.side && p.position === "GK") {
+        target = ownGoal(p.side);
+      } else {
+        const normal = toTeamFrame(carrier.side, anchor(state, p, p.side === possessionSide));
+        target = fromTeamFrame(carrier.side, {
+          x: Math.min(normal.x, PITCH_LENGTH - BOX_DEPTH - PENALTY_EDGE_MARGIN), y: normal.y,
+        });
+      }
+      speed = MOVE_SPEED;
+    } else if (setPieceSpot) {
       target = setPieceSpot;
       speed = MOVE_SPEED;
     } else if (chasing.has(p)) {
@@ -140,26 +164,33 @@ export function moveOffBall(state: MatchState): void {
       }
       speed = MOVE_SPEED;
     }
+    if (carrier && state.ball.setPiece !== null) {
+      target = keepDistance(state, carrier, p, target);
+      speed = MOVE_SPEED;
+    }
     const from = p.pos;
     p.pos = moveTowards(p.pos, target, speed * speedFactor(p), standOff);
     tire(p, dist(from, p.pos));
   }
-  if (carrier && ballDead(state)) keepDistance(state, carrier);
   moveReferee(state);
 }
 
 // Opponents have to stand back from a restart
-function keepDistance(state: MatchState, taker: MatchPlayer): void {
+function keepDistance(state: MatchState, taker: MatchPlayer, p: MatchPlayer, target: Vec): Vec {
   const kind = state.ball.setPiece;
-  if (kind === "penalty" || kind === "kickoff") return;
-  const required = kind === "throw_in" ? THROW_IN_DISTANCE : WALL_DISTANCE;
-  for (const p of state.players) {
-    if (p.side === taker.side) continue;
-    const d = dist(p.pos, state.ball.pos);
-    if (d >= required) continue;
-    const away = d < 0.01 ? normalize(sub(CENTRE, state.ball.pos)) : normalize(sub(p.pos, state.ball.pos));
-    p.pos = clampToPitch(add(state.ball.pos, scale(away, required)));
+  if (kind === "penalty") {
+    if (p.side !== taker.side && p.position === "GK") return target;
+    if (dist(target, state.ball.pos) >= WALL_DISTANCE) return target;
+    return add(state.ball.pos, scale(normalize(sub(target, state.ball.pos)), WALL_DISTANCE));
   }
+  if (p.side === taker.side) return target;
+  const required = kind === "throw_in" ? THROW_IN_DISTANCE : WALL_DISTANCE;
+  // Escape to the nearest legal point first, rather than taking a second movement step.
+  const point = dist(p.pos, state.ball.pos) < required - RESTART_DISTANCE_EPSILON ? p.pos : target;
+  if (dist(point, state.ball.pos) >= required) return target;
+  let away = normalize(sub(point, state.ball.pos));
+  if (dist(point, state.ball.pos) === 0) away = normalize(sub(ownGoal(p.side), state.ball.pos));
+  return clampToPitch(add(state.ball.pos, scale(away, required)));
 }
 
 // A loose ball goes to whoever reaches it. If both sides get there,

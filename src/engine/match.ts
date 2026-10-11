@@ -164,7 +164,7 @@ export function tick(state: MatchState): void {
   }
 
   const carrier = owner(state);
-  if (carrier && !attemptTackle(state, carrier) && state.time >= state.ball.readyAt) {
+  if (carrier && !attemptTackle(state, carrier) && state.time >= state.ball.readyAt && !ballDead(state)) {
     const current = owner(state);
     if (current) act(state, current, chooseAction(state, current));
   }
@@ -182,7 +182,7 @@ export function startEventMatch(
   managers: Managers = {},
 ): MatchState {
   const state = createMatchState(world, home, away, rng, managers);
-  kickoff(state, "home");
+  kickoff(state, "home", undefined, true);
   return state;
 }
 
@@ -199,7 +199,7 @@ function startSecondHalf(state: MatchState): void {
   for (const p of state.players) p.energy = Math.min(1, p.energy + HALF_TIME_RECOVERY);
   // Half time is the natural moment for changes
   makePendingSubs(state);
-  kickoff(state, "away");
+  kickoff(state, "away", undefined, true);
 }
 
 // Advances the match by one second. At the end of normal time in each half the

@@ -8,6 +8,7 @@ import {
   MENTALITY_PUSH,
   MENTALITY_WIDTH,
   SETUP_TICKS,
+  KICKOFF_HALF_MARGIN,
   SHIFT_X,
   SHIFT_Y,
 } from "./constants";
@@ -22,6 +23,8 @@ import {
   type MatchState,
   type Side,
 } from "./state";
+
+import { restartTicks } from "./restarts";
 
 // Depth of each line in the team frame (own goal at x = 0)
 const LINE_X: Record<Position, number> = { GK: 4, DEF: 20, MID: 38, FWD: 50 };
@@ -83,16 +86,21 @@ export function keeperPosition(state: MatchState, keeper: MatchPlayer): Vec {
 
 // Everyone back to their own half; a forward from the kicking team takes the ball on the spot.
 // After a goal there's a delay while the scorers celebrate.
-export function kickoff(state: MatchState, kicking: Side, delay: number = SETUP_TICKS.kickoff): void {
+export function kickoffPosition(p: MatchPlayer): Vec {
+  return fromTeamFrame(p.side, { x: Math.min(p.slot.x, CENTRE.x - KICKOFF_HALF_MARGIN), y: p.slot.y });
+}
+
+export function kickoff(state: MatchState, kicking: Side, delay: number = SETUP_TICKS.kickoff, placePlayers = false): void {
   for (const p of state.players) {
-    p.pos = fromTeamFrame(p.side, { x: Math.min(p.slot.x, CENTRE.x - 2), y: p.slot.y });
+    if (placePlayers) p.pos = kickoffPosition(p);
     p.cooldown = 0;
   }
   const kicker =
     state.players.find((p) => p.side === kicking && p.position === "FWD") ??
     state.players.find((p) => p.side === kicking && p.position !== "GK");
   if (!kicker) throw new Error(`No outfield player to kick off for ${kicking}`);
-  kicker.pos = { ...CENTRE };
-  giveBall(state, kicker, delay, "kickoff");
+  if (placePlayers) kicker.pos = { ...CENTRE };
+  giveBall(state, kicker, restartTicks(state, delay), "kickoff");
+  state.ball.pos = { ...CENTRE };
   emit(state, { type: "kickoff", side: kicking });
 }

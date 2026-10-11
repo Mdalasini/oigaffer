@@ -3,9 +3,10 @@ import { fixedManager } from "../manager";
 import type { GameWorld } from "../model";
 import { seededRng } from "../random";
 import { player, SLOW_TEST, strongVsWeak } from "../test-helpers";
-import { GOAL_AREA_DEPTH, HALF_TIME, MATCH_SECONDS, MAX_SUBS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
+import { BOX_DEPTH, CONTROL_RADIUS, GOAL_AREA_DEPTH, GOAL_CELEBRATION_TICKS, HALF_TIME, MATCH_SECONDS, MAX_SUBS, PENALTY_EDGE_MARGIN, RESTART_VARIATION, SETUP_TICKS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
 import { scoreOptions } from "./decide";
-import { dist, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
+import { kickoff, kickoffPosition } from "./formation";
+import { CENTRE, dist, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { injure, makePendingSubs, requestSub, sendOff, substitute } from "./lineup";
 import { createMatchState, isFullTime, simulateEventMatch, stepEventMatch, tick } from "./match";
 import { moveOffBall } from "./movement";
@@ -70,7 +71,11 @@ describe("ball out of play", () => {
     const taker = owner(state)!;
     expect(taker.side).toBe("away");
     expect(state.ball.setPiece).toBe("throw_in");
-    expect(taker.pos).toEqual({ x: 40, y: 0 });
+    expect(state.ball.pos).toEqual({ x: 40, y: 0 });
+    const before = { ...taker.pos };
+    moveOffBall(state);
+    expect(dist(taker.pos, state.ball.pos)).toBeLessThan(dist(before, state.ball.pos));
+    expect(dist(before, taker.pos)).toBeLessThanOrEqual(9);
     expect(ballDead(state)).toBe(true);
   });
 
@@ -79,7 +84,7 @@ describe("ball out of play", () => {
     placeBall(corner, { x: -1, y: 20 }, "home"); // home defends x = 0
     expect(corner.ball.setPiece).toBe("corner");
     expect(owner(corner)!.side).toBe("away");
-    expect(owner(corner)!.pos).toEqual({ x: 0, y: 0 });
+    expect(corner.ball.pos).toEqual({ x: 0, y: 0 });
 
     const goalKick = newState();
     placeBall(goalKick, { x: -1, y: 20 }, "away");
@@ -98,6 +103,8 @@ describe("restarts limit what the taker can do", () => {
       defender.pos = { ...taker.pos };
       defender.cooldown = 0;
       state.time = state.ball.readyAt;
+      expect(ballDead(state)).toBe(true);
+      for (let t = 0; t < 100 && ballDead(state); t++) moveOffBall(state);
       expect(ballDead(state)).toBe(false);
       const events = state.events.length;
       expect(attemptTackle(state, taker)).toBe(false);
@@ -105,6 +112,59 @@ describe("restarts limit what the taker can do", () => {
       expect(state.events).toHaveLength(events);
       expect(defender.cooldown).toBe(0);
     }
+  });
+
+  test("setup durations vary reproducibly around the restart midpoint", () => {
+    const delays: number[] = [];
+    for (let seed = 1; seed <= 20; seed++) {
+      const a = newState(undefined, seed);
+      const b = newState(undefined, seed);
+      goalKick(a, "home");
+      goalKick(b, "home");
+      expect(a.ball.readyAt).toBe(b.ball.readyAt);
+      expect(a.ball.readyAt).toBeGreaterThanOrEqual(SETUP_TICKS.goal_kick * (1 - RESTART_VARIATION));
+      expect(a.ball.readyAt).toBeLessThanOrEqual(SETUP_TICKS.goal_kick * (1 + RESTART_VARIATION));
+      delays.push(a.ball.readyAt);
+    }
+    expect(new Set(delays).size).toBeGreaterThan(1);
+  });
+
+  test("penalty setup walks everyone to legal positions in either team frame", () => {
+    for (const side of ["home", "away"] as const) {
+      const state = newState();
+      const before = new Map(state.players.map((p) => [p.id, { ...p.pos }]));
+      awardFreeKick(state, side, fromTeamFrame(side, { x: 98, y: 34 }), true);
+      for (const p of state.players) expect(p.pos).toEqual(before.get(p.id)!);
+      for (let t = 0; t < 100; t++) moveOffBall(state);
+      const taker = owner(state)!;
+      expect(dist(taker.pos, state.ball.pos)).toBeLessThanOrEqual(CONTROL_RADIUS);
+      for (const p of state.players) {
+        if (p === taker) continue;
+        if (p.side !== side && p.position === "GK") {
+          expect(toTeamFrame(side, p.pos)).toEqual({ x: PITCH_LENGTH, y: CENTRE.y });
+        } else {
+          expect(toTeamFrame(side, p.pos).x).toBeLessThanOrEqual(PITCH_LENGTH - BOX_DEPTH - PENALTY_EDGE_MARGIN);
+          expect(dist(p.pos, state.ball.pos)).toBeGreaterThanOrEqual(WALL_DISTANCE - 1e-9);
+        }
+      }
+    }
+  });
+
+  test("post-goal kickoff walks players back, while period kickoffs can place them", () => {
+    const state = newState();
+    clearPitch(state);
+    const before = new Map(state.players.map((p) => [p.id, { ...p.pos }]));
+    kickoff(state, "home", GOAL_CELEBRATION_TICKS);
+    for (const p of state.players) expect(p.pos).toEqual(before.get(p.id)!);
+    expect(state.ball.pos).toEqual(CENTRE);
+    for (let t = 0; t < 100; t++) moveOffBall(state);
+    expect(owner(state)!.pos).toEqual(CENTRE);
+    for (const p of team(state, "away")) {
+      expect(toTeamFrame(p.side, p.pos).x).toBeLessThan(CENTRE.x);
+      expect(dist(p.pos, CENTRE)).toBeGreaterThanOrEqual(WALL_DISTANCE - 1e-9);
+    }
+    kickoff(state, "away", undefined, true);
+    for (const p of state.players) expect(p.pos).toEqual(p === owner(state) ? CENTRE : kickoffPosition(p));
   });
 
   test("a throw-in can only be passed, and not far", () => {
@@ -136,7 +196,10 @@ describe("restarts limit what the taker can do", () => {
     const state = newState();
     awardFreeKick(state, "home", { x: 98, y: 34 }, true);
     expect(state.ball.setPiece).toBe("penalty");
-    expect(owner(state)!.pos).toEqual({ x: PITCH_LENGTH - 11, y: PITCH_WIDTH / 2 });
+    expect(state.ball.pos).toEqual({ x: PITCH_LENGTH - 11, y: PITCH_WIDTH / 2 });
+    const before = { ...owner(state)!.pos };
+    moveOffBall(state);
+    expect(dist(owner(state)!.pos, state.ball.pos)).toBeLessThan(dist(before, state.ball.pos));
     const options = scoreOptions(state, owner(state)!);
     expect(options.map((o) => o.action.kind === "shoot" && o.action.shot)).toEqual(["penalty"]);
   });
@@ -145,7 +208,10 @@ describe("restarts limit what the taker can do", () => {
     const state = newState();
     awardFreeKick(state, "home", { x: 70, y: 34 }, true);
     for (const p of team(state, "away")) p.pos = { x: 71, y: 34 };
+    const before = team(state, "away").map((p) => ({ ...p.pos }));
     moveOffBall(state);
+    team(state, "away").forEach((p, i) => expect(dist(p.pos, before[i]!)).toBeLessThanOrEqual(9));
+    for (let t = 0; t < 20; t++) moveOffBall(state);
     for (const p of team(state, "away")) expect(dist(p.pos, state.ball.pos)).toBeGreaterThanOrEqual(WALL_DISTANCE - 1e-9);
   });
 });
@@ -330,6 +396,9 @@ describe("substitutions", () => {
     const on = state.players.find((p) => p.id === "sbm")!;
     expect(on.position).toBe("MID");
     expect(on.energy).toBe(1);
+    expect(on.pos).toEqual({ x: CENTRE.x, y: 0 });
+    moveOffBall(state);
+    expect(dist(on.pos, { x: CENTRE.x, y: 0 })).toBeGreaterThan(0);
     expect(state.players.some((p) => p.id === off.id)).toBe(false);
     expect(state.teams.home.subsUsed).toBe(1);
   });
@@ -455,7 +524,7 @@ describe("match-loop and lineup edge cases", () => {
     expect(taker.id).not.toBe(injured.id);
     expect(taker.side).toBe("home");
     expect(taker.position).not.toBe("GK");
-    expect(taker.pos).toEqual(state.ball.pos);
+    expect(taker.pos).not.toEqual(state.ball.pos);
     expect(state.ball.setPiece).toBe("corner");
     expect(state.ball.readyAt).toBe(readyAt);
     for (let i = 0; i < 100 && state.ball.setPiece === "corner"; i++) stepEventMatch(state);
@@ -464,6 +533,33 @@ describe("match-loop and lineup edge cases", () => {
 });
 
 describe("a full match", () => {
+  test("players walk into restarts and every restart completes or reaches a whistle", () => {
+    const state = newState(withBenches(), 11);
+    while (!isFullTime(state)) {
+      const period = state.period;
+      const positions = new Map(state.players.map((p) => [p.id, { ...p.pos }]));
+      stepEventMatch(state);
+      if (state.period === period) {
+        for (const p of state.players) {
+          const before = positions.get(p.id);
+          if (before) expect(dist(before, p.pos)).toBeLessThanOrEqual(9);
+        }
+      }
+    }
+    const restarts = state.events.filter((e) => e.type === "set_piece");
+    expect(restarts.length).toBeGreaterThan(0);
+    for (const restart of restarts) {
+      const index = state.events.indexOf(restart);
+      const next = state.events.findIndex((e, i) => i > index && e.type === "set_piece");
+      const following = state.events.slice(index + 1, next < 0 ? undefined : next);
+      expect(following.some((e) =>
+        ("playerId" in e && e.playerId === restart.playerId &&
+          ["pass", "through_ball", "pass_astray", "interception", "cross", "shot", "clearance"].includes(e.type)) ||
+        (e.type === "offside" && e.passerId === restart.playerId) || e.type === "whistle"
+      )).toBe(true);
+    }
+  }, SLOW_TEST);
+
   test("players tire, and tired players are weaker", () => {
     const world = withBenches();
     const state = newState(world, 3);

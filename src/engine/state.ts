@@ -2,7 +2,7 @@ import type { Manager } from "../manager";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
 import type { FormationName, Mentality, Tactics } from "../tactics";
-import { CONTROL_TICKS } from "./constants";
+import { CONTROL_RADIUS, CONTROL_TICKS } from "./constants";
 import type { Rng } from "../random";
 import { dist, PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
 
@@ -153,7 +153,11 @@ export const challengeSkill = (p: MatchPlayer): number =>
   p.position === "GK" ? p.attributes.goalkeeping : p.attributes.tackling;
 
 // The ball is dead while a restart is being set up
-export const ballDead = (state: MatchState): boolean => state.ball.setPiece !== null && state.time < state.ball.readyAt;
+export function ballDead(state: MatchState): boolean {
+  if (state.ball.setPiece === null) return false;
+  const taker = owner(state);
+  return state.time < state.ball.readyAt || !taker || dist(taker.pos, state.ball.pos) > CONTROL_RADIUS;
+}
 
 // ---------- State changes ----------
 

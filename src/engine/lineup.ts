@@ -3,6 +3,7 @@ import { lineRating } from "../squad";
 import { assignRoles, type Tactics } from "../tactics";
 import { ADDED, MAX_SUBS } from "./constants";
 import { arrangeSide } from "./formation";
+import { CENTRE } from "./geometry";
 import { emit, nearest, opponent, type MatchPlayer, type MatchState, type OffPitch, type Side } from "./state";
 
 const onSide = (state: MatchState, side: Side) => state.players.filter((p) => p.side === side);
@@ -44,7 +45,6 @@ function takeOff(state: MatchState, p: MatchPlayer, reason: OffPitch["reason"]):
       ), state.ball.pos);
       if (taker) {
         state.ball.ownerId = taker.id;
-        taker.pos = { ...state.ball.pos };
       }
     }
   }
@@ -110,7 +110,7 @@ export function requestSub(state: MatchState, side: Side, offId: Id, onId: Id): 
   return valid;
 }
 
-// The replacement takes over the role and spot of the player going off
+// The replacement enters at halfway and runs into the outgoing player's role
 export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): boolean {
   const off = state.players.find((p) => p.id === offId && p.side === side);
   const on = bench(state, side).find((o) => o.id === onId);
@@ -125,7 +125,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     attributes: { ...on.attributes },
     energy: 1,
     slot: off.slot,
-    pos: { ...off.pos },
+    pos: { x: CENTRE.x, y: 0 },
     cooldown: 0,
     yellow: false,
   };

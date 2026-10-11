@@ -188,11 +188,11 @@ describe("tactics in the engine", () => {
   });
 
   test("an underdog that sits deep concedes less, and the game has fewer goals", () => {
-    const play = (mentality: -2 | 2) => {
+    const play = (mentality: -2 | 0) => {
       const rng = seededRng(21);
       let conceded = 0;
       let total = 0;
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 100; i++) {
         const r = simulateEventMatch(world, world.clubs.weak!, world.clubs.strong!, rng, {
           home: fixedManager({ formation: "4-4-2", mentality }),
           away: fixedManager({ formation: "4-4-2", mentality: 0 }),
@@ -203,7 +203,7 @@ describe("tactics in the engine", () => {
       return { conceded, total };
     };
     const deep = play(-2);
-    const open = play(2);
+    const open = play(0);
     expect(deep.conceded).toBeLessThan(open.conceded);
     expect(deep.total).toBeLessThan(open.total);
   }, SLOW_TEST);

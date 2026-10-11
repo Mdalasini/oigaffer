@@ -9,6 +9,7 @@ import {
   KEEPER_HOLD_TICKS,
   PENALTY_SPOT,
   SETUP_TICKS,
+  RESTART_VARIATION,
 } from "./constants";
 import { add, CENTRE, dist, normalize, PITCH_LENGTH, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
 import {
@@ -40,10 +41,14 @@ const outfield = (state: MatchState, side: Side) => state.players.filter((p) => 
 const best = (players: MatchPlayer[], skill: (p: MatchPlayer) => number) =>
   players.reduce<MatchPlayer | undefined>((a, b) => (!a || skill(b) > skill(a) ? b : a), undefined);
 
-// Puts the taker on the spot with the ball. They can act once the restart is set up.
+// The ball waits on the spot while the taker walks over and the restart is prepared.
+export function restartTicks(state: MatchState, ticks: number): number {
+  return ticks * (1 - RESTART_VARIATION + 2 * RESTART_VARIATION * state.rng());
+}
+
 function setUp(state: MatchState, kind: Exclude<SetPiece, "kickoff">, taker: MatchPlayer, spot: Vec, ticks: number): void {
-  taker.pos = { ...spot };
-  giveBall(state, taker, ticks, kind);
+  giveBall(state, taker, restartTicks(state, ticks), kind);
+  state.ball.pos = { ...spot };
   emit(state, { type: "set_piece", side: taker.side, kind, playerId: taker.id });
 }
 
@@ -106,17 +111,6 @@ export function awardFreeKick(state: MatchState, side: Side, spot: Vec, direct: 
 export function penalty(state: MatchState, side: Side): void {
   const taker = best(outfield(state, side), (p) => p.attributes.shooting);
   if (!taker) return;
-  const goal = attackingGoal(side);
-  const keeper = keeperOf(state, opponent(side));
-  const edge = PITCH_LENGTH - BOX_DEPTH - 1;
-  for (const p of state.players) {
-    if (p === taker || p === keeper) continue;
-    const t = toTeamFrame(side, p.pos);
-    if (inBox(side, p.pos) || dist(p.pos, fromTeamFrame(side, { x: PITCH_LENGTH - PENALTY_SPOT, y: CENTRE.y })) < 9.15) {
-      p.pos = fromTeamFrame(side, { x: Math.min(t.x, edge), y: t.y });
-    }
-  }
-  if (keeper) keeper.pos = { ...goal };
   state.stoppage += ADDED.penalty;
   setUp(state, "penalty", taker, fromTeamFrame(side, { x: PITCH_LENGTH - PENALTY_SPOT, y: CENTRE.y }), SETUP_TICKS.penalty);
 }
