@@ -39,6 +39,7 @@ src/
 ui/               Vite + React app; imports the game straight from src/
   App.tsx         Setup screen: pick clubs and starting tactics
   MatchScreen.tsx Scoreboard, commentary feed, manager controls, stats
+  SquadPanel.tsx  Players on the pitch with energy and bookings, the bench, substitutions
   useMatch.ts     Runs a match on a timer with startEventMatch/stepEventMatch
   TacticsPicker.tsx, styles.css
 ```
@@ -55,13 +56,16 @@ Both implement `MatchEngine` and return a `MatchResult`, so `playSeason` can use
 
 - **Poisson (`src/match.ts`)**: xG = `1.35 × attack ÷ opponent defence`, goals sampled from Poisson. It is fast, and it is the calibration target.
 - **Event engine (`src/engine/`)**: one-second ticks on a continuous 105×68 m pitch. It is structured after Millington's *AI for Games*:
-  - **Strategy**: managers (`manager.ts`) set formation and mentality; `formation.ts` turns that into slots that slide with the ball.
-  - **Decision making**: `decide.ts` scores every option for the ball carrier (a pass per teammate, through balls, shoot, dribble, clear) in expected-goal units, and picks one by softmax.
-  - **Movement**: `movement.ts` uses kinematic steering (arrive, pursue, interpose). It covers pressing, goal-side marking, cover, the offside line and loose balls.
-  - **Outcomes**: `resolve.ts` rolls results from attributes, separately from the decision. Every outcome is emitted as a `MatchEvent`; the score is derived from the events.
-  - `valuation.ts` holds xG, possession value, pass risk and race estimates; `state.ts` holds the match state and sensing queries; `constants.ts` holds every tuning knob.
+  - **Strategy**: managers (`manager.ts`) set formation and mentality and make substitutions; `formation.ts` turns tactics into slots that slide with the ball (pushed up and stretched wide in possession, narrow without it).
+  - **Decision making**: `decide.ts` scores every option for the ball carrier (a pass per teammate, through balls, crosses, shoot, dribble, clear) in expected-goal units, and picks one by softmax. A restart limits the options (a throw-in can only be passed, a corner is crossed, a penalty is shot), and passers ignore teammates who are obviously offside.
+  - **Movement**: `movement.ts` uses kinematic steering (arrive, pursue, interpose). It covers pressing, goal-side marking, cover, the offside line, loose balls, corner positions and standing back from restarts. Running drains energy.
+  - **Outcomes**: `resolve.ts` rolls results from attributes, separately from the decision: passes, crosses (block, delivery, keeper claim, aerial duel, header), shots, dribbles, tackles and the fouls that come from them. Every outcome is emitted as a `MatchEvent`; the score is derived from the events.
+  - **Rules**: `referee.ts` judges fouls (advantage, free kick or penalty), cards (yellow, second yellow, straight red, last-man fouls) and offside; the referee has a seeded strictness. `restarts.ts` decides what happens when the ball goes out (throw-in, corner, goal kick) and sets up free kicks and penalties. `lineup.ts` handles tactics changes, substitutions (five, made only at a dead ball or half time), injuries and sending-offs; a side down to ten re-fits its shape and finds an emergency keeper. `fatigue.ts` lowers attributes and speed as energy drops.
+  - `valuation.ts` holds xG, possession value, pass risk, race, cross, free-kick and penalty estimates; `state.ts` holds the match state and sensing queries; `constants.ts` holds every tuning knob.
 
-`simulateEventMatch` plays a whole match in one go. The UI drives the same loop one second at a time with `startEventMatch` and `stepEventMatch`, and applies the player's changes immediately with `applyTactics`. The player's side uses `humanManager`, which never changes tactics on its own. Keep the two paths identical: a test checks that stepping and simulating produce the same events.
+The match clock runs in two periods. `state.clock` is match time (0–2700 s first half, 2700–5400 s second, then added time); `state.time` counts every tick and keeps events in order. At 45' and 90' the added time is announced from the half's stoppages (goals, subs, cards, injuries, penalties), and `state.phase` moves through `first_half`, `half_time`, `second_half` and `full_time`. Show minutes with `minuteLabel(period, clock)` (for example 45+2').
+
+`simulateEventMatch` plays a whole match in one go. The UI drives the same loop one second at a time with `startEventMatch` and `stepEventMatch`, applies the player's tactics immediately with `applyTactics`, and queues their substitutions with `requestSub`. The player's side uses `humanManager`, which never changes tactics or makes subs on its own. Injured players are replaced like-for-like automatically for both sides. Keep the two paths identical: a test checks that stepping and simulating produce the same events.
 
 Each team works in its own **team frame**, attacking towards x = 105. Convert with `toTeamFrame`/`fromTeamFrame` instead of special-casing home and away.
 
@@ -73,7 +77,7 @@ All randomness goes through an injected `Rng`. Never call `Math.random()` inside
 
 The event engine's behaviour is emergent, and the constants interact strongly. After **any** change to `src/engine/`:
 
-1. Run `bun run calibrate 5`. The event engine should stay close to the Poisson engine: about 2.5–2.9 goals a game, about 25% draws, favourites winning about 55%, and a strength→GD correlation of about 0.45–0.5. Per-team stats should stay plausible: about 13 shots, about 80% pass completion.
+1. Run `bun run calibrate 5` (or 6 for a steadier read). The event engine should stay close to the Poisson engine: about 2.5–2.9 goals a game, about 25% draws, favourites winning about 55%, and a strength→GD correlation of about 0.45–0.5. Per-team stats should stay plausible: about 13 shots, about 80% pass completion, roughly 10 fouls, 1–2 yellows, about 2 offsides, about 0.15 penalties, 3–5 subs, and added time of about 2 + 4 minutes.
 2. If the change touches shape, pressing, marking, valuation or anything that mentality and formation feed into, re-check tactical balance. Play the same two teams (`strongVsWeak(12, 12)`) with `fixedManager` setups against a balanced 4-4-2 for 150 or more matches each. Use at least that many, because smaller samples are dominated by noise. Defensive settings should lower goals both ways and attacking settings should raise them. No setting should dominate.
 
 Lessons from previous tuning:
@@ -81,7 +85,11 @@ Lessons from previous tuning:
 - Formation anchors need per-line depth limits (`LINE_RANGE`). Without them, a pinned-back defence collapses onto its own goal line.
 - Tie-breaks must not favour list order, because that once gave home teams a 69% win rate. Contested loose balls are resolved randomly.
 - Real-world figures make good sanity anchors: the xG curve is about 0.45 at 6 m, 0.22 at 11 m and 0.06 at 20 m.
-- Known open imbalances: attacking mentality is worth about +0.3 points a game, one-striker formations are net negative, and tackles and interceptions run higher than in real football.
+- Every attribute-driven roll sharpens the gap between strong and weak teams. When adding one (crosses and aerial duels were the latest), check the favourite win rate and correlation, and keep the skill coefficients modest.
+- Fouls in the box need to be rarer than elsewhere (`BOX_FOUL_FACTOR`); otherwise penalties swamp the scoring.
+- Clearances must not be aimed over the opponent's goal line (`CLEAR_MAX_DEPTH`); otherwise goal kicks pile up.
+- A defensive mentality that only means "risk-averse passing" makes teams hoard the ball in their own half and concede more. Defensive teams also play more directly (`MENTALITY_DIRECT`) and narrower (`MENTALITY_WIDTH`). Shifting the line with mentality (tried again on this branch) only rewards territory, so don't.
+- Known open imbalances: 4-5-1 (about +0.4 points a game) and 4-3-3 are the strongest formations and back fives the weakest (about −0.35); very defensive costs about 0.4 points a game but lowers goals both ways; corners (about 3 a team) and crosses (about 8) are below real football; tackles and interceptions run higher than in real football.
 
 ## UI
 
@@ -95,7 +103,7 @@ Lessons from previous tuning:
 - Comments explain *why* or describe football behaviour, not what the next line does.
 - Put tuning numbers in `engine/constants.ts` with a short comment and units, never inline.
 - In `ui/`, use function components and hooks. Keep logic that doesn't need React in `src/`.
-- Tests live next to the code as `*.test.ts` and use `bun:test`. Use `test-helpers.ts` fixtures and seeded RNGs. Statistical tests should use enough matches and loose thresholds so they don't flake.
+- Tests live next to the code as `*.test.ts` and use `bun:test`. Use `test-helpers.ts` fixtures and seeded RNGs. Statistical tests should use enough matches and loose thresholds so they don't flake, and pass `SLOW_TEST` as the timeout when they play many full matches.
 
 ## Git workflow
 

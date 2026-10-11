@@ -550,3 +550,91 @@ legend {
     display: none;
   }
 }
+
+/* ---------- Squad: who's on, how tired, and the bench ---------- */
+
+.squad h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 17px;
+  margin: 14px 0 6px;
+}
+
+.players {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.players button,
+.players li.off {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 2.6em 1fr 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 14px;
+  border-color: transparent;
+}
+
+.players button:hover:not(:disabled) {
+  border-color: var(--chalk-faint);
+}
+
+.players button:disabled {
+  opacity: 1;
+  color: var(--chalk-dim);
+}
+
+.players .role {
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--chalk-dim);
+}
+
+.players button[aria-pressed="true"] .role {
+  color: var(--us);
+}
+
+.players .who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.players li.off {
+  color: var(--chalk-dim);
+  text-decoration: line-through;
+}
+
+/* a referee's card, in miniature */
+.booking {
+  display: inline-block;
+  width: 7px;
+  height: 10px;
+  border-radius: 1px;
+  background: #f5d90a;
+}
+
+/* how much running they have left */
+.energy {
+  height: 5px;
+  background: var(--chalk-faint);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.energy span {
+  display: block;
+  height: 100%;
+  background: var(--chalk-dim);
+}
+
+.feed li.card .text {
+  font-weight: 700;
+}

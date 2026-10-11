@@ -33,3 +33,6 @@ export function strongVsWeak(strong = 16, weak = 8): GameWorld {
     },
   };
 }
+
+// Tests that play many full matches need longer than bun's default 5s, especially on a busy machine
+export const SLOW_TEST = 60_000;

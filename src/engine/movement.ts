@@ -10,11 +10,19 @@ import {
   PRESS_SPEED,
   PRESS_STAND_OFF,
   PRESS_TRIGGER,
+  OFFSIDE_GAMBLE,
+  OFFSIDE_GAMBLE_CHANCE,
   RUN_SPEED,
+  THROW_IN_DISTANCE,
+  WALL_DISTANCE,
 } from "./constants";
+import { speedFactor, tire } from "./fatigue";
 import { anchor, keeperPosition } from "./formation";
-import { add, CENTRE, dist, moveTowards, normalize, scale, sub, type Vec } from "./geometry";
+import { add, CENTRE, clampToPitch, dist, moveTowards, normalize, scale, sub, type Vec } from "./geometry";
+import { moveReferee, offsideLine } from "./referee";
+import { cornerPosition } from "./restarts";
 import {
+  ballDead,
   emit,
   giveBall,
   nearest,
@@ -32,6 +40,8 @@ import {
 // their zone; otherwise the defence holds its shape. Keepers only come out inside their box.
 function chasers(state: MatchState): Set<MatchPlayer> {
   const carrier = owner(state);
+  // Nobody closes down a restart
+  if (ballDead(state)) return new Set();
   const sides: Side[] = carrier ? [opponent(carrier.side)] : ["home", "away"];
   const result = new Set<MatchPlayer>();
   for (const side of sides) {
@@ -87,16 +97,6 @@ function markingTargets(state: MatchState, defending: Side, busy: Set<MatchPlaye
   return targets;
 }
 
-// Attackers can't stand beyond the second-last defender (or the ball, if it's further forward)
-function offsideLine(state: MatchState, attacking: Side): number {
-  const depths = state.players
-    .filter((p) => p.side !== attacking)
-    .map((p) => toTeamFrame(attacking, p.pos).x)
-    .sort((a, b) => b - a);
-  const ballX = toTeamFrame(attacking, state.ball.pos).x;
-  return Math.max(depths[1] ?? CENTRE.x, ballX);
-}
-
 export function moveOffBall(state: MatchState): void {
   const carrier = owner(state);
   const possessionSide = carrier?.side ?? state.ball.lastSide;
@@ -109,7 +109,11 @@ export function moveOffBall(state: MatchState): void {
     let target: Vec;
     let speed: number;
     let standOff = 0;
-    if (chasing.has(p)) {
+    const setPieceSpot = cornerPosition(state, p);
+    if (setPieceSpot) {
+      target = setPieceSpot;
+      speed = MOVE_SPEED;
+    } else if (chasing.has(p)) {
       target = state.ball.pos;
       speed = p.id === state.ball.runnerId ? RUN_SPEED : PRESS_SPEED;
       if (carrier) standOff = PRESS_STAND_OFF;
@@ -127,14 +131,34 @@ export function moveOffBall(state: MatchState): void {
         target = toTeamFrame(p.side, { x: Math.max(t.x - COVER_DROP, 6), y: t.y });
       }
       if (p.side === possessionSide) {
-        // Stay onside; forwards play right on the shoulder of the last defender
+        // Stay onside; forwards play right on the shoulder of the last defender,
+        // and now and then gamble on a run a little too early
         const t = toTeamFrame(p.side, target);
-        const x = p.position === "FWD" ? onside - 1 : Math.min(t.x, onside);
+        const gamble = state.rng() < OFFSIDE_GAMBLE_CHANCE ? state.rng() * OFFSIDE_GAMBLE : 0;
+        const x = p.position === "FWD" ? onside - 1 + gamble : Math.min(t.x, onside);
         target = toTeamFrame(p.side, { x, y: t.y });
       }
       speed = MOVE_SPEED;
     }
-    p.pos = moveTowards(p.pos, target, speed, standOff);
+    const from = p.pos;
+    p.pos = moveTowards(p.pos, target, speed * speedFactor(p), standOff);
+    tire(p, dist(from, p.pos));
+  }
+  if (carrier && ballDead(state)) keepDistance(state, carrier);
+  moveReferee(state);
+}
+
+// Opponents have to stand back from a restart
+function keepDistance(state: MatchState, taker: MatchPlayer): void {
+  const kind = state.ball.setPiece;
+  if (kind === "penalty" || kind === "kickoff") return;
+  const required = kind === "throw_in" ? THROW_IN_DISTANCE : WALL_DISTANCE;
+  for (const p of state.players) {
+    if (p.side === taker.side) continue;
+    const d = dist(p.pos, state.ball.pos);
+    if (d >= required) continue;
+    const away = d < 0.01 ? normalize(sub(CENTRE, state.ball.pos)) : normalize(sub(p.pos, state.ball.pos));
+    p.pos = clampToPitch(add(state.ball.pos, scale(away, required)));
   }
 }
 

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { defaultManager, type ManagerContext } from "./manager";
 
 const even = { attack: 12, defence: 12 };
@@ -9,6 +9,9 @@ const ctx = (overrides: Partial<ManagerContext>): ManagerContext => ({
   strength: even,
   opponentStrength: even,
   tactics: { formation: "4-4-2", mentality: 0 },
+  onPitch: [],
+  bench: [],
+  subsLeft: 5,
   ...overrides,
 });
 
@@ -41,4 +44,40 @@ test("late in a level game the favourite pushes and the underdog settles", () =>
   const strong = { attack: 16, defence: 16 };
   expect(defaultManager.inMatch(ctx({ minute: 75, strength: strong })).mentality).toBe(1);
   expect(defaultManager.inMatch(ctx({ minute: 75, opponentStrength: strong })).mentality).toBe(-1);
+});
+
+describe("substitutions", () => {
+  const attrs = (v: number) => ({ passing: v, shooting: v, dribbling: v, tackling: v, goalkeeping: v, stamina: v });
+  const onPitch = (id: string, role: "GK" | "DEF" | "MID" | "FWD", energy: number, natural = role) => ({
+    id,
+    role,
+    natural,
+    attributes: attrs(12),
+    energy,
+    yellow: false,
+  });
+  const benchMid = { id: "sub-mid", natural: "MID" as const, attributes: attrs(11) };
+  const benchKeeper = { id: "sub-gk", natural: "GK" as const, attributes: attrs(11) };
+
+  test("replaces the most tired outfield player in the second half", () => {
+    const squad = [onPitch("gk", "GK", 0.5), onPitch("m1", "MID", 0.78), onPitch("m2", "MID", 0.7)];
+    const subs = defaultManager.substitutions!(ctx({ minute: 65, onPitch: squad, bench: [benchMid] }));
+    expect(subs).toEqual([{ offId: "m2", onId: "sub-mid" }]);
+  });
+
+  test("leaves tired players on in the first hour", () => {
+    const subs = defaultManager.substitutions!(ctx({ minute: 40, onPitch: [onPitch("m", "MID", 0.6)], bench: [benchMid] }));
+    expect(subs).toEqual([]);
+  });
+
+  test("gets a real keeper back in goal after a red card", () => {
+    const squad = [onPitch("standin", "GK", 0.9, "DEF"), onPitch("m", "MID", 0.95)];
+    const subs = defaultManager.substitutions!(ctx({ minute: 20, onPitch: squad, bench: [benchMid, benchKeeper] }));
+    expect(subs).toEqual([{ offId: "standin", onId: "sub-gk" }]);
+  });
+
+  test("makes no changes with none left", () => {
+    const squad = [onPitch("m", "MID", 0.5)];
+    expect(defaultManager.substitutions!(ctx({ minute: 80, onPitch: squad, bench: [benchMid], subsLeft: 0 }))).toEqual([]);
+  });
 });

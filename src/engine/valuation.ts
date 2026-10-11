@@ -1,4 +1,19 @@
 import {
+  AERIAL_BASE,
+  AERIAL_CONTEST_RANGE,
+  AERIAL_CROWD,
+  AERIAL_CROWD_RANGE,
+  AERIAL_FREE,
+  AERIAL_SKILL,
+  CROSS_BASE,
+  CROSS_SKILL,
+  FREE_KICK_XG_DECAY,
+  FREE_KICK_XG_MAX,
+  HEADER_XG_FACTOR,
+  KEEPER_CLAIM,
+  KEEPER_CLAIM_SKILL,
+  PENALTY_SKILL,
+  PENALTY_XG,
   INTERCEPT_FALLOFF,
   INTERCEPT_MAX,
   KEEPER_SPEED,
@@ -23,6 +38,7 @@ import { add, dist, distToSegment, normalize, PITCH_LENGTH, scale, sub, type Vec
 import {
   attackingGoal,
   challengeSkill,
+  keeperOf,
   nearest,
   opponent,
   opponents,
@@ -109,4 +125,54 @@ export function raceWinChance(state: MatchState, runner: MatchPlayer, target: Ve
     defenderTime = Math.min(defenderTime, dist(o.pos, target) / speed);
   }
   return 1 / (1 + Math.exp(-RACE_SHARPNESS * (defenderTime - runnerTime)));
+}
+
+export interface CrossAssessment {
+  delivery: number; // ball reaches the target area
+  claim: number; // keeper comes and takes it
+  duel: number; // target wins the header
+  defender: MatchPlayer | null; // who challenges them
+  xg: number; // the header, if they win it
+}
+
+// A ball into the box for `target`: it has to be delivered, get past the keeper,
+// and be won in the air. Shooting stands in for heading, tackling for defensive heading.
+export function assessCross(state: MatchState, crosser: MatchPlayer, target: MatchPlayer): CrossAssessment {
+  const clamp01 = (v: number) => Math.min(0.95, Math.max(0.05, v));
+  const delivery = clamp01(CROSS_BASE + CROSS_SKILL * (crosser.attributes.passing - 10));
+  const keeper = keeperOf(state, opponent(crosser.side));
+  const nearGoal = dist(target.pos, attackingGoal(crosser.side)) < 8;
+  const claim = keeper
+    ? clamp01((KEEPER_CLAIM + KEEPER_CLAIM_SKILL * (keeper.attributes.goalkeeping - 10)) * (nearGoal ? 1.4 : 0.7))
+    : 0;
+  const defender = nearest(
+    opponents(state, target).filter((o) => o.position !== "GK"),
+    target.pos,
+  );
+  const contested = defender !== undefined && dist(defender.pos, target.pos) < AERIAL_CONTEST_RANGE;
+  // A packed box is hard to win anything in
+  const crowd = opponents(state, target).filter(
+    (o) => o !== defender && o.position !== "GK" && dist(o.pos, target.pos) < AERIAL_CROWD_RANGE,
+  ).length;
+  const oneOnOne = contested
+    ? AERIAL_BASE + AERIAL_SKILL * (target.attributes.shooting - defender.attributes.tackling)
+    : AERIAL_FREE;
+  const duel = clamp01(oneOnOne * (1 - AERIAL_CROWD) ** crowd);
+  const xg = Math.min(0.9, baseXg(target.side, target.pos) * HEADER_XG_FACTOR * (1 + SHOT_SKILL * (target.attributes.shooting - 10)));
+  return { delivery, claim, duel, defender: contested ? defender : null, xg };
+}
+
+// Over or round the wall: much harder than an open shot from the same distance
+export function freeKickXg(taker: MatchPlayer): number {
+  const goal = attackingGoal(taker.side);
+  const d = dist(taker.pos, goal);
+  const angle = 0.3 + (0.7 * Math.abs(goal.x - taker.pos.x)) / Math.max(d, 1);
+  const skill = 1 + 2 * SHOT_SKILL * (taker.attributes.shooting - 10);
+  return Math.min(0.3, FREE_KICK_XG_MAX * Math.exp(-(d - 16) / FREE_KICK_XG_DECAY) * angle * skill);
+}
+
+export function penaltyXg(state: MatchState, taker: MatchPlayer): number {
+  const keeper = keeperOf(state, opponent(taker.side));
+  const diff = taker.attributes.shooting - (keeper?.attributes.goalkeeping ?? 1);
+  return Math.min(0.92, Math.max(0.55, PENALTY_XG + PENALTY_SKILL * diff));
 }

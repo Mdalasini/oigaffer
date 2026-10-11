@@ -1,6 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { HALF_TIME } from "../src/engine/constants";
-import { applyTactics, isFullTime, startEventMatch, stepEventMatch } from "../src/engine/match";
+import { applyTactics, isFullTime, requestSub, startEventMatch, stepEventMatch } from "../src/engine/match";
 import type { MatchState, Side } from "../src/engine/state";
 import { humanManager } from "../src/manager";
 import type { Club, GameWorld } from "../src/model";
@@ -43,7 +42,7 @@ export function useMatch(setup: MatchSetup) {
       for (let i = 0; i < perFrame && !isFullTime(state); i++) {
         stepEventMatch(state);
         // Stop for the team talk at half time
-        if (state.time === HALF_TIME) {
+        if (state.phase === "half_time") {
           setRunning(false);
           break;
         }
@@ -60,5 +59,12 @@ export function useMatch(setup: MatchSetup) {
     redraw();
   };
 
-  return { state, running, setRunning, speed, setSpeed, changeTactics, finished: isFullTime(state) };
+  // Substitutions are made at the next stoppage
+  const substitute = (offId: string, onId: string) => {
+    const ok = requestSub(state, setup.side, offId, onId);
+    redraw();
+    return ok;
+  };
+
+  return { state, running, setRunning, speed, setSpeed, changeTactics, substitute, finished: isFullTime(state) };
 }

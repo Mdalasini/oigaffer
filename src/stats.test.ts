@@ -4,12 +4,12 @@ import { teamStats } from "./stats";
 
 test("team stats count from the event log", () => {
   const events: MatchEvent[] = [
-    { time: 1, side: "home", type: "pass", playerId: "a", receiverId: "b" },
-    { time: 2, side: "home", type: "pass", playerId: "b", receiverId: "c" },
-    { time: 3, side: "away", type: "interception", playerId: "c", interceptorId: "z" },
-    { time: 4, side: "away", type: "pass", playerId: "z", receiverId: "y" },
-    { time: 5, side: "away", type: "shot", playerId: "y", xg: 0.3, outcome: "goal" },
-    { time: 6, side: "home", type: "shot", playerId: "a", xg: 0.1, outcome: "blocked" },
+    { time: 1, period: 1, clock: 1, side: "home", type: "pass", playerId: "a", receiverId: "b" },
+    { time: 2, period: 1, clock: 2, side: "home", type: "pass", playerId: "b", receiverId: "c" },
+    { time: 3, period: 1, clock: 3, side: "away", type: "interception", playerId: "c", interceptorId: "z" },
+    { time: 4, period: 1, clock: 4, side: "away", type: "pass", playerId: "z", receiverId: "y" },
+    { time: 5, period: 1, clock: 5, side: "away", type: "shot", playerId: "y", xg: 0.3, outcome: "goal", kind: "open_play" },
+    { time: 6, period: 1, clock: 6, side: "home", type: "shot", playerId: "a", xg: 0.1, outcome: "blocked", kind: "open_play" },
   ];
   const home = teamStats(events, "home");
   const away = teamStats(events, "away");

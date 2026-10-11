@@ -12,6 +12,12 @@ export interface TeamStats {
   interceptions: number;
   clearances: number;
   throughBalls: number;
+  crosses: number;
+  corners: number;
+  fouls: number; // committed
+  offsides: number;
+  yellows: number;
+  reds: number;
 }
 
 // Box-score stats for one side, counted from the event log
@@ -37,5 +43,11 @@ export function teamStats(events: MatchEvent[], side: Side): TeamStats {
     interceptions: count((e) => e.type === "interception" && ours(e)),
     clearances: count((e) => e.type === "clearance" && ours(e)),
     throughBalls: count((e) => e.type === "through_ball" && ours(e)),
+    crosses: count((e) => e.type === "cross" && ours(e)),
+    corners: count((e) => e.type === "set_piece" && e.kind === "corner" && ours(e)),
+    fouls: count((e) => e.type === "foul" && ours(e)),
+    offsides: count((e) => e.type === "offside" && ours(e)),
+    yellows: count((e) => e.type === "card" && e.card === "yellow" && ours(e)),
+    reds: count((e) => e.type === "card" && e.card !== "yellow" && ours(e)),
   };
 }

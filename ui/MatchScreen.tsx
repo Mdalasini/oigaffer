@@ -1,8 +1,8 @@
-import { commentary, matchMinute, type CommentaryLine, type Names } from "../src/commentary";
-import { HALF_TIME } from "../src/engine/constants";
+import { commentary, minuteLabel, type CommentaryLine, type Names } from "../src/commentary";
 import { opponent, type Side } from "../src/engine/state";
 import { teamStats, type TeamStats } from "../src/stats";
 import { MENTALITY_NAMES } from "../src/tactics";
+import { SquadPanel } from "./SquadPanel";
 import { TacticsPicker } from "./TacticsPicker";
 import { SPEEDS, useMatch, type MatchSetup, type Speed } from "./useMatch";
 
@@ -17,23 +17,35 @@ const STAT_ROWS: [string, (s: TeamStats) => number, (n: number) => string][] = [
   ["Tackles won", (s) => s.tacklesWon, String],
   ["Interceptions", (s) => s.interceptions, String],
   ["Through balls", (s) => s.throughBalls, String],
+  ["Crosses", (s) => s.crosses, String],
+  ["Corners", (s) => s.corners, String],
+  ["Fouls", (s) => s.fouls, String],
+  ["Offsides", (s) => s.offsides, String],
+  ["Yellow cards", (s) => s.yellows, String],
+  ["Red cards", (s) => s.reds, String],
 ];
 
 export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
-  const { state, running, setRunning, speed, setSpeed, changeTactics, finished } = useMatch(setup);
+  const { state, running, setRunning, speed, setSpeed, changeTactics, substitute, finished } = useMatch(setup);
   const { world, home, away, side: mySide } = setup;
 
   const names: Names = {
     club: (s) => (s === "home" ? home.name : away.name),
     player: (id) => world.players[id]?.name ?? id,
   };
-  const feed = commentary(state.events, state.time, names).reverse();
+  const feed = commentary(state.events, names).reverse();
   const stats = { home: teamStats(state.events, "home"), away: teamStats(state.events, "away") };
   const theirs = state.teams[opponent(mySide)].tactics;
   const whose = (side: Side) => (side === mySide ? "us" : "them");
 
-  const clock = finished ? "FT" : state.time === HALF_TIME ? "HT" : `${matchMinute(state.time)}'`;
-  const playLabel = running ? "Pause" : state.time === 0 ? "Kick off" : state.time === HALF_TIME ? "Start second half" : "Resume";
+  const clock = finished ? "FT" : state.phase === "half_time" ? "HT" : minuteLabel(state.period, state.clock);
+  const playLabel = running
+    ? "Pause"
+    : state.time === 0
+      ? "Kick off"
+      : state.phase === "half_time"
+        ? "Start second half"
+        : "Resume";
 
   return (
     <main className="match">
@@ -93,6 +105,8 @@ export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () =
           </p>
         </section>
 
+        <SquadPanel state={state} side={mySide} names={names} onSubstitute={substitute} disabled={finished} />
+
         <section>
           <h2>Stats</h2>
           <dl className="stats">
@@ -122,7 +136,7 @@ export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () =
 function FeedLine({ line, whose }: { line: CommentaryLine; whose: string }) {
   return (
     <li className={`${line.kind} ${whose}`}>
-      <span className="minute">{matchMinute(line.time)}'</span>
+      <span className="minute">{minuteLabel(line.period, line.clock)}</span>
       <span className="text">{line.text}</span>
     </li>
   );
