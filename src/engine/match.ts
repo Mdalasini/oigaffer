@@ -2,6 +2,7 @@ import { defaultManager, type Manager } from "../manager";
 import type { MatchResult } from "../match";
 import type { Club, GameWorld } from "../model";
 import type { Rng } from "../random";
+import { pickEleven } from "../squad";
 import { clubStrength } from "../strength";
 import { assignRoles, type Tactics } from "../tactics";
 import { HALF_TIME, MANAGER_INTERVAL, MATCH_SECONDS } from "./constants";
@@ -39,9 +40,7 @@ export function createMatchState(
 
   const players: MatchPlayer[] = [];
   for (const side of ["home", "away"] as const) {
-    clubs[side].playerIds.forEach((id, i) => {
-      const p = world.players[id];
-      if (!p) throw new Error(`Club ${clubs[side].id} references unknown player ${id}`);
+    pickEleven(world, clubs[side]).forEach((p, i) => {
       players.push({
         id: p.id,
         side,

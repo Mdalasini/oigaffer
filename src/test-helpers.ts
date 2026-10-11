@@ -11,6 +11,7 @@ export const player = (id: string, position: Position, attacking: number, defend
     dribbling: attacking,
     tackling: defending,
     goalkeeping: defending,
+    stamina: 12,
   },
 });
 

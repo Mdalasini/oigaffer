@@ -23,7 +23,8 @@ src/
   model.ts        Player, Club, GameWorld (the in-memory save) — keep this small
   strength.ts     Derived attacking/defending ratings and club strength
   random.ts       Seeded RNG (mulberry32) and Poisson sampler
-  seed.ts         Generates clubs with a 4-4-2 eleven from a club "quality"
+  seed.ts         Generates clubs with an 18-player squad from a club "quality"
+  squad.ts        pickEleven (best eleven for a formation) and lineRating
   match.ts        Poisson quick-sim engine and the MatchEngine/MatchResult types
   fixtures.ts     Double round robin (circle method)
   table.ts        League table
@@ -44,9 +45,9 @@ ui/               Vite + React app; imports the game straight from src/
 
 ## Domain model
 
-- Players have five attributes on a 1–20 scale: `passing`, `shooting`, `dribbling`, `tackling`, `goalkeeping`. `attackingRating`/`defendingRating` in `strength.ts` derive the summary values the Poisson engine uses.
+- Players have six attributes on a 1–20 scale: `passing`, `shooting`, `dribbling`, `tackling`, `goalkeeping` and `stamina` (how slowly they tire). `attackingRating`/`defendingRating` in `strength.ts` derive the summary values the Poisson engine uses.
 - `Player.position` is the natural position. In a match, `MatchPlayer.position` is the role in the current formation and can change.
-- Squads are exactly eleven players. There are no subs, contracts, injuries or finances yet. The user explicitly wants the model kept minimal, so add fields only when a feature needs them.
+- `Club.playerIds` is the whole squad (18 from the seed: 2 GK, 6 DEF, 6 MID, 4 FWD, with reserves a notch weaker). `pickEleven` chooses the starters; `clubStrength` rates that eleven. There are no contracts or finances yet. The user explicitly wants the model kept minimal, so add fields only when a feature needs them.
 
 ## Two match engines
 
