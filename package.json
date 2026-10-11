@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
+    "season": "bun src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
