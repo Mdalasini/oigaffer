@@ -18,6 +18,13 @@ export const PRESS_STAND_OFF = 1.5;
 // A defender only leaves their zone to press when the ball is this close to their anchor
 export const PRESS_TRIGGER = 30;
 
+// Mentality, per step from balanced (-2 … +2)
+export const MENTALITY_PUSH = 2; // metres players push up (or hold back) when their team has the ball
+export const MENTALITY_RISK = 0.3; // how much more (or less) gains are weighed against losses
+
+// How often managers look at the game, and the pause after a goal
+export const MANAGER_INTERVAL = 5 * 60;
+
 // Team shape: how far the formation slides with the ball
 export const SHIFT_X = 0.6;
 export const SHIFT_Y = 0.35;
@@ -26,12 +33,18 @@ export const DEFEND_DROP = 3;
 export const KEEPER_MAX_ADVANCE = 6;
 export const KEEPER_BOX = 16.5;
 
+// Marking: defenders pick up attackers near their zone and stand goal-side of them
+export const MARK_RANGE = 12; // how far from their anchor a defender will pick someone up
+export const MARK_DISTANCE = 1.5; // how tight they stand
+export const MARK_HALF_MARGIN = 10; // attackers this far into the defending half or deeper get marked
+export const COVER_DROP = 3; // spare defenders with nobody to mark drop this far behind the line
+
 // Valuation: worth of having the ball somewhere, in expected-goal units
 export const POSSESSION_VALUE = 0.015;
 export const PROGRESS_VALUE = 0.01; // extra for having the ball at the opponent's end vs your own
-export const THREAT_SCALE = 0.4;
-export const XG_MAX = 1.0;
-export const XG_DECAY = 11.5;
+export const THREAT_SCALE = 0.6;
+export const XG_MAX = 0.85;
+export const XG_DECAY = 7;
 export const DECISION_TEMPERATURE = 0.003;
 
 // Passing
@@ -58,11 +71,18 @@ export const ON_TARGET_SKILL = 0.008;
 export const KEEPER_HOLD = 0.55;
 
 // Dribbling
-export const DRIBBLE_DISTANCE = 5;
+export const DRIBBLE_DISTANCE = 5; // taking someone on
+export const CARRY_DISTANCE = 7; // running into open space
 export const DRIBBLE_CONTEST_RANGE = 3;
 export const DRIBBLE_BASE = 0.5;
 export const DRIBBLE_SKILL = 0.01;
 export const DRIBBLE_FREE = 0.95;
+
+// Through balls: played into space ahead of a runner
+export const THROUGH_BALL_MAX_DISTANCE = 60; // long balls over the top from deep
+export const THROUGH_BALL_LEADS = [10, 20]; // metres ahead of the runner: short, and into the space behind a high line
+export const RUN_SPEED = 8; // the runner is already moving, so gets there a bit quicker
+export const RACE_SHARPNESS = 1.5; // how decisively a one-second head start wins the race
 
 // Clearances: a won loose ball is worth less than controlled possession
 export const LOOSE_BALL_DISCOUNT = 0.5;

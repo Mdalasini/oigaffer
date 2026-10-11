@@ -1,4 +1,7 @@
+import type { Manager } from "../manager";
 import type { Attributes, Id, Position } from "../model";
+import type { ClubStrength } from "../strength";
+import type { FormationName, Mentality, Tactics } from "../tactics";
 import { CONTROL_TICKS } from "./constants";
 import type { Rng } from "../random";
 import { dist, PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
@@ -10,7 +13,7 @@ export const opponent = (side: Side): Side => (side === "home" ? "away" : "home"
 export interface MatchPlayer {
   id: Id;
   side: Side;
-  position: Position;
+  position: Position; // the role they're playing in the current formation
   attributes: Attributes;
   slot: Vec; // formation position in the team frame
   pos: Vec; // world position
@@ -22,6 +25,7 @@ export interface Ball {
   ownerId: Id | null;
   lastSide: Side; // team that last had possession
   readyAt: number; // tick from which the owner can act
+  runnerId: Id | null; // player a through ball was played for
 }
 
 export type ShotOutcome = "goal" | "saved" | "off_target" | "blocked";
@@ -29,6 +33,7 @@ export type ShotOutcome = "goal" | "saved" | "off_target" | "blocked";
 export type MatchEvent = { time: number; side: Side } & (
   | { type: "kickoff" }
   | { type: "pass"; playerId: Id; receiverId: Id }
+  | { type: "through_ball"; playerId: Id; receiverId: Id }
   | { type: "interception"; playerId: Id; interceptorId: Id }
   | { type: "pass_astray"; playerId: Id }
   | { type: "dribble"; playerId: Id; defenderId: Id | null }
@@ -36,7 +41,14 @@ export type MatchEvent = { time: number; side: Side } & (
   | { type: "clearance"; playerId: Id }
   | { type: "shot"; playerId: Id; xg: number; outcome: ShotOutcome; keeperId?: Id }
   | { type: "recovery"; playerId: Id }
+  | { type: "tactics"; formation: FormationName; mentality: Mentality; moved: { playerId: Id; from: Position; to: Position }[] }
 );
+
+export interface TeamState {
+  tactics: Tactics;
+  manager: Manager;
+  strength: ClubStrength;
+}
 
 export interface MatchState {
   time: number;
@@ -44,6 +56,7 @@ export interface MatchState {
   ball: Ball;
   score: Record<Side, number>;
   xg: Record<Side, number>;
+  teams: Record<Side, TeamState>;
   events: MatchEvent[];
   rng: Rng;
 }
@@ -100,11 +113,13 @@ export function giveBall(state: MatchState, p: MatchPlayer, controlTicks = CONTR
   state.ball.lastSide = p.side;
   state.ball.pos = { ...p.pos };
   state.ball.readyAt = state.time + controlTicks;
+  state.ball.runnerId = null;
 }
 
-export function looseBall(state: MatchState, pos: Vec): void {
+export function looseBall(state: MatchState, pos: Vec, runnerId: Id | null = null): void {
   state.ball.ownerId = null;
   state.ball.pos = { ...pos };
+  state.ball.runnerId = runnerId;
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

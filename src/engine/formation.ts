@@ -3,6 +3,7 @@ import {
   ATTACK_PUSH,
   DEFEND_DROP,
   KEEPER_MAX_ADVANCE,
+  MENTALITY_PUSH,
   SHIFT_X,
   SHIFT_Y,
 } from "./constants";
@@ -20,6 +21,14 @@ import {
 
 // Depth of each line in the team frame (own goal at x = 0)
 const LINE_X: Record<Position, number> = { GK: 4, DEF: 20, MID: 38, FWD: 50 };
+// How deep and how high each line will go as the shape slides with the ball.
+// Without a floor a pinned-back defence ends up standing on its own goal line.
+const LINE_RANGE: Record<Position, [number, number]> = {
+  GK: [0, 20],
+  DEF: [12, 65],
+  MID: [22, 85],
+  FWD: [48, 100],
+};
 
 // Spreads each positional line evenly across the pitch width.
 // Works for any formation: the shape comes from how many players are in each line.
@@ -36,13 +45,26 @@ export function assignSlots(positions: Position[]): Vec[] {
   });
 }
 
+// Recomputes a side's formation slots from the roles its players hold.
+// Players keep their left-to-right order, so nobody crosses the pitch to a new slot.
+export function arrangeSide(state: MatchState, side: Side): void {
+  const team = state.players.filter((p) => p.side === side).sort((a, b) => a.slot.y - b.slot.y);
+  const slots = assignSlots(team.map((p) => p.position));
+  team.forEach((p, i) => (p.slot = slots[i]!));
+}
+
 // Where an off-ball player wants to be: their slot, slid towards the ball,
 // pushed up when their team has the ball and dropped back when it doesn't.
+// Mentality sets how many bodies commit forward when the team has the ball.
 export function anchor(state: MatchState, p: MatchPlayer, inPossession: boolean): Vec {
   const ball = toTeamFrame(p.side, state.ball.pos);
-  const x = p.slot.x + (ball.x - CENTRE.x) * SHIFT_X + (inPossession ? ATTACK_PUSH : -DEFEND_DROP);
+  const x =
+    p.slot.x +
+    (ball.x - CENTRE.x) * SHIFT_X +
+    (inPossession ? ATTACK_PUSH + state.teams[p.side].tactics.mentality * MENTALITY_PUSH : -DEFEND_DROP);
   const y = p.slot.y + (ball.y - CENTRE.y) * SHIFT_Y;
-  return fromTeamFrame(p.side, clampToPitch({ x, y }));
+  const [minX, maxX] = LINE_RANGE[p.position];
+  return fromTeamFrame(p.side, clampToPitch({ x: Math.min(maxX, Math.max(minX, x)), y }));
 }
 
 // Interpose between the ball and the middle of the goal, staying near the line
