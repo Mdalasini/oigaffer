@@ -107,7 +107,7 @@ export const KEEPER_KICK_DISTANCE = 50;
 
 // Tackling
 export const TACKLE_RANGE = 2;
-export const TACKLE_ATTEMPT = 0.1;
+export const TACKLE_ATTEMPT = 0.17; // chance per second that the nearest defender in range tries a tackle (the ball spends a third of play in flight)
 export const TACKLE_BASE = 0.35;
 export const TACKLE_SKILL = 0.004;
 export const TACKLE_COOLDOWN = 3;

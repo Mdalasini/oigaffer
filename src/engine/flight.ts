@@ -76,7 +76,8 @@ function land(state: MatchState, flight: BallFlight): void {
       }));
       break;
     case "header":
-      if (player) resolveShot(state, player, arrival.xg, "header");
+      // Only a player who got there can head it; otherwise it drops loose
+      if (reached) resolveShot(state, player!, arrival.xg, "header");
       else looseBall(state, state.ball.pos, arrival.playerId);
       break;
     case "follow_on":
