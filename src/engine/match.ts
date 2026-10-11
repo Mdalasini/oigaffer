@@ -129,6 +129,40 @@ export function tick(state: MatchState): void {
   if (state.ball.ownerId === null) pickUpLooseBall(state);
 }
 
+// Sets up a match ready for the first tick
+export function startEventMatch(
+  world: GameWorld,
+  home: Club,
+  away: Club,
+  rng: Rng = Math.random,
+  managers: Managers = {},
+): MatchState {
+  const state = createMatchState(world, home, away, rng, managers);
+  kickoff(state, "home");
+  return state;
+}
+
+export const isFullTime = (state: MatchState): boolean => state.time >= MATCH_SECONDS;
+
+// Advances the match by one second. Managers look at the game every few
+// minutes, and straight after a goal.
+export function stepEventMatch(state: MatchState): void {
+  if (isFullTime(state)) return;
+  const t = ++state.time;
+  if (t === HALF_TIME + 1) kickoff(state, "away");
+  if (t % MANAGER_INTERVAL === 0 || scoredLastTick(state)) consultManagers(state);
+  tick(state);
+}
+
+function scoredLastTick(state: MatchState): boolean {
+  for (let i = state.events.length - 1; i >= 0; i--) {
+    const e = state.events[i]!;
+    if (e.time < state.time - 1) return false;
+    if (e.type === "shot" && e.outcome === "goal" && e.time === state.time - 1) return true;
+  }
+  return false;
+}
+
 export function simulateEventMatch(
   world: GameWorld,
   home: Club,
@@ -136,20 +170,8 @@ export function simulateEventMatch(
   rng: Rng = Math.random,
   managers: Managers = {},
 ): EventMatchResult {
-  const state = createMatchState(world, home, away, rng, managers);
-  kickoff(state, "home");
-  let goals = 0;
-  for (let t = 1; t <= MATCH_SECONDS; t++) {
-    state.time = t;
-    if (t === HALF_TIME + 1) kickoff(state, "away");
-    // Managers look at the game every few minutes, and straight after a goal
-    const scored = state.score.home + state.score.away !== goals;
-    if (t % MANAGER_INTERVAL === 0 || scored) {
-      goals = state.score.home + state.score.away;
-      consultManagers(state);
-    }
-    tick(state);
-  }
+  const state = startEventMatch(world, home, away, rng, managers);
+  while (!isFullTime(state)) stepEventMatch(state);
   return {
     homeGoals: state.score.home,
     awayGoals: state.score.away,

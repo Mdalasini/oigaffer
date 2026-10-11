@@ -58,3 +58,9 @@ export const defaultManager: Manager = {
 export function fixedManager(fixed: Tactics): Manager {
   return { prematch: () => fixed, inMatch: () => fixed };
 }
+
+// The player's manager: starts with their chosen tactics and never changes them
+// itself. The UI applies the player's changes straight to the match instead.
+export function humanManager(initial: Tactics): Manager {
+  return { prematch: () => initial, inMatch: (ctx) => ctx.tactics };
+}
