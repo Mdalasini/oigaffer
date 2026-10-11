@@ -3,16 +3,16 @@ import { fixedManager } from "../manager";
 import type { GameWorld } from "../model";
 import { seededRng } from "../random";
 import { player, SLOW_TEST, strongVsWeak } from "../test-helpers";
-import { MAX_SUBS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
+import { GOAL_AREA_DEPTH, MAX_SUBS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
 import { scoreOptions } from "./decide";
 import { dist, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { makePendingSubs, requestSub, sendOff, substitute } from "./lineup";
 import { createMatchState, isFullTime, simulateEventMatch, stepEventMatch, tick } from "./match";
 import { moveOffBall } from "./movement";
 import { judgeFoul } from "./referee";
-import { act } from "./resolve";
-import { awardFreeKick, placeBall } from "./restarts";
-import { ballDead, giveBall, keeperOf, owner, type MatchPlayer, type MatchState } from "./state";
+import { act, attemptTackle } from "./resolve";
+import { awardFreeKick, goalKick, placeBall } from "./restarts";
+import { ballDead, fromTeamFrame, giveBall, keeperOf, owner, toTeamFrame, type MatchPlayer, type MatchState } from "./state";
 
 // Two clubs of equal quality, each with a bench (a spare keeper, defender, midfielder and forward)
 function withBenches(): GameWorld {
@@ -37,7 +37,33 @@ function clearPitch(state: MatchState) {
   for (const p of state.players) p.pos = p.side === "home" ? { x: 2, y: 2 } : { x: 40, y: 66 };
 }
 
+// The receiver is beyond the defence, but ahead of the ball rather than level with it
+function offsideSituation(seed = 1) {
+  const state = newState(undefined, seed);
+  clearPitch(state);
+  const passer = byRole(state, "home", "MID")[0]!;
+  const runner = byRole(state, "home", "FWD")[0]!;
+  passer.pos = { x: 60, y: 34 };
+  runner.pos = { x: 92, y: 34 };
+  for (const d of byRole(state, "away", "DEF")) d.pos = { x: 85, y: 30 };
+  keeperOf(state, "away")!.pos = { x: 104, y: 34 };
+  giveBall(state, passer, 0);
+  return { state, passer, runner };
+}
+
 describe("ball out of play", () => {
+  test("goal kicks are taken inside the goal area for both sides", () => {
+    for (const side of ["home", "away"] as const) {
+      const state = newState();
+      goalKick(state, side);
+      const spot = toTeamFrame(side, state.ball.pos);
+      expect(spot.x).toBe(GOAL_AREA_DEPTH - 0.5);
+      expect(spot.x).toBeLessThan(GOAL_AREA_DEPTH);
+      expect(spot.y).toBe(PITCH_WIDTH / 2);
+      expect(owner(state)).toBe(keeperOf(state, side));
+    }
+  });
+
   test("over the touchline is a throw-in to the other side", () => {
     const state = newState();
     placeBall(state, { x: 40, y: -2 }, "home");
@@ -63,6 +89,24 @@ describe("ball out of play", () => {
 });
 
 describe("restarts limit what the taker can do", () => {
+  test("a restart taker cannot be tackled even after readyAt", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const state = newState(undefined, seed);
+      awardFreeKick(state, "home", { x: 60, y: 34 }, true);
+      const taker = owner(state)!;
+      const defender = byRole(state, "away", "DEF")[0]!;
+      defender.pos = { ...taker.pos };
+      defender.cooldown = 0;
+      state.time = state.ball.readyAt;
+      expect(ballDead(state)).toBe(false);
+      const events = state.events.length;
+      expect(attemptTackle(state, taker)).toBe(false);
+      expect(owner(state)).toBe(taker);
+      expect(state.events).toHaveLength(events);
+      expect(defender.cooldown).toBe(0);
+    }
+  });
+
   test("a throw-in can only be passed, and not far", () => {
     const state = newState();
     placeBall(state, { x: 50, y: -1 }, "away");
@@ -107,6 +151,67 @@ describe("restarts limit what the taker can do", () => {
 });
 
 describe("offside", () => {
+  test("offside passes and through balls are only flagged on success", () => {
+    for (const kind of ["pass", "through"] as const) {
+      for (const outcome of ["success", "interception", "astray"] as const) {
+        const { state, passer, runner } = offsideSituation();
+        const defender = byRole(state, "away", "DEF")[0]!;
+        act(state, passer, {
+          kind, receiver: runner, target: { x: 96, y: 34 },
+          success: outcome === "success" ? 1 : 0,
+          risks: outcome === "interception" ? [{ player: defender, risk: 1 }] : [],
+        });
+        expect(state.events.some((e) => e.type === "offside")).toBe(outcome === "success");
+        if (outcome === "success") expect(state.ball.setPiece).toBe("indirect_free_kick");
+        else if (outcome === "interception") {
+          expect(state.events.at(-1)?.type).toBe("interception");
+          expect(owner(state)).toBe(defender);
+        } else expect(state.events.some((e) => e.type === "pass_astray")).toBe(true);
+      }
+    }
+  });
+
+  test("passes from throw-ins, goal kicks and corners remain exempt from offside", () => {
+    for (const kind of ["throw_in", "goal_kick", "corner"] as const) {
+      const { state, passer, runner } = offsideSituation();
+      giveBall(state, passer, 0, kind);
+      act(state, passer, { kind: "pass", receiver: runner, success: 1, risks: [] });
+      expect(owner(state)).toBe(runner);
+      expect(state.events.some((e) => e.type === "offside")).toBe(false);
+    }
+  });
+
+  test("delivered crosses flag offside before a keeper claim, but corners are exempt", () => {
+    for (const corner of [false, true]) {
+      const { state, passer, runner } = offsideSituation();
+      if (corner) giveBall(state, passer, 0, "corner");
+      act(state, passer, { kind: "cross", target: runner, delivery: 1, claim: 1, duel: 1, xg: 1, defender: null });
+      expect(state.events.some((e) => e.type === "offside")).toBe(!corner);
+      if (corner) expect(owner(state)).toBe(keeperOf(state, "away"));
+      else {
+        expect(state.events.at(-2)).toMatchObject({ type: "offside", playerId: runner.id, passerId: passer.id });
+        expect(state.ball.setPiece).toBe("indirect_free_kick");
+        expect(state.ball.pos).toEqual(runner.pos);
+      }
+    }
+  });
+
+  test("blocked and overhit crosses do not flag an offside target", () => {
+    let blocked = 0;
+    for (let seed = 1; seed <= 50; seed++) {
+      const { state, passer, runner } = offsideSituation(seed);
+      byRole(state, "away", "DEF")[0]!.pos = { ...passer.pos };
+      act(state, passer, { kind: "cross", target: runner, delivery: 0, claim: 0, duel: 1, xg: 1, defender: null });
+      const cross = state.events.find((e) => e.type === "cross");
+      expect(cross?.type).toBe("cross");
+      if (cross?.type === "cross" && cross.outcome === "blocked") blocked++;
+      else expect(cross).toMatchObject({ outcome: "overhit" });
+      expect(state.events.some((e) => e.type === "offside")).toBe(false);
+    }
+    expect(blocked).toBeGreaterThan(0);
+    expect(blocked).toBeLessThan(50);
+  });
+
   test("a pass to someone beyond the second-last defender is flagged", () => {
     const state = newState();
     clearPitch(state);
@@ -139,6 +244,26 @@ describe("offside", () => {
 });
 
 describe("fouls and cards", () => {
+  test("DOGSO penalties give red for pull-backs and the next yellow for tackles", () => {
+    for (const tactical of [false, true]) {
+      for (const booked of [false, true]) {
+        const state = newState();
+        clearPitch(state);
+        const attacker = byRole(state, "home", "FWD")[0]!;
+        const defender = byRole(state, "away", "DEF")[0]!;
+        attacker.pos = { x: 95, y: 34 };
+        defender.pos = { x: 94, y: 35 };
+        defender.yellow = booked;
+        giveBall(state, attacker, 0);
+        judgeFoul(state, defender, attacker, tactical);
+        const card = tactical ? "red" : booked ? "second_yellow" : "yellow";
+        expect(state.events.some((e) => e.type === "card" && e.card === card && e.playerId === defender.id)).toBe(true);
+        expect(state.ball.setPiece).toBe("penalty");
+        expect(team(state, "away")).toHaveLength(card === "yellow" ? 11 : 10);
+      }
+    }
+  });
+
   test("bringing down a clear run on goal as the last defender is a red card", () => {
     const state = newState();
     clearPitch(state);
@@ -164,6 +289,28 @@ describe("fouls and cards", () => {
     expect(home.filter((p) => p.position === "GK")).toHaveLength(1);
     expect(home.filter((p) => p.position === "DEF")).toHaveLength(4);
   });
+});
+
+test("forwards gambling beyond a deep offside line stay on the pitch", () => {
+  for (const side of ["home", "away"] as const) {
+    const state = newState();
+    clearPitch(state);
+    const carrier = byRole(state, side, "MID")[0]!;
+    carrier.pos = fromTeamFrame(side, { x: PITCH_LENGTH, y: 34 });
+    for (const forward of byRole(state, side, "FWD")) {
+      forward.pos = fromTeamFrame(side, { x: PITCH_LENGTH, y: 34 });
+    }
+    giveBall(state, carrier, 0);
+    for (let t = 0; t < 100; t++) {
+      moveOffBall(state);
+      for (const forward of byRole(state, side, "FWD")) {
+        expect(forward.pos.x).toBeGreaterThanOrEqual(0);
+        expect(forward.pos.x).toBeLessThanOrEqual(PITCH_LENGTH);
+        expect(forward.pos.y).toBeGreaterThanOrEqual(0);
+        expect(forward.pos.y).toBeLessThanOrEqual(PITCH_WIDTH);
+      }
+    }
+  }
 });
 
 describe("substitutions", () => {

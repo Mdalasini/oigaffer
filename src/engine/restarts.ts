@@ -5,6 +5,7 @@ import {
   BOX_HALF_WIDTH,
   DANGEROUS_FREE_KICK_TICKS,
   FREE_KICK_SHOT_RANGE,
+  GOAL_AREA_DEPTH,
   KEEPER_HOLD_TICKS,
   PENALTY_SPOT,
   SETUP_TICKS,
@@ -74,11 +75,11 @@ export function corner(state: MatchState, side: Side, flag: Vec): void {
   if (taker) setUp(state, "corner", taker, flag, SETUP_TICKS.corner);
 }
 
-// Ball to the keeper on the edge of the six-yard box
+// Ball to the keeper just inside the six-yard box
 export function goalKick(state: MatchState, side: Side): void {
   const taker = keeperOf(state, side) ?? nearest(state.players.filter((p) => p.side === side), ownGoal(side));
   if (!taker) return;
-  const spot = add(ownGoal(side), scale(normalize(sub(attackingGoal(side), ownGoal(side))), 6));
+  const spot = add(ownGoal(side), scale(normalize(sub(attackingGoal(side), ownGoal(side))), GOAL_AREA_DEPTH - 0.5));
   setUp(state, "goal_kick", taker, spot, Math.max(SETUP_TICKS.goal_kick, KEEPER_HOLD_TICKS));
 }
 

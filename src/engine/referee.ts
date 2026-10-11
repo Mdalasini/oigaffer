@@ -59,8 +59,11 @@ function deniesGoalScoringChance(state: MatchState, fouler: MatchPlayer, victim:
 
 function decideCard(state: MatchState, fouler: MatchPlayer, victim: MatchPlayer, tactical: boolean, penalty: boolean): Card | null {
   const strict = state.referee.strictness;
-  // Stopping a clear chance is a red, unless it's a penalty (the spot kick restores the chance)
-  if (deniesGoalScoringChance(state, fouler, victim) && !penalty) return "red";
+  // Only an attempt to play the ball gets the reduced DOGSO sanction in the box
+  if (deniesGoalScoringChance(state, fouler, victim)) {
+    if (tactical || !penalty) return "red";
+    return fouler.yellow ? "second_yellow" : "yellow";
+  }
   if (state.rng() < STRAIGHT_RED_CHANCE * strict) return "red";
   const yellow = (tactical ? TACTICAL_YELLOW_CHANCE : YELLOW_CHANCE) * strict;
   if (state.rng() < yellow * (fouler.yellow ? BOOKED_CAUTION : 1)) return fouler.yellow ? "second_yellow" : "yellow";

@@ -70,7 +70,7 @@ function behindGoalLine(state: MatchState, attacking: Side, near: Vec): void {
 // Keepers holding the ball can't be tackled, and nobody tackles at a dead ball.
 // A mistimed challenge can be a foul.
 export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean {
-  if (carrier.position === "GK" || ballDead(state)) return false;
+  if (carrier.position === "GK" || ballDead(state) || state.ball.setPiece !== null) return false;
   const ready = opponents(state, carrier).filter((o) => o.cooldown === 0 && o.position !== "GK");
   const tackler = nearest(ready, carrier.pos);
   if (!tackler || dist(tackler.pos, carrier.pos) > TACKLE_RANGE) return false;
@@ -102,13 +102,15 @@ function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { 
   // Offside is judged the moment the ball is played; restarts like throw-ins are exempt
   const kind = state.ball.setPiece;
   const exempt = kind === "throw_in" || kind === "goal_kick" || kind === "corner";
-  if (!exempt && flaggedOffside(state, action.receiver)) {
-    emit(state, { type: "offside", side: passer.side, playerId: action.receiver.id, passerId: passer.id });
-    awardFreeKick(state, opponent(passer.side), { ...action.receiver.pos }, false);
-    return;
-  }
+  const offside = !exempt && flaggedOffside(state, action.receiver);
 
   if (state.rng() < action.success) {
+    // An offside position only matters if the receiver becomes involved in play
+    if (offside) {
+      emit(state, { type: "offside", side: passer.side, playerId: action.receiver.id, passerId: passer.id });
+      awardFreeKick(state, opponent(passer.side), { ...action.receiver.pos }, false);
+      return;
+    }
     if (action.kind === "through") {
       // Into space: the runner and the defence race for it
       emit(state, { type: "through_ball", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
@@ -201,6 +203,7 @@ export function resolveShot(state: MatchState, shooter: MatchPlayer, xg: number,
 // Delivered, claimed by the keeper, headed clear, or won and headed at goal
 function resolveCross(state: MatchState, crosser: MatchPlayer, action: Action & { kind: "cross" }): void {
   const { target } = action;
+  const offside = state.ball.setPiece !== "corner" && flaggedOffside(state, target);
   const cross = (outcome: "blocked" | "overhit" | "claimed" | "cleared" | "won") =>
     emit(state, { type: "cross", side: crosser.side, playerId: crosser.id, targetId: target.id, outcome });
 
@@ -216,6 +219,11 @@ function resolveCross(state: MatchState, crosser: MatchPlayer, action: Action & 
   if (state.rng() > action.delivery) {
     cross("overhit");
     placeBall(state, scatter(state, target.pos, 5, 15), crosser.side);
+    return;
+  }
+  if (offside) {
+    emit(state, { type: "offside", side: crosser.side, playerId: target.id, passerId: crosser.id });
+    awardFreeKick(state, opponent(crosser.side), { ...target.pos }, false);
     return;
   }
   const keeper = keeperOf(state, opponent(crosser.side));

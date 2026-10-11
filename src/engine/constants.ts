@@ -109,6 +109,7 @@ export const TACKLE_LOOSE_DISTANCE: [number, number] = [2, 8];
 // ---------- Rules, restarts and the referee ----------
 
 // Pitch markings (metres)
+export const GOAL_AREA_DEPTH = 5.5; // metres
 export const BOX_DEPTH = 16.5;
 export const BOX_HALF_WIDTH = 20.16;
 export const PENALTY_SPOT = 11;

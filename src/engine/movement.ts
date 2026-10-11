@@ -136,7 +136,7 @@ export function moveOffBall(state: MatchState): void {
         const t = toTeamFrame(p.side, target);
         const gamble = state.rng() < OFFSIDE_GAMBLE_CHANCE ? state.rng() * OFFSIDE_GAMBLE : 0;
         const x = p.position === "FWD" ? onside - 1 + gamble : Math.min(t.x, onside);
-        target = toTeamFrame(p.side, { x, y: t.y });
+        target = clampToPitch(toTeamFrame(p.side, { x, y: t.y }));
       }
       speed = MOVE_SPEED;
     }
