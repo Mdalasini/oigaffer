@@ -9,6 +9,7 @@ export interface Attributes {
   dribbling: number;
   tackling: number;
   goalkeeping: number;
+  stamina: number; // how slowly they tire over a match
 }
 
 export interface Player {
@@ -21,7 +22,7 @@ export interface Player {
 export interface Club {
   id: Id;
   name: string;
-  playerIds: Id[];
+  playerIds: Id[]; // the whole squad; the starting eleven is picked from it
 }
 
 export interface GameWorld {

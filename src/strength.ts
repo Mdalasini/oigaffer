@@ -1,4 +1,5 @@
 import type { Club, GameWorld, Player, Position } from "./model";
+import { pickEleven } from "./squad";
 
 // How much each position contributes to each side of the game
 const ATTACK_WEIGHT: Record<Position, number> = { GK: 0, DEF: 0.2, MID: 0.6, FWD: 1 };
@@ -34,13 +35,9 @@ function weightedAverage(
   return weightSum === 0 ? 0 : total / weightSum;
 }
 
-// Returns attack and defence on the same 1–20 scale as player attributes
+// Returns attack and defence of the club's best eleven, on the same 1–20 scale as player attributes
 export function clubStrength(world: GameWorld, club: Club): ClubStrength {
-  const players = club.playerIds.map((id) => {
-    const p = world.players[id];
-    if (!p) throw new Error(`Club ${club.id} references unknown player ${id}`);
-    return p;
-  });
+  const players = pickEleven(world, club);
   return {
     attack: weightedAverage(players, ATTACK_WEIGHT, attackingRating),
     defence: weightedAverage(players, DEFENCE_WEIGHT, defendingRating),

@@ -5,10 +5,12 @@ import { generateWorld } from "./seed";
 
 const NAMES = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
 
-test("seeded clubs field eleven players with valid attributes", () => {
+test("seeded clubs have a squad with cover in every position and valid attributes", () => {
   const world = generateWorld(NAMES, seededRng(1));
   for (const club of Object.values(world.clubs)) {
-    expect(club.playerIds).toHaveLength(11);
+    expect(club.playerIds).toHaveLength(18);
+    const positions = club.playerIds.map((id) => world.players[id]!.position);
+    expect(positions.filter((p) => p === "GK")).toHaveLength(2);
     for (const id of club.playerIds) {
       for (const v of Object.values(world.players[id]!.attributes)) {
         expect(Number.isInteger(v) && v >= 1 && v <= 20).toBe(true);
