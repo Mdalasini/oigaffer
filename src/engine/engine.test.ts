@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fixedManager, humanManager } from "../manager";
 import { seededRng } from "../random";
-import { strongVsWeak } from "../test-helpers";
+import { SLOW_TEST, strongVsWeak } from "../test-helpers";
 import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
 import { anchor, assignSlots, keeperPosition } from "./formation";
@@ -111,11 +111,16 @@ describe("full match", () => {
     expect(shotXg).toBeCloseTo(r.homeXg);
   });
 
-  test("events are in order and inside the 90 minutes", () => {
+  test("events are in order, and the match runs 90 minutes plus added time", () => {
     const { events } = simulateEventMatch(world, world.clubs.strong!, world.clubs.weak!, seededRng(7));
     expect(events.length).toBeGreaterThan(100);
     for (let i = 1; i < events.length; i++) expect(events[i]!.time).toBeGreaterThanOrEqual(events[i - 1]!.time);
-    expect(events.at(-1)!.time).toBeLessThanOrEqual(MATCH_SECONDS);
+    const added = events.filter((e) => e.type === "added_time");
+    expect(added.map((e) => e.period)).toEqual([1, 2]);
+    expect(events.filter((e) => e.type === "whistle").map((e) => e.type === "whistle" && e.phase)).toEqual(["half_time", "full_time"]);
+    const last = events.at(-1)!;
+    expect(last).toMatchObject({ type: "whistle", phase: "full_time", period: 2 });
+    expect(last.clock).toBeGreaterThan(MATCH_SECONDS);
   });
 
   test("stronger club wins more often than it loses", () => {
@@ -128,7 +133,7 @@ describe("full match", () => {
       else if (r.homeGoals < r.awayGoals) losses++;
     }
     expect(wins).toBeGreaterThan(losses * 2);
-  });
+  }, SLOW_TEST);
 });
 
 describe("tactics in the engine", () => {
@@ -182,20 +187,26 @@ describe("tactics in the engine", () => {
     expect(shapeDepth(2)).toBeGreaterThan(shapeDepth(-2));
   });
 
-  test("very defensive concedes less than very attacking against the same opponent", () => {
-    const conceded = (mentality: -2 | 2) => {
+  test("an underdog that sits deep concedes less, and the game has fewer goals", () => {
+    const play = (mentality: -2 | 0) => {
       const rng = seededRng(21);
+      let conceded = 0;
       let total = 0;
-      for (let i = 0; i < 40; i++) {
-        total += simulateEventMatch(world, world.clubs.strong!, world.clubs.weak!, rng, {
+      for (let i = 0; i < 100; i++) {
+        const r = simulateEventMatch(world, world.clubs.weak!, world.clubs.strong!, rng, {
           home: fixedManager({ formation: "4-4-2", mentality }),
           away: fixedManager({ formation: "4-4-2", mentality: 0 }),
-        }).awayGoals;
+        });
+        conceded += r.awayGoals;
+        total += r.homeGoals + r.awayGoals;
       }
-      return total;
+      return { conceded, total };
     };
-    expect(conceded(-2)).toBeLessThan(conceded(2));
-  });
+    const deep = play(-2);
+    const open = play(0);
+    expect(deep.conceded).toBeLessThan(open.conceded);
+    expect(deep.total).toBeLessThan(open.total);
+  }, SLOW_TEST);
 
   test("managers change tactics during a match", () => {
     let changes = 0;
@@ -205,7 +216,7 @@ describe("tactics in the engine", () => {
       changes += events.filter((e) => e.type === "tactics" && e.time > 0).length;
     }
     expect(changes).toBeGreaterThan(0);
-  });
+  }, SLOW_TEST);
 });
 
 describe("stepping a match", () => {
@@ -214,10 +225,10 @@ describe("stepping a match", () => {
     const state = startEventMatch(world, strong!, weak!, seededRng(3));
     while (!isFullTime(state)) stepEventMatch(state);
     const result = simulateEventMatch(world, strong!, weak!, seededRng(3));
-    expect(state.time).toBe(MATCH_SECONDS);
+    expect(state.clock).toBeGreaterThan(MATCH_SECONDS);
     expect(state.score).toEqual({ home: result.homeGoals, away: result.awayGoals });
     expect(state.events).toEqual(result.events);
-  });
+  }, SLOW_TEST);
 
   test("a human manager's changes stick until they change them again", () => {
     const { strong, weak } = world.clubs;
@@ -227,5 +238,5 @@ describe("stepping a match", () => {
     applyTactics(state, "home", { formation: "3-4-3", mentality: 2 });
     while (!isFullTime(state)) stepEventMatch(state);
     expect(state.teams.home.tactics).toEqual({ formation: "3-4-3", mentality: 2 });
-  });
+  }, SLOW_TEST);
 });

@@ -65,6 +65,25 @@ function summarise(name: string, engine: MatchEngine) {
     console.log(`    take-ons won    ${per(count((e) => e.type === "dribble" && e.defenderId !== null))}`);
     console.log(`    clearances      ${per(count((e) => e.type === "clearance"))}`);
     console.log(`    interceptions   ${per(count((e) => e.type === "interception"))}`);
+    console.log(`    crosses         ${per(count((e) => e.type === "cross"))}  (won ${per(count((e) => e.type === "cross" && e.outcome === "won"))})`);
+    console.log(`    corners         ${per(count((e) => e.type === "set_piece" && e.kind === "corner"))}`);
+    console.log(`    throw-ins       ${per(count((e) => e.type === "set_piece" && e.kind === "throw_in"))}`);
+    console.log(`    goal kicks      ${per(count((e) => e.type === "set_piece" && e.kind === "goal_kick"))}`);
+    console.log(`    fouls           ${per(count((e) => e.type === "foul"))}  (advantage ${per(count((e) => e.type === "foul" && e.award === "advantage"))})`);
+    console.log(`    offsides        ${per(count((e) => e.type === "offside"))}`);
+    console.log(`    yellow / red    ${per(count((e) => e.type === "card" && e.card === "yellow"))} / ${per(count((e) => e.type === "card" && e.card !== "yellow"))}`);
+    console.log(`    penalties       ${per(count((e) => e.type === "set_piece" && e.kind === "penalty"))}`);
+    console.log(`    injuries        ${per(count((e) => e.type === "injury"))}`);
+    console.log(`    subs            ${per(count((e) => e.type === "substitution"))}`);
+    const goalsBy = (kind: string) =>
+      count((e) => e.type === "shot" && e.outcome === "goal" && e.kind === kind);
+    const allGoals = count((e) => e.type === "shot" && e.outcome === "goal");
+    const share = (n: number) => `${((100 * n) / Math.max(1, allGoals)).toFixed(0)}%`;
+    console.log(`  goals by type:     headers ${share(goalsBy("header"))}, free kicks ${share(goalsBy("free_kick"))}, penalties ${share(goalsBy("penalty"))}`);
+    const added = events.filter((e) => e.type === "added_time");
+    const avgAdded = (period: number) =>
+      (added.filter((e) => e.period === period).reduce((s, e) => s + (e.type === "added_time" ? e.minutes : 0), 0) / matches).toFixed(1);
+    console.log(`  added time:        ${avgAdded(1)} + ${avgAdded(2)} minutes`);
   }
 }
 

@@ -1,9 +1,14 @@
 import type { Position } from "../model";
 import {
   ATTACK_PUSH,
+  ATTACK_WIDTH,
+  DEFEND_WIDTH,
   DEFEND_DROP,
   KEEPER_MAX_ADVANCE,
   MENTALITY_PUSH,
+  MENTALITY_WIDTH,
+  SETUP_TICKS,
+  KICKOFF_HALF_MARGIN,
   SHIFT_X,
   SHIFT_Y,
 } from "./constants";
@@ -18,6 +23,8 @@ import {
   type MatchState,
   type Side,
 } from "./state";
+
+import { restartTicks } from "./restarts";
 
 // Depth of each line in the team frame (own goal at x = 0)
 const LINE_X: Record<Position, number> = { GK: 4, DEF: 20, MID: 38, FWD: 50 };
@@ -54,15 +61,17 @@ export function arrangeSide(state: MatchState, side: Side): void {
 }
 
 // Where an off-ball player wants to be: their slot, slid towards the ball,
-// pushed up when their team has the ball and dropped back when it doesn't.
+// pushed up and spread wide when their team has the ball, dropped back and narrow when it doesn't.
 // Mentality sets how many bodies commit forward when the team has the ball.
 export function anchor(state: MatchState, p: MatchPlayer, inPossession: boolean): Vec {
+  const mentality = state.teams[p.side].tactics.mentality;
   const ball = toTeamFrame(p.side, state.ball.pos);
   const x =
     p.slot.x +
     (ball.x - CENTRE.x) * SHIFT_X +
-    (inPossession ? ATTACK_PUSH + state.teams[p.side].tactics.mentality * MENTALITY_PUSH : -DEFEND_DROP);
-  const y = p.slot.y + (ball.y - CENTRE.y) * SHIFT_Y;
+    (inPossession ? ATTACK_PUSH + mentality * MENTALITY_PUSH : -DEFEND_DROP);
+  const width = inPossession ? 1 + (ATTACK_WIDTH - 1) * (1 + MENTALITY_WIDTH * mentality) : DEFEND_WIDTH;
+  const y = CENTRE.y + (p.slot.y - CENTRE.y) * width + (ball.y - CENTRE.y) * SHIFT_Y;
   const [minX, maxX] = LINE_RANGE[p.position];
   return fromTeamFrame(p.side, clampToPitch({ x: Math.min(maxX, Math.max(minX, x)), y }));
 }
@@ -75,17 +84,23 @@ export function keeperPosition(state: MatchState, keeper: MatchPlayer): Vec {
   return add(goal, scale(normalize(toBall), advance));
 }
 
-// Everyone back to their own half; a forward from the kicking team takes the ball on the spot
-export function kickoff(state: MatchState, kicking: Side): void {
+// Everyone back to their own half; a forward from the kicking team takes the ball on the spot.
+// After a goal there's a delay while the scorers celebrate.
+export function kickoffPosition(p: MatchPlayer): Vec {
+  return fromTeamFrame(p.side, { x: Math.min(p.slot.x, CENTRE.x - KICKOFF_HALF_MARGIN), y: p.slot.y });
+}
+
+export function kickoff(state: MatchState, kicking: Side, delay: number = SETUP_TICKS.kickoff, placePlayers = false): void {
   for (const p of state.players) {
-    p.pos = fromTeamFrame(p.side, { x: Math.min(p.slot.x, CENTRE.x - 2), y: p.slot.y });
+    if (placePlayers) p.pos = kickoffPosition(p);
     p.cooldown = 0;
   }
   const kicker =
     state.players.find((p) => p.side === kicking && p.position === "FWD") ??
     state.players.find((p) => p.side === kicking && p.position !== "GK");
   if (!kicker) throw new Error(`No outfield player to kick off for ${kicking}`);
-  kicker.pos = { ...CENTRE };
-  giveBall(state, kicker, 1);
+  if (placePlayers) kicker.pos = { ...CENTRE };
+  giveBall(state, kicker, restartTicks(state, delay), "kickoff");
+  state.ball.pos = { ...CENTRE };
   emit(state, { type: "kickoff", side: kicking });
 }
