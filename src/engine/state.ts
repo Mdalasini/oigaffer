@@ -54,7 +54,7 @@ export type ShotOutcome = "goal" | "saved" | "off_target" | "blocked";
 export type ShotKind = "open_play" | "header" | "free_kick" | "penalty";
 export type Card = "yellow" | "second_yellow" | "red";
 export type Period = 1 | 2;
-export type Phase = "first_half" | "half_time" | "second_half" | "full_time";
+export type Phase = "first_half" | "half_time" | "second_half" | "full_time" | "abandoned";
 
 export type MatchEvent = { time: number; period: Period; clock: number; side: Side } & (
   | { type: "kickoff" }
@@ -80,7 +80,7 @@ export type MatchEvent = { time: number; period: Period; clock: number; side: Si
   | { type: "substitution"; offId: Id; onId: Id }
   | { type: "injury"; playerId: Id }
   | { type: "added_time"; minutes: number }
-  | { type: "whistle"; phase: "half_time" | "full_time" }
+  | { type: "whistle"; phase: "half_time" | "full_time" | "abandoned" }
 );
 
 export interface TeamState {
@@ -97,6 +97,8 @@ export interface MatchState {
   clock: number; // match clock in seconds: 0–2700 first half, 2700–5400 second, beyond for added time
   periodEnd: number; // clock at which the ref blows for this period; set once added time is known
   stoppage: number; // seconds to add on in the current period
+  announcedStoppage: number; // stoppage total when added time was announced
+  announcedEnd: number; // minimum period end shown by the fourth official
   phase: Phase;
   players: MatchPlayer[]; // on the pitch
   offPitch: OffPitch[];

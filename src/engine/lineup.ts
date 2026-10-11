@@ -3,7 +3,7 @@ import { lineRating } from "../squad";
 import { assignRoles, type Tactics } from "../tactics";
 import { ADDED, MAX_SUBS } from "./constants";
 import { arrangeSide } from "./formation";
-import { emit, type MatchPlayer, type MatchState, type OffPitch, type Side } from "./state";
+import { emit, nearest, opponent, type MatchPlayer, type MatchState, type OffPitch, type Side } from "./state";
 
 const onSide = (state: MatchState, side: Side) => state.players.filter((p) => p.side === side);
 
@@ -36,8 +36,30 @@ export function applyTactics(state: MatchState, side: Side, tactics: Tactics, fo
 function takeOff(state: MatchState, p: MatchPlayer, reason: OffPitch["reason"]): void {
   state.players = state.players.filter((q) => q !== p);
   state.offPitch.push({ id: p.id, side: p.side, natural: p.natural, attributes: p.base, reason });
-  if (state.ball.ownerId === p.id) state.ball.ownerId = null;
+  if (state.ball.ownerId === p.id) {
+    state.ball.ownerId = null;
+    if (reason !== "substituted" && state.ball.setPiece !== null) {
+      const taker = nearest(onSide(state, p.side).filter((q) =>
+        q.position !== "GK" || state.ball.setPiece === "goal_kick"
+      ), state.ball.pos);
+      if (taker) {
+        state.ball.ownerId = taker.id;
+        taker.pos = { ...state.ball.pos };
+      }
+    }
+  }
   state.teams[p.side].pendingSubs = state.teams[p.side].pendingSubs.filter((s) => s.offId !== p.id);
+}
+
+function abandonIfShort(state: MatchState, side: Side): void {
+  if (state.phase === "abandoned" || onSide(state, side).length >= 7) return;
+  const winner = opponent(side);
+  if (state.score[winner] - state.score[side] < 3) {
+    state.score[side] = 0;
+    state.score[winner] = 3;
+  }
+  emit(state, { type: "whistle", side, phase: "abandoned" });
+  state.phase = "abandoned";
 }
 
 // Down to ten: the shape closes up around the gap (the front line loses a player first).
@@ -45,6 +67,7 @@ function takeOff(state: MatchState, p: MatchPlayer, reason: OffPitch["reason"]):
 export function sendOff(state: MatchState, p: MatchPlayer): void {
   takeOff(state, p, "sent_off");
   fitRoles(state, p.side, state.teams[p.side].tactics);
+  abandonIfShort(state, p.side);
 }
 
 export const subsLeft = (state: MatchState, side: Side): number => MAX_SUBS - state.teams[side].subsUsed;
@@ -71,6 +94,7 @@ export function injure(state: MatchState, p: MatchPlayer): void {
   } else {
     takeOff(state, p, "injured");
     fitRoles(state, p.side, state.teams[p.side].tactics);
+    abandonIfShort(state, p.side);
   }
 }
 

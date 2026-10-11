@@ -3,10 +3,10 @@ import { fixedManager } from "../manager";
 import type { GameWorld } from "../model";
 import { seededRng } from "../random";
 import { player, SLOW_TEST, strongVsWeak } from "../test-helpers";
-import { GOAL_AREA_DEPTH, MAX_SUBS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
+import { GOAL_AREA_DEPTH, HALF_TIME, MATCH_SECONDS, MAX_SUBS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
 import { scoreOptions } from "./decide";
 import { dist, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
-import { makePendingSubs, requestSub, sendOff, substitute } from "./lineup";
+import { injure, makePendingSubs, requestSub, sendOff, substitute } from "./lineup";
 import { createMatchState, isFullTime, simulateEventMatch, stepEventMatch, tick } from "./match";
 import { moveOffBall } from "./movement";
 import { judgeFoul } from "./referee";
@@ -360,6 +360,106 @@ describe("substitutions", () => {
       if (substitute(state, "home", off.id, `extra${i}`)) made++;
     }
     expect(made).toBe(MAX_SUBS);
+  });
+});
+
+describe("match-loop and lineup edge cases", () => {
+  test("late penalties are taken before the whistle in either half", () => {
+    for (const period of [1, 2] as const) {
+      const state = newState(undefined, period);
+      state.period = period;
+      state.phase = period === 1 ? "first_half" : "second_half";
+      state.periodEnd = (period === 1 ? HALF_TIME : MATCH_SECONDS) + 120;
+      state.clock = state.periodEnd - 1;
+      awardFreeKick(state, "home", { x: 98, y: 34 }, true);
+      state.announcedEnd = state.periodEnd;
+      state.announcedStoppage = state.stoppage;
+      for (let i = 0; i < 100 && (state as MatchState).phase !== "half_time" && !isFullTime(state); i++) stepEventMatch(state);
+      const shot = state.events.findIndex((e) => e.type === "shot" && e.kind === "penalty");
+      const whistle = state.events.findIndex((e) => e.type === "whistle");
+      expect(shot).toBeGreaterThanOrEqual(0);
+      expect(whistle).toBe(state.events.length - 1);
+      expect(whistle).toBeGreaterThan(shot);
+      expect(state.events.filter((e) => e.type === "shot")).toHaveLength(1);
+      expect(state.events[whistle]!.time).toBe(state.events[shot]!.time + 1);
+    }
+  });
+
+  test("stoppages during added time extend the announced end without another announcement", () => {
+    for (const period of [1, 2] as const) {
+      const state = newState(undefined, period);
+      state.period = period;
+      state.phase = period === 1 ? "first_half" : "second_half";
+      state.clock = (period === 1 ? HALF_TIME : MATCH_SECONDS) - 1;
+      // Keep play paused so only the staged stoppage affects the end.
+      giveBall(state, byRole(state, "home", "MID")[0]!, 1000, "throw_in");
+      stepEventMatch(state);
+      const announcedEnd = state.periodEnd;
+      state.stoppage += 45;
+      while (state.clock < announcedEnd + 45) stepEventMatch(state);
+      expect(state.periodEnd).toBe(announcedEnd + 45);
+      expect((state as MatchState).phase).toBe(period === 1 ? "half_time" : "full_time");
+      expect(state.events.filter((e) => e.type === "added_time")).toHaveLength(1);
+      expect(state.events.at(-1)).toMatchObject({ type: "whistle", clock: announcedEnd + 45 });
+    }
+  });
+
+  test("the fifth sending-off abandons the match and awards a 0-3 defeat", () => {
+    const state = newState();
+    for (let i = 0; i < 5; i++) {
+      sendOff(state, team(state, "home").find((p) => p.position !== "GK")!);
+      expect(state.phase).toBe(i === 4 ? "abandoned" : "first_half");
+    }
+    expect(state.score).toEqual({ home: 0, away: 3 });
+    expect(state.events.at(-1)).toMatchObject({ type: "whistle", phase: "abandoned" });
+    expect(isFullTime(state)).toBe(true);
+    const before = structuredClone({ time: state.time, clock: state.clock, events: state.events });
+    stepEventMatch(state);
+    expect({ time: state.time, clock: state.clock, events: state.events }).toEqual(before);
+  });
+
+  test("an unreplaced injury abandons a six-player side and preserves a three-goal lead", () => {
+    const state = newState();
+    for (let i = 0; i < 4; i++) sendOff(state, team(state, "away").find((p) => p.position !== "GK")!);
+    state.score = { home: 5, away: 2 };
+    injure(state, team(state, "away").find((p) => p.position !== "GK")!);
+    expect(state.phase).toBe("abandoned");
+    expect(state.score).toEqual({ home: 5, away: 2 });
+  });
+
+  test("a match cannot start with fewer than seven available players", () => {
+    for (const club of ["strong", "weak"] as const) {
+      const world = strongVsWeak(12, 12);
+      world.clubs[club]!.playerIds = world.clubs[club]!.playerIds.slice(0, 6);
+      expect(() => newState(world)).toThrow("at least 7 players available");
+    }
+  });
+
+  test("an injured corner taker hands the pending restart to a teammate after five substitutions", () => {
+    const world = withBenches();
+    for (let i = 0; i < MAX_SUBS; i++) {
+      const p = player(`extra${i}`, "MID", 10, 10);
+      world.players[p.id] = p;
+      world.clubs.strong!.playerIds.push(p.id);
+    }
+    const state = newState(world);
+    for (let i = 0; i < MAX_SUBS; i++) {
+      expect(substitute(state, "home", byRole(state, "home", "MID")[0]!.id, `extra${i}`)).toBe(true);
+    }
+    clearPitch(state);
+    placeBall(state, { x: 106, y: 10 }, "away");
+    const injured = owner(state)!;
+    const readyAt = state.ball.readyAt;
+    injure(state, injured);
+    const taker = owner(state)!;
+    expect(taker.id).not.toBe(injured.id);
+    expect(taker.side).toBe("home");
+    expect(taker.position).not.toBe("GK");
+    expect(taker.pos).toEqual(state.ball.pos);
+    expect(state.ball.setPiece).toBe("corner");
+    expect(state.ball.readyAt).toBe(readyAt);
+    for (let i = 0; i < 100 && state.ball.setPiece === "corner"; i++) stepEventMatch(state);
+    expect(state.events.some((e) => (e.type === "cross" || e.type === "pass") && e.playerId === taker.id)).toBe(true);
   });
 });
 

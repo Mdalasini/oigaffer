@@ -41,6 +41,11 @@ export function createMatchState(
   managers: Managers = {},
 ): MatchState {
   const clubs = { home, away };
+  for (const side of ["home", "away"] as const) {
+    if (new Set(squadPlayers(world, clubs[side])).size < 7) {
+      throw new Error(`${side} must have at least 7 players available to start a match`);
+    }
+  }
   const strength = { home: clubStrength(world, home), away: clubStrength(world, away) };
 
   const team = (side: Side) => {
@@ -80,6 +85,8 @@ export function createMatchState(
     clock: 0,
     periodEnd: Infinity,
     stoppage: 0,
+    announcedStoppage: 0,
+    announcedEnd: Infinity,
     phase: "first_half",
     players,
     offPitch,
@@ -162,6 +169,7 @@ export function tick(state: MatchState): void {
     if (current) act(state, current, chooseAction(state, current));
   }
 
+  if (isFullTime(state)) return;
   moveOffBall(state);
   if (state.ball.ownerId === null) pickUpLooseBall(state);
 }
@@ -178,13 +186,15 @@ export function startEventMatch(
   return state;
 }
 
-export const isFullTime = (state: MatchState): boolean => state.phase === "full_time";
+export const isFullTime = (state: MatchState): boolean => state.phase === "full_time" || state.phase === "abandoned";
 
 function startSecondHalf(state: MatchState): void {
   state.period = 2;
   state.clock = HALF_TIME;
   state.periodEnd = Infinity;
   state.stoppage = 0;
+  state.announcedStoppage = 0;
+  state.announcedEnd = Infinity;
   state.phase = "second_half";
   for (const p of state.players) p.energy = Math.min(1, p.energy + HALF_TIME_RECOVERY);
   // Half time is the natural moment for changes
@@ -197,7 +207,7 @@ function startSecondHalf(state: MatchState): void {
 // Managers look at the game every few minutes and straight after big moments;
 // substitutions wait for the ball to go dead.
 export function stepEventMatch(state: MatchState): void {
-  if (state.phase === "full_time") return;
+  if (isFullTime(state)) return;
   if (state.phase === "half_time") startSecondHalf(state);
 
   state.time++;
@@ -206,18 +216,32 @@ export function stepEventMatch(state: MatchState): void {
   if (state.clock === regulation) {
     const minutes = Math.max(MIN_ADDED_MINUTES[state.period - 1]!, Math.round(state.stoppage / 60));
     state.periodEnd = regulation + minutes * 60;
+    state.announcedEnd = state.periodEnd;
+    state.announcedStoppage = state.stoppage;
     emit(state, { type: "added_time", side: "home", minutes });
   }
-  if (state.clock >= state.periodEnd) {
+  if (state.announcedEnd !== Infinity) {
+    state.periodEnd = state.announcedEnd + state.stoppage - state.announcedStoppage;
+  }
+  // A late penalty must be taken, but the whistle still prevents rebound play.
+  if (state.clock >= state.periodEnd && state.ball.setPiece !== "penalty") {
     const phase = state.period === 1 ? "half_time" : "full_time";
     emit(state, { type: "whistle", side: "home", phase });
     state.phase = phase;
     return;
   }
 
+  const latePenalty = state.clock >= state.periodEnd && state.ball.setPiece === "penalty";
   if (state.clock % MANAGER_INTERVAL === 0 || somethingHappened(state)) consultManagers(state);
   if (ballDead(state)) makePendingSubs(state);
   tick(state);
+  if (latePenalty && state.ball.setPiece !== "penalty") {
+    // Extending a period solely for a penalty doesn't allow a goal celebration
+    // or a rebound to start another spell of play.
+    state.periodEnd = state.clock;
+    state.announcedEnd = state.clock;
+    state.announcedStoppage = state.stoppage;
+  }
 }
 
 export function simulateEventMatch(

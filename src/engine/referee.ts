@@ -93,10 +93,12 @@ export function judgeFoul(state: MatchState, fouler: MatchPlayer, victim: MatchP
     if (card === "yellow") fouler.yellow = true;
     else sendOff(state, fouler);
   }
+  if (state.phase === "abandoned") return true;
   if (advantage) return false;
 
   const spot = { ...victim.pos };
   if (hurt) injure(state, victim);
+  if ((state as MatchState).phase === "abandoned") return true;
   awardFreeKick(state, opponent(fouler.side), spot, true, hurt ? undefined : victim);
   return true;
 }

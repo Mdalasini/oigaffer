@@ -97,7 +97,7 @@ export function describe(e: MatchEvent, names: Names): CommentaryLine | null {
     case "added_time":
       return line(`${e.minutes} minute${e.minutes === 1 ? "" : "s"} added on.`, "info", null);
     case "whistle":
-      return line(e.phase === "half_time" ? "Half time." : "Full time.", "info", null);
+      return line(e.phase === "abandoned" ? "The match is abandoned." : e.phase === "half_time" ? "Half time." : "Full time.", "info", null);
     case "tactics": {
       const setup = `${e.formation}, ${MENTALITY_NAMES[e.mentality]}`;
       if (e.time === 0) return line(`${club} line up ${setup}.`, "tactics");
