@@ -10,6 +10,8 @@ bun run typecheck             # tsc --noEmit (strict, noUncheckedIndexedAccess)
 bun run season [seed] [--events]   # play a season and print the table (Poisson engine unless --events)
 bun run watch [seed]          # play one event-engine match: shots, tactical changes, stats
 bun run calibrate [seasons]   # compare the event engine against the Poisson engine
+bun run ui                    # Vite dev server for the browser UI (http://localhost:5173)
+bun run ui:build              # production build into ui/dist
 ```
 
 Run `bun test` and `bun run typecheck` before every commit.
@@ -27,10 +29,17 @@ src/
   table.ts        League table
   season.ts       playSeason(world, rng, engine)
   tactics.ts      Mentality, formations, assignRoles (moving players between lines)
-  manager.ts      Manager interface and the default decision-tree manager
+  manager.ts      Manager interface, the default decision-tree manager, humanManager
+  commentary.ts   Turns match events into commentary lines (only the moments a manager reacts to)
+  stats.ts        Per-team box-score stats counted from the event log
   engine/         Event-based match engine (see below)
   calibrate.ts, main.ts, watch.ts   CLI entry points
   test-helpers.ts Shared fixtures: player(), squad(), strongVsWeak()
+ui/               Vite + React app; imports the game straight from src/
+  App.tsx         Setup screen: pick clubs and starting tactics
+  MatchScreen.tsx Scoreboard, commentary feed, manager controls, stats
+  useMatch.ts     Runs a match on a timer with startEventMatch/stepEventMatch
+  TacticsPicker.tsx, styles.css
 ```
 
 ## Domain model
@@ -50,6 +59,8 @@ Both implement `MatchEngine` and return a `MatchResult`, so `playSeason` can use
   - **Movement**: `movement.ts` uses kinematic steering (arrive, pursue, interpose). It covers pressing, goal-side marking, cover, the offside line and loose balls.
   - **Outcomes**: `resolve.ts` rolls results from attributes, separately from the decision. Every outcome is emitted as a `MatchEvent`; the score is derived from the events.
   - `valuation.ts` holds xG, possession value, pass risk and race estimates; `state.ts` holds the match state and sensing queries; `constants.ts` holds every tuning knob.
+
+`simulateEventMatch` plays a whole match in one go. The UI drives the same loop one second at a time with `startEventMatch` and `stepEventMatch`, and applies the player's changes immediately with `applyTactics`. The player's side uses `humanManager`, which never changes tactics on its own. Keep the two paths identical: a test checks that stepping and simulating produce the same events.
 
 Each team works in its own **team frame**, attacking towards x = 105. Convert with `toTeamFrame`/`fromTeamFrame` instead of special-casing home and away.
 
@@ -71,11 +82,18 @@ Lessons from previous tuning:
 - Real-world figures make good sanity anchors: the xG curve is about 0.45 at 6 m, 0.22 at 11 m and 0.06 at 20 m.
 - Known open imbalances: attacking mentality is worth about +0.3 points a game, one-striker formations are net negative, and tackles and interceptions run higher than in real football.
 
+## UI
+
+- The UI only reads engine state and calls engine functions. Game rules stay in `src/`, so they are tested and reusable from the CLI.
+- The engine mutates `MatchState` in place. `useMatch` keeps it in a ref and bumps a counter to redraw.
+- Visual direction is a floodlit match night: grass green, chalk white, amber for the player's team and sky blue for the opponent. Big Shoulders Display is used for the scoreboard and headings, and Atkinson Hyperlegible for everything else. Colours are CSS variables at the top of `styles.css`; keep new UI within that palette.
+
 ## Code style
 
 - Match the surrounding code. Use small modules, plain functions and interfaces, with no classes.
 - Comments explain *why* or describe football behaviour, not what the next line does.
 - Put tuning numbers in `engine/constants.ts` with a short comment and units, never inline.
+- In `ui/`, use function components and hooks. Keep logic that doesn't need React in `src/`.
 - Tests live next to the code as `*.test.ts` and use `bun:test`. Use `test-helpers.ts` fixtures and seeded RNGs. Statistical tests should use enough matches and loose thresholds so they don't flake.
 
 ## Git workflow

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { fixedManager } from "../manager";
+import { fixedManager, humanManager } from "../manager";
 import { seededRng } from "../random";
 import { strongVsWeak } from "../test-helpers";
 import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
 import { anchor, assignSlots, keeperPosition } from "./formation";
 import { distToSegment, moveTowards, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
-import { applyTactics, createMatchState, simulateEventMatch } from "./match";
+import { applyTactics, createMatchState, isFullTime, simulateEventMatch, startEventMatch, stepEventMatch } from "./match";
 import { giveBall, toTeamFrame, type MatchState } from "./state";
 import { assessPass, baseXg, looseBallWinChance } from "./valuation";
 
@@ -205,5 +205,27 @@ describe("tactics in the engine", () => {
       changes += events.filter((e) => e.type === "tactics" && e.time > 0).length;
     }
     expect(changes).toBeGreaterThan(0);
+  });
+});
+
+describe("stepping a match", () => {
+  test("stepping to full time plays the same match as simulating it", () => {
+    const { strong, weak } = world.clubs;
+    const state = startEventMatch(world, strong!, weak!, seededRng(3));
+    while (!isFullTime(state)) stepEventMatch(state);
+    const result = simulateEventMatch(world, strong!, weak!, seededRng(3));
+    expect(state.time).toBe(MATCH_SECONDS);
+    expect(state.score).toEqual({ home: result.homeGoals, away: result.awayGoals });
+    expect(state.events).toEqual(result.events);
+  });
+
+  test("a human manager's changes stick until they change them again", () => {
+    const { strong, weak } = world.clubs;
+    const managers = { home: humanManager({ formation: "4-4-2", mentality: 0 }) };
+    const state = startEventMatch(world, strong!, weak!, seededRng(4), managers);
+    for (let t = 0; t < 600; t++) stepEventMatch(state);
+    applyTactics(state, "home", { formation: "3-4-3", mentality: 2 });
+    while (!isFullTime(state)) stepEventMatch(state);
+    expect(state.teams.home.tactics).toEqual({ formation: "3-4-3", mentality: 2 });
   });
 });
