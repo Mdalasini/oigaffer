@@ -35,8 +35,41 @@ export interface OffPitch {
 
 export type SetPiece = "kickoff" | "throw_in" | "goal_kick" | "corner" | "free_kick" | "indirect_free_kick" | "penalty";
 
+export type FlightKind = "pass" | "driven" | "through" | "cross" | "shot" | "clearance";
+
+export type EventPayload = DistributiveOmit<MatchEvent, "time" | "period" | "clock">;
+
+// Outcomes are rolled at launch, except a header struck when the cross arrives.
+export type Arrival =
+  | { type: "receive"; playerId: Id; controlTicks: number }
+  | { type: "loose"; side: Side; runnerId: Id | null }
+  | { type: "offside"; side: Side }
+  | { type: "goal"; side: Side }
+  | { type: "goal_kick"; side: Side }
+  | { type: "corner"; side: Side }
+  | { type: "header"; playerId: Id; xg: number }
+  | { type: "follow_on"; kind: FlightKind; destination: Vec; arrival: Arrival };
+
+// Public renderer data. Sample at a fractional tick with sampleFlight().
+export interface BallFlight {
+  kind: FlightKind;
+  origin: Vec;
+  destination: Vec;
+  launchTick: number;
+  arrivalTick: number;
+  peakHeight: number; // metres above the interpolated endpoint heights
+  launchHeight: number;
+  arrivalHeight: number;
+  meetIds: Id[]; // players moving to the landing point
+  penalty: boolean; // the period cannot end before this flight arrives
+  arrival: Arrival;
+  events: EventPayload[];
+}
+
 export interface Ball {
   pos: Vec;
+  height: number; // metres above the pitch
+  flight: BallFlight | null;
   ownerId: Id | null;
   lastSide: Side; // team that last had possession
   lastTouch: Side; // team that last touched it, for deciding restarts
@@ -166,6 +199,8 @@ export function emit(state: MatchState, event: DistributiveOmit<MatchEvent, "tim
 }
 
 export function giveBall(state: MatchState, p: MatchPlayer, controlTicks = CONTROL_TICKS, setPiece: SetPiece | null = null): void {
+  state.ball.flight = null;
+  state.ball.height = 0;
   state.ball.ownerId = p.id;
   state.ball.lastSide = p.side;
   state.ball.lastTouch = p.side;
@@ -176,6 +211,8 @@ export function giveBall(state: MatchState, p: MatchPlayer, controlTicks = CONTR
 }
 
 export function looseBall(state: MatchState, pos: Vec, runnerId: Id | null = null): void {
+  state.ball.flight = null;
+  state.ball.height = 0;
   state.ball.ownerId = null;
   state.ball.pos = { ...pos };
   state.ball.runnerId = runnerId;

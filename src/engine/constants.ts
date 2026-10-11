@@ -12,6 +12,14 @@ export const KEEPER_SPEED = 5;
 export const CONTROL_RADIUS = 1.5;
 // Ticks between gaining the ball and being able to act with it (taking a touch)
 export const CONTROL_TICKS = 3;
+
+// Scheduled ball flight: m/s and arc height in metres; arrivals use whole ticks.
+export const BALL_SPEED = { pass: 15, driven: 20, through: 20, cross: 20, shot: 25, clearance: 22 } as const;
+export const BALL_PEAK = { pass: 0, driven: 0, through: 2, cross: 5, shot: 0.5, clearance: 9 } as const;
+export const DRIVEN_PASS_DISTANCE = 30; // metres: longer passes are struck harder
+export const MIN_FLIGHT_TICKS = 1; // seconds: even a short strike arrives on a later tick
+export const HEADER_HEIGHT = 1.8; // aerial contact height in metres
+export const SHOT_MISS_WIDTH = 5; // metres from goal centre for an off-target shot
 export const KEEPER_HOLD_TICKS = 6;
 // Pressers close down to this distance rather than standing on the carrier
 export const PRESS_STAND_OFF = 1.5;

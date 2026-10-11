@@ -6,6 +6,7 @@ import { player, SLOW_TEST, strongVsWeak } from "../test-helpers";
 import { BOX_DEPTH, CONTROL_RADIUS, GOAL_AREA_DEPTH, GOAL_CELEBRATION_TICKS, HALF_TIME, MATCH_SECONDS, MAX_SUBS, PENALTY_EDGE_MARGIN, RESTART_VARIATION, SETUP_TICKS, THROW_MAX_DISTANCE, WALL_DISTANCE } from "./constants";
 import { scoreOptions } from "./decide";
 import { kickoff, kickoffPosition } from "./formation";
+import { advanceFlight } from "./flight";
 import { CENTRE, dist, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { injure, makePendingSubs, requestSub, sendOff, substitute } from "./lineup";
 import { createMatchState, isFullTime, simulateEventMatch, stepEventMatch, tick } from "./match";
@@ -50,6 +51,17 @@ function offsideSituation(seed = 1) {
   keeperOf(state, "away")!.pos = { x: 104, y: 34 };
   giveBall(state, passer, 0);
   return { state, passer, runner };
+}
+
+// Outcome assertions now wait for contact; no new carrier decision is made here.
+function finishFlight(state: MatchState): void {
+  for (let i = 0; state.ball.flight && i < 20; i++) {
+    state.time++;
+    state.clock++;
+    moveOffBall(state);
+    advanceFlight(state);
+  }
+  expect(state.ball.flight).toBeNull();
 }
 
 describe("ball out of play", () => {
@@ -227,6 +239,7 @@ describe("offside", () => {
           success: outcome === "success" ? 1 : 0,
           risks: outcome === "interception" ? [{ player: defender, risk: 1 }] : [],
         });
+        finishFlight(state);
         expect(state.events.some((e) => e.type === "offside")).toBe(outcome === "success");
         if (outcome === "success") expect(state.ball.setPiece).toBe("indirect_free_kick");
         else if (outcome === "interception") {
@@ -242,6 +255,7 @@ describe("offside", () => {
       const { state, passer, runner } = offsideSituation();
       giveBall(state, passer, 0, kind);
       act(state, passer, { kind: "pass", receiver: runner, success: 1, risks: [] });
+      finishFlight(state);
       expect(owner(state)).toBe(runner);
       expect(state.events.some((e) => e.type === "offside")).toBe(false);
     }
@@ -252,6 +266,7 @@ describe("offside", () => {
       const { state, passer, runner } = offsideSituation();
       if (corner) giveBall(state, passer, 0, "corner");
       act(state, passer, { kind: "cross", target: runner, delivery: 1, claim: 1, duel: 1, xg: 1, defender: null });
+      finishFlight(state);
       expect(state.events.some((e) => e.type === "offside")).toBe(!corner);
       if (corner) expect(owner(state)).toBe(keeperOf(state, "away"));
       else {
@@ -268,6 +283,7 @@ describe("offside", () => {
       const { state, passer, runner } = offsideSituation(seed);
       byRole(state, "away", "DEF")[0]!.pos = { ...passer.pos };
       act(state, passer, { kind: "cross", target: runner, delivery: 0, claim: 0, duel: 1, xg: 1, defender: null });
+      finishFlight(state);
       const cross = state.events.find((e) => e.type === "cross");
       expect(cross?.type).toBe("cross");
       if (cross?.type === "cross" && cross.outcome === "blocked") blocked++;
@@ -290,6 +306,7 @@ describe("offside", () => {
     giveBall(state, passer, 0);
 
     act(state, passer, { kind: "pass", receiver: runner, success: 1, risks: [] });
+    finishFlight(state);
     expect(state.events.at(-2)).toMatchObject({ type: "offside", side: "home", playerId: runner.id });
     expect(state.ball.setPiece).toBe("indirect_free_kick");
     expect(owner(state)!.side).toBe("away");
@@ -305,6 +322,7 @@ describe("offside", () => {
     for (const d of byRole(state, "away", "DEF")) d.pos = { x: 85, y: 30 };
     giveBall(state, passer, 0);
     act(state, passer, { kind: "pass", receiver: runner, success: 1, risks: [] });
+    finishFlight(state);
     expect(owner(state)).toBe(runner);
   });
 });
@@ -527,7 +545,7 @@ describe("match-loop and lineup edge cases", () => {
     expect(taker.pos).not.toEqual(state.ball.pos);
     expect(state.ball.setPiece).toBe("corner");
     expect(state.ball.readyAt).toBe(readyAt);
-    for (let i = 0; i < 100 && state.ball.setPiece === "corner"; i++) stepEventMatch(state);
+    for (let i = 0; i < 100 && (state.ball.setPiece === "corner" || state.ball.flight); i++) stepEventMatch(state);
     expect(state.events.some((e) => (e.type === "cross" || e.type === "pass") && e.playerId === taker.id)).toBe(true);
   });
 });

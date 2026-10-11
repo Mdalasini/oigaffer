@@ -46,6 +46,21 @@ function chasers(state: MatchState): Set<MatchPlayer> {
   const carrier = owner(state);
   // Nobody closes down a restart
   if (ballDead(state)) return new Set();
+  if (state.ball.flight) {
+    const flight = state.ball.flight;
+    const result = new Set(state.players.filter((p) => flight.meetIds.includes(p.id)));
+    // Receivers of rolled completions own the landing spot. Loose deliveries still
+    // provoke a race, but nobody can collect them before the scheduled arrival.
+    if (flight.kind === "through" || flight.kind === "clearance" || flight.meetIds.length === 0) {
+      for (const side of ["home", "away"] as const) {
+        const candidates = state.players.filter((p) => p.side === side &&
+          (p.position !== "GK" || dist(flight.destination, ownGoal(side)) < KEEPER_BOX));
+        const chaser = nearest(candidates, flight.destination);
+        if (chaser) result.add(chaser);
+      }
+    }
+    return result;
+  }
   const sides: Side[] = carrier ? [opponent(carrier.side)] : ["home", "away"];
   const result = new Set<MatchPlayer>();
   for (const side of sides) {
@@ -138,8 +153,8 @@ export function moveOffBall(state: MatchState): void {
       target = setPieceSpot;
       speed = MOVE_SPEED;
     } else if (chasing.has(p)) {
-      target = state.ball.pos;
-      speed = p.id === state.ball.runnerId ? RUN_SPEED : PRESS_SPEED;
+      target = state.ball.flight?.destination ?? state.ball.pos;
+      speed = p.id === state.ball.runnerId || state.ball.flight?.meetIds.includes(p.id) ? RUN_SPEED : PRESS_SPEED;
       if (carrier) standOff = PRESS_STAND_OFF;
     } else if (p.position === "GK") {
       target = keeperPosition(state, p);
@@ -196,6 +211,7 @@ function keepDistance(state: MatchState, taker: MatchPlayer, p: MatchPlayer, tar
 // A loose ball goes to whoever reaches it. If both sides get there,
 // the closest player from each side contests it 50/50.
 export function pickUpLooseBall(state: MatchState): void {
+  if (state.ball.flight) return;
   const inReach = state.players.filter((p) => dist(p.pos, state.ball.pos) <= CONTROL_RADIUS);
   const contenders = (["home", "away"] as const)
     .map((side) => nearest(inReach.filter((p) => p.side === side), state.ball.pos))
