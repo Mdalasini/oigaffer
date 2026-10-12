@@ -7,7 +7,7 @@ import {
   CROSS_BLOCK,
   CROSS_BLOCK_FOR_CORNER,
   CROSS_BLOCK_RANGE,
-  CONTROL_TICKS,
+  PASS_ERROR_RADIUS,
   DRIVEN_PASS_DISTANCE,
   HEADER_HEIGHT,
   SHOT_MISS_WIDTH,
@@ -118,7 +118,7 @@ function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { 
       launchFlight(state, flightKind, landing, { type: "loose", side: passer.side, runnerId: action.receiver.id }, [action.receiver.id], 0,
         [{ type: "through_ball", side: passer.side, playerId: passer.id, receiverId: action.receiver.id }]);
     } else {
-      launchFlight(state, flightKind, receiverSpot, { type: "receive", playerId: action.receiver.id, controlTicks: CONTROL_TICKS }, [action.receiver.id], 0,
+      launchFlight(state, flightKind, receiverSpot, { type: "receive", playerId: action.receiver.id }, [action.receiver.id], 0,
         [{ type: "pass", side: passer.side, playerId: passer.id, receiverId: action.receiver.id }]);
     }
     return;
@@ -129,11 +129,11 @@ function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { 
   if (totalRisk > 0 && state.rng() < Math.min(1, totalRisk / failure)) {
     let roll = state.rng() * totalRisk;
     const interceptor = action.risks.find((r) => (roll -= r.risk) <= 0)?.player ?? action.risks[0]!.player;
-    launchFlight(state, flightKind, interceptor.pos, { type: "receive", playerId: interceptor.id, controlTicks: CONTROL_TICKS }, [interceptor.id], 0,
+    launchFlight(state, flightKind, interceptor.pos, { type: "receive", playerId: interceptor.id }, [interceptor.id], 0,
       [{ type: "interception", side: interceptor.side, playerId: passer.id, interceptorId: interceptor.id }]);
     return;
   }
-  const landing = scatter(state, action.kind === "through" ? action.target : receiverSpot, 4, 10);
+  const landing = scatter(state, action.kind === "through" ? action.target : receiverSpot, ...PASS_ERROR_RADIUS);
   launchFlight(state, flightKind, landing, { type: "loose", side: passer.side, runnerId: null }, [], 0,
     [{ type: "pass_astray", side: passer.side, playerId: passer.id }]);
 }

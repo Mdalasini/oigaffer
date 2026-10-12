@@ -1,5 +1,13 @@
 import {
   CONTROL_RADIUS,
+  CARRIER_JOG_SPEED,
+  FIRST_TOUCH_SPEED,
+  POOR_TOUCH_CHANCE,
+  POOR_TOUCH_DISTANCE,
+  PRESSURE_RANGE,
+  TOUCH_ESCAPE_RANGE,
+  TOUCH_ESCAPE_WEIGHT,
+  TOUCH_SKILL_MAX,
   BOX_DEPTH,
   PENALTY_EDGE_MARGIN,
   COVER_DROP,
@@ -23,14 +31,16 @@ import { speedFactor, tire } from "./fatigue";
 import { anchor, keeperPosition, kickoffPosition } from "./formation";
 import { add, CENTRE, clampToPitch, dist, moveTowards, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
-import { cornerPosition } from "./restarts";
+import { cornerPosition, placeBall } from "./restarts";
 import {
+  attackingGoal,
   ballDead,
   emit,
   fromTeamFrame,
   giveBall,
   nearest,
   opponent,
+  opponents,
   owner,
   ownGoal,
   toTeamFrame,
@@ -116,7 +126,37 @@ function markingTargets(state: MatchState, defending: Side, busy: Set<MatchPlaye
   return targets;
 }
 
+// Protect a receiving touch, then carry while looking up. This is not a take-on.
+export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
+  if (!state.ball.receiving || carrier.position === "GK" || state.ball.setPiece !== null || state.time >= state.ball.readyAt) return;
+  const defender = nearest(opponents(state, carrier), carrier.pos);
+  const distance = defender ? dist(defender.pos, carrier.pos) : Infinity;
+  const forward = normalize(sub(attackingGoal(carrier.side), carrier.pos));
+  const escape = defender && distance > 0 ? normalize(sub(carrier.pos, defender.pos)) : { x: -forward.y, y: forward.x };
+  const weight = TOUCH_ESCAPE_WEIGHT * Math.max(0, 1 - distance / TOUCH_ESCAPE_RANGE);
+  const direction = normalize(add(forward, scale(escape, weight)));
+  if (state.ball.pendingTouch) {
+    state.ball.pendingTouch = false;
+    const skill = (carrier.attributes.passing + carrier.attributes.dribbling) / 2;
+    const risk = POOR_TOUCH_CHANCE * Math.max(0, 1 - distance / PRESSURE_RANGE) *
+      Math.max(0, (TOUCH_SKILL_MAX - skill) / (TOUCH_SKILL_MAX - 1));
+    if (risk > 0 && state.rng() < risk) {
+      placeBall(state, add(carrier.pos, scale(direction, POOR_TOUCH_DISTANCE)), carrier.side);
+      return;
+    }
+  }
+  const speed = state.time < state.ball.controlledAt ? FIRST_TOUCH_SPEED : CARRIER_JOG_SPEED;
+  const from = carrier.pos;
+  carrier.pos = clampToPitch(add(from, scale(direction, speed * speedFactor(carrier))));
+  tire(carrier, dist(from, carrier.pos));
+  state.ball.pos = { ...carrier.pos };
+}
+
 export function moveOffBall(state: MatchState): void {
+  // Every off-ball target must see the same ball position, not a partial update
+  // dependent on which side's carrier appears first in the player array.
+  const previousCarrier = owner(state);
+  if (previousCarrier) moveCarrier(state, previousCarrier);
   const carrier = owner(state);
   const possessionSide = carrier?.side ?? state.ball.lastSide;
   const chasing = chasers(state);

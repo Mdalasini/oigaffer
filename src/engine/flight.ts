@@ -25,6 +25,8 @@ export function launchFlight(
     penalty: state.ball.setPiece === "penalty", arrival, events,
   };
   state.ball.ownerId = null;
+  state.ball.pendingTouch = false;
+  state.ball.receiving = false;
   state.ball.runnerId = null;
   state.ball.setPiece = null;
 }

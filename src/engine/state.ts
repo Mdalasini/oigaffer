@@ -2,7 +2,7 @@ import type { Manager } from "../manager";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
 import type { FormationName, Mentality, Tactics } from "../tactics";
-import { CONTROL_RADIUS, CONTROL_TICKS } from "./constants";
+import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
 import { dist, PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
 
@@ -41,7 +41,7 @@ export type EventPayload = DistributiveOmit<MatchEvent, "time" | "period" | "clo
 
 // Outcomes are rolled at launch, except a header struck when the cross arrives.
 export type Arrival =
-  | { type: "receive"; playerId: Id; controlTicks: number }
+  | { type: "receive"; playerId: Id; controlTicks?: number }
   | { type: "loose"; side: Side; runnerId: Id | null }
   | { type: "offside"; side: Side }
   | { type: "goal"; side: Side }
@@ -74,6 +74,9 @@ export interface Ball {
   lastSide: Side; // team that last had possession
   lastTouch: Side; // team that last touched it, for deciding restarts
   readyAt: number; // tick from which the owner can act
+  controlledAt: number; // touch ends; remaining delay is looking up
+  pendingTouch: boolean; // roll a heavy touch once per reception
+  receiving: boolean; // carries belong to receptions, not an extra successful dribble
   runnerId: Id | null; // player a through ball was played for
   setPiece: SetPiece | null; // the restart about to be taken; limits what the taker can do
 }
@@ -198,14 +201,25 @@ export function emit(state: MatchState, event: DistributiveOmit<MatchEvent, "tim
   state.events.push({ ...event, time: state.time, period: state.period, clock: state.clock } as MatchEvent);
 }
 
-export function giveBall(state: MatchState, p: MatchPlayer, controlTicks = CONTROL_TICKS, setPiece: SetPiece | null = null): void {
+export function giveBall(state: MatchState, p: MatchPlayer, controlTicks?: number, setPiece: SetPiece | null = null): void {
+  const automaticTouch = controlTicks === undefined && p.position !== "GK" && setPiece === null;
+  if (controlTicks === undefined) {
+    const defender = nearest(opponents(state, p), p.pos);
+    const pressure = defender ? Math.max(0, 1 - dist(defender.pos, p.pos) / PRESSURE_RANGE) : 0;
+    const skill = (p.attributes.passing + p.attributes.dribbling) / 2;
+    controlTicks = p.position === "GK" ? KEEPER_HOLD_TICKS : Math.max(CONTROL_MIN_TICKS, Math.min(CONTROL_TICKS,
+      Math.round(CONTROL_TICKS - (skill - 1) * CONTROL_SKILL_FACTOR + pressure * CONTROL_PRESSURE_TICKS)));
+  }
   state.ball.flight = null;
   state.ball.height = 0;
   state.ball.ownerId = p.id;
   state.ball.lastSide = p.side;
   state.ball.lastTouch = p.side;
   state.ball.pos = { ...p.pos };
-  state.ball.readyAt = state.time + controlTicks;
+  state.ball.controlledAt = state.time + controlTicks;
+  state.ball.readyAt = state.ball.controlledAt + (automaticTouch ? DECISION_PAUSE_TICKS : 0);
+  state.ball.pendingTouch = automaticTouch;
+  state.ball.receiving = automaticTouch;
   state.ball.runnerId = null;
   state.ball.setPiece = setPiece;
 }
@@ -214,6 +228,8 @@ export function looseBall(state: MatchState, pos: Vec, runnerId: Id | null = nul
   state.ball.flight = null;
   state.ball.height = 0;
   state.ball.ownerId = null;
+  state.ball.pendingTouch = false;
+  state.ball.receiving = false;
   state.ball.pos = { ...pos };
   state.ball.runnerId = runnerId;
   state.ball.setPiece = null;
