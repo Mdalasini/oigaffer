@@ -31,6 +31,7 @@ import {
   STEER_CLOSE_ACCEL,
   STEER_ANTICIPATION,
   STEER_DEFEND_ACCEL,
+  STEER_FACE_SPEED,
 } from "./constants";
 import { movementBuffer, restartRadiusFor, separateBodies, separation, steerPlayer } from "./steering";
 import { anchor, keeperPosition, kickoffPosition } from "./formation";
@@ -38,7 +39,6 @@ import { add, CENTRE, clampToPitch, dist, distSq, normalize, PITCH_LENGTH, PITCH
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition, placeBall } from "./restarts";
 import {
-  attackingGoal,
   ballDead,
   emit,
   fromTeamFrame,
@@ -151,10 +151,14 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
   }
   const defender = nearest(opponents(state, carrier), carrier.pos);
   const distance = defender ? dist(defender.pos, carrier.pos) : Infinity;
-  const forward = normalize(sub(attackingGoal(carrier.side), carrier.pos));
-  const escape = defender && distance > 0 ? normalize(sub(carrier.pos, defender.pos)) : { x: -forward.y, y: forward.x };
+  // Control and look-up follow the receiving run, not an automatic take-on
+  // towards goal. Deliberate forward bursts belong to the dribble decision.
+  const momentum = Math.hypot(carrier.vel.x, carrier.vel.y);
+  const runDirection = momentum > STEER_FACE_SPEED ? normalize(carrier.vel) :
+    { x: 0, y: carrier.pos.y < PITCH_WIDTH / 2 ? 1 : -1 };
+  const escape = defender && distance > 0 ? normalize(sub(carrier.pos, defender.pos)) : { x: -runDirection.y, y: runDirection.x };
   const weight = TOUCH_ESCAPE_WEIGHT * Math.max(0, 1 - distance / TOUCH_ESCAPE_RANGE);
-  const direction = normalize(add(forward, scale(escape, weight)));
+  const direction = normalize(add(runDirection, scale(escape, weight)));
   if (state.ball.pendingTouch) {
     state.ball.pendingTouch = false;
     const skill = (carrier.attributes.passing + carrier.attributes.dribbling) / 2;

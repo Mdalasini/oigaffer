@@ -65,9 +65,51 @@ describe("moving first touch with ball flight", () => {
     giveBall(state, receiver);
     const from = { ...receiver.pos };
     moveCarrier(state, receiver);
-    expect(receiver.pos.x).toBeGreaterThan(from.x);
+    expect(receiver.pos.x).toBe(from.x);
     expect(receiver.pos.y).toBeLessThan(from.y);
     expect(dist(receiver.pos, defender.pos)).toBeGreaterThan(dist(from, defender.pos));
+  });
+
+  test("control follows an incoming run rather than adding a goalward take-on", () => {
+    for (const side of ["home", "away"] as const) {
+      const { state, receiver } = situation(side);
+      const sign = side === "home" ? 1 : -1;
+      receiver.vel = { x: -sign * FIRST_TOUCH_SPEED, y: 0 };
+      state.rng = () => 1;
+      giveBall(state, receiver);
+      const from = { ...receiver.pos };
+      moveCarrier(state, receiver);
+      expect((receiver.pos.x - from.x) * sign).toBeLessThan(0);
+      expect(Math.abs(receiver.pos.y - from.y)).toBeLessThan(1e-9);
+      expect(dist(from, receiver.pos)).toBeGreaterThan(FIRST_TOUCH_SPEED * 0.9);
+    }
+  });
+
+  test("looking up jogs in space and turns away to shield near an opponent", () => {
+    const open = situation(), pressed = situation();
+    for (const s of [open, pressed]) {
+      s.state.rng = () => 1;
+      giveBall(s.state, s.receiver);
+      s.state.time = s.state.ball.controlledAt;
+    }
+    pressed.defender.pos = { x: pressed.receiver.pos.x + 1, y: pressed.receiver.pos.y };
+    const openFrom = { ...open.receiver.pos }, pressedFrom = { ...pressed.receiver.pos };
+    moveCarrier(open.state, open.receiver);
+    moveCarrier(pressed.state, pressed.receiver);
+    expect(dist(openFrom, open.receiver.pos)).toBeGreaterThan(CARRIER_JOG_SPEED * 0.9);
+    expect(pressed.receiver.pos.x).toBeLessThan(pressedFrom.x);
+    expect(dist(pressed.receiver.pos, pressed.defender.pos)).toBeGreaterThan(dist(pressedFrom, pressed.defender.pos));
+  });
+
+  test("a committed carry still runs faster than the look-up jog", () => {
+    const { state, receiver } = situation();
+    giveBall(state, receiver, 1);
+    receiver.carryTarget = { x: receiver.pos.x + 7, y: receiver.pos.y };
+    const from = { ...receiver.pos };
+    moveCarrier(state, receiver);
+    expect(dist(from, receiver.pos)).toBeGreaterThan(CARRIER_JOG_SPEED);
+    expect(receiver.carryTarget).toBeUndefined();
+    expect(state.ball.pos).toEqual(receiver.pos);
   });
 
   test("heavy touch needs pressure and is rolled once per reception", () => {

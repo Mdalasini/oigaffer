@@ -33,8 +33,10 @@ export const CONTROL_TICKS = 3; // maximum first-touch time
 export const CONTROL_MIN_TICKS = 1;
 export const CONTROL_SKILL_FACTOR = 0.1; // seconds saved per passing/dribbling point above 1
 export const CONTROL_PRESSURE_TICKS = 0.75; // extra seconds under close pressure
-export const FIRST_TOUCH_SPEED = 0.7; // m/s: protect the receiving touch
-export const CARRIER_JOG_SPEED = 0.7; // m/s: faster jogging still gives free territory with steering
+// Carries move at 1.5 m/s: a jog that follows the run, not a sprint. 2.5 m/s gave 3.4-4.5 goals a game
+// by handing out free territory, and 0.7 m/s looked like walking.
+export const FIRST_TOUCH_SPEED = 1.5; // m/s: the receiving touch keeps the ball moving with the run
+export const CARRIER_JOG_SPEED = 1.5; // m/s: look-up jog
 export const DECISION_PAUSE_TICKS = 1; // seconds after control
 export const TOUCH_ESCAPE_RANGE = 8; // metres: sense the nearest opponent
 export const TOUCH_ESCAPE_WEIGHT = 1.3;
