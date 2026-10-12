@@ -1,5 +1,4 @@
 import {
-  ADDED,
   BLOCK_CHANCE,
   BLOCK_FOR_CORNER,
   BLOCK_RANGE,
@@ -8,12 +7,15 @@ import {
   CROSS_BLOCK,
   CROSS_BLOCK_FOR_CORNER,
   CROSS_BLOCK_RANGE,
+  PASS_ERROR_RADIUS,
+  DRIVEN_PASS_DISTANCE,
+  HEADER_HEIGHT,
+  SHOT_MISS_WIDTH,
   HEADED_BEHIND,
   TACKLE_LOOSE,
   TACKLE_LOOSE_DISTANCE,
   FOUL_ON_FAILED_TACKLE,
   FOUL_TACKLING_SKILL,
-  GOAL_CELEBRATION_TICKS,
   KEEPER_HOLD,
   KEEPER_HOLD_TICKS,
   KEEPER_SKILL,
@@ -28,11 +30,10 @@ import {
   TACTICAL_FOUL,
 } from "./constants";
 import { clearanceTarget, type Action } from "./decide";
-import { tire } from "./fatigue";
-import { kickoff } from "./formation";
-import { add, CENTRE, dist, distToSegment, normalize, PITCH_LENGTH, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
+import { launchFlight } from "./flight";
+import { add, dist, distToSegment, normalize, PITCH_LENGTH, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
 import { flaggedOffside, judgeFoul } from "./referee";
-import { awardFreeKick, corner, goalKick, inBox, placeBall } from "./restarts";
+import { inBox, placeBall } from "./restarts";
 import {
   attackingGoal,
   ballDead,
@@ -45,6 +46,7 @@ import {
   opponents,
   ownGoal,
   toTeamFrame,
+  type EventPayload,
   type MatchPlayer,
   type MatchState,
   type ShotKind,
@@ -60,17 +62,16 @@ function scatter(state: MatchState, pos: Vec, minR: number, maxR: number): Vec {
   return { x: pos.x + Math.cos(angle) * r, y: pos.y + Math.sin(angle) * r };
 }
 
-// Pushed behind by the defending side: a corner on whichever side the ball was nearest
-function behindGoalLine(state: MatchState, attacking: Side, near: Vec): void {
-  const nearLeft = toTeamFrame(attacking, near).y < CENTRE.y;
-  corner(state, attacking, toTeamFrame(attacking, { x: PITCH_LENGTH, y: nearLeft ? 0 : PITCH_WIDTH }));
+// Deflections travel to the nearest point of the goal line, not its centre.
+function goalLine(attacking: Side, near: Vec): Vec {
+  return toTeamFrame(attacking, { x: PITCH_LENGTH, y: clamp(toTeamFrame(attacking, near).y, 0, PITCH_WIDTH) });
 }
 
 // The nearest defender to the carrier may try to win the ball before they act.
 // Keepers holding the ball can't be tackled, and nobody tackles at a dead ball.
 // A mistimed challenge can be a foul.
 export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean {
-  if (carrier.position === "GK" || ballDead(state) || state.ball.setPiece !== null) return false;
+  if (state.ball.flight || carrier.position === "GK" || ballDead(state) || state.ball.setPiece !== null) return false;
   const ready = opponents(state, carrier).filter((o) => o.cooldown === 0 && o.position !== "GK");
   const tackler = nearest(ready, carrier.pos);
   if (!tackler || dist(tackler.pos, carrier.pos) > TACKLE_RANGE) return false;
@@ -99,50 +100,50 @@ export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean 
 }
 
 function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { kind: "pass" | "through" }): void {
-  // Offside is judged the moment the ball is played; restarts like throw-ins are exempt
+  // Offside and interception geometry are judged at launch, not after players move.
   const kind = state.ball.setPiece;
   const exempt = kind === "throw_in" || kind === "goal_kick" || kind === "corner";
   const offside = !exempt && flaggedOffside(state, action.receiver);
+  const receiverSpot = { ...action.receiver.pos };
+  const flightKind = action.kind === "through" ? "through"
+    : dist(passer.pos, receiverSpot) >= DRIVEN_PASS_DISTANCE ? "driven" : "pass";
 
   if (state.rng() < action.success) {
-    // An offside position only matters if the receiver becomes involved in play
     if (offside) {
-      emit(state, { type: "offside", side: passer.side, playerId: action.receiver.id, passerId: passer.id });
-      awardFreeKick(state, opponent(passer.side), { ...action.receiver.pos }, false);
-      return;
-    }
-    if (action.kind === "through") {
-      // Into space: the runner and the defence race for it
-      emit(state, { type: "through_ball", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
-      placeBall(state, scatter(state, action.target, 0, 3), passer.side, action.receiver.id);
+      launchFlight(state, flightKind, receiverSpot, { type: "offside", side: passer.side }, [action.receiver.id], 0,
+        [{ type: "offside", side: passer.side, playerId: action.receiver.id, passerId: passer.id }]);
+    } else if (action.kind === "through") {
+      const landing = scatter(state, action.target, 0, 3);
+      launchFlight(state, flightKind, landing, { type: "loose", side: passer.side, runnerId: action.receiver.id }, [action.receiver.id], 0,
+        [{ type: "through_ball", side: passer.side, playerId: passer.id, receiverId: action.receiver.id }]);
     } else {
-      giveBall(state, action.receiver);
-      emit(state, { type: "pass", side: passer.side, playerId: passer.id, receiverId: action.receiver.id });
+      launchFlight(state, flightKind, receiverSpot, { type: "receive", playerId: action.receiver.id }, [action.receiver.id], 0,
+        [{ type: "pass", side: passer.side, playerId: passer.id, receiverId: action.receiver.id }]);
     }
     return;
   }
 
-  // Failed: either someone near the lane cut it out, or it simply went astray
   const totalRisk = action.risks.reduce((s, r) => s + r.risk, 0);
   const failure = 1 - action.success;
   if (totalRisk > 0 && state.rng() < Math.min(1, totalRisk / failure)) {
     let roll = state.rng() * totalRisk;
     const interceptor = action.risks.find((r) => (roll -= r.risk) <= 0)?.player ?? action.risks[0]!.player;
-    giveBall(state, interceptor);
-    emit(state, { type: "interception", side: interceptor.side, playerId: passer.id, interceptorId: interceptor.id });
+    launchFlight(state, flightKind, interceptor.pos, { type: "receive", playerId: interceptor.id }, [interceptor.id], 0,
+      [{ type: "interception", side: interceptor.side, playerId: passer.id, interceptorId: interceptor.id }]);
     return;
   }
-  emit(state, { type: "pass_astray", side: passer.side, playerId: passer.id });
-  placeBall(state, scatter(state, action.kind === "through" ? action.target : action.receiver.pos, 4, 10), passer.side);
+  const landing = scatter(state, action.kind === "through" ? action.target : receiverSpot, ...PASS_ERROR_RADIUS);
+  launchFlight(state, flightKind, landing, { type: "loose", side: passer.side, runnerId: null }, [], 0,
+    [{ type: "pass_astray", side: passer.side, playerId: passer.id }]);
 }
 
 export function resolveShot(state: MatchState, shooter: MatchPlayer, xg: number, kind: ShotKind): void {
   const side = shooter.side;
   const goal = attackingGoal(side);
   const keeper = keeperOf(state, opponent(side));
-  state.xg[side] += xg;
-  const shot = (outcome: "goal" | "saved" | "off_target" | "blocked") =>
-    emit(state, { type: "shot", side, playerId: shooter.id, xg, outcome, keeperId: keeper?.id, kind });
+  const shooterSpot = { ...shooter.pos };
+  const shot = (outcome: "goal" | "saved" | "off_target" | "blocked"): EventPayload[] =>
+    [{ type: "shot", side, playerId: shooter.id, xg, outcome, ...(keeper ? { keeperId: keeper.id } : {}), kind }];
 
   // Open-play shots can be blocked; set-piece shots already allow for the wall
   const blockers =
@@ -150,13 +151,13 @@ export function resolveShot(state: MatchState, shooter: MatchPlayer, xg: number,
       ? opponents(state, shooter).filter((o) => o.position !== "GK" && distToSegment(o.pos, shooter.pos, goal) < BLOCK_RANGE)
       : [];
   if (blockers.some(() => state.rng() < BLOCK_CHANCE)) {
-    shot("blocked");
     if (state.rng() < BLOCK_FOR_CORNER) {
-      behindGoalLine(state, side, shooter.pos);
+      launchFlight(state, "shot", goalLine(side, shooterSpot), { type: "corner", side }, [], 0, shot("blocked"));
       return;
     }
-    const towardGoal = normalize(sub(goal, shooter.pos));
-    placeBall(state, scatter(state, add(shooter.pos, scale(towardGoal, 3)), 1, 4), opponent(side));
+    const towardGoal = normalize(sub(goal, shooterSpot));
+    const landing = scatter(state, add(shooterSpot, scale(towardGoal, 3)), 1, 4);
+    launchFlight(state, "shot", landing, { type: "loose", side: opponent(side), runnerId: null }, [], 0, shot("blocked"));
     return;
   }
 
@@ -175,85 +176,91 @@ export function resolveShot(state: MatchState, shooter: MatchPlayer, xg: number,
   }
 
   if (scored) {
-    shot("goal");
-    state.score[side]++;
-    state.stoppage += ADDED.goal;
-    kickoff(state, opponent(side), GOAL_CELEBRATION_TICKS);
+    launchFlight(state, "shot", goal, { type: "goal", side }, keeper ? [keeper.id] : [], 0, shot("goal"));
     return;
   }
   if (!onTarget) {
-    shot("off_target");
-    goalKick(state, opponent(side));
+    const miss = { ...goal, y: goal.y + (shooterSpot.y < goal.y ? -SHOT_MISS_WIDTH : SHOT_MISS_WIDTH) };
+    launchFlight(state, "shot", miss, { type: "goal_kick", side: opponent(side) }, [], 0, shot("off_target"));
     return;
   }
 
-  shot("saved");
   if (keeper && state.rng() < KEEPER_HOLD) {
-    giveBall(state, keeper, KEEPER_HOLD_TICKS);
+    launchFlight(state, "shot", keeper.pos, { type: "receive", playerId: keeper.id, controlTicks: KEEPER_HOLD_TICKS }, [keeper.id], 0, shot("saved"));
   } else if (state.rng() < PARRY_FOR_CORNER) {
-    behindGoalLine(state, side, shooter.pos);
+    launchFlight(state, "shot", goalLine(side, shooterSpot), { type: "corner", side }, keeper ? [keeper.id] : [], 0, shot("saved"));
   } else {
-    // Parried back into play in front of goal
     const ownGoalPos = ownGoal(opponent(side));
-    const outward = normalize(sub(shooter.pos, ownGoalPos));
-    placeBall(state, scatter(state, add(ownGoalPos, scale(outward, 8)), 1, 5), opponent(side));
+    const outward = normalize(sub(shooterSpot, ownGoalPos));
+    const landing = scatter(state, add(ownGoalPos, scale(outward, 8)), 1, 5);
+    launchFlight(state, "shot", goal, {
+      type: "follow_on", kind: "pass", destination: landing,
+      arrival: { type: "loose", side: opponent(side), runnerId: null },
+    }, keeper ? [keeper.id] : [], 0, shot("saved"));
   }
 }
 
 // Delivered, claimed by the keeper, headed clear, or won and headed at goal
 function resolveCross(state: MatchState, crosser: MatchPlayer, action: Action & { kind: "cross" }): void {
   const { target } = action;
+  const targetSpot = { ...target.pos };
+  const crosserSpot = { ...crosser.pos };
   const offside = state.ball.setPiece !== "corner" && flaggedOffside(state, target);
-  const cross = (outcome: "blocked" | "overhit" | "claimed" | "cleared" | "won") =>
-    emit(state, { type: "cross", side: crosser.side, playerId: crosser.id, targetId: target.id, outcome });
+  const cross = (outcome: "blocked" | "overhit" | "claimed" | "cleared" | "won"): EventPayload[] =>
+    [{ type: "cross", side: crosser.side, playerId: crosser.id, targetId: target.id, outcome }];
 
   // Charged down by whoever is closing the crosser, often behind for a corner
   const closer = nearest(opponents(state, crosser), crosser.pos);
   if (state.ball.setPiece !== "corner" && closer && dist(closer.pos, crosser.pos) < CROSS_BLOCK_RANGE && state.rng() < CROSS_BLOCK) {
-    cross("blocked");
-    if (state.rng() < CROSS_BLOCK_FOR_CORNER) behindGoalLine(state, crosser.side, crosser.pos);
-    else placeBall(state, scatter(state, crosser.pos, 2, 6), closer.side);
+    if (state.rng() < CROSS_BLOCK_FOR_CORNER) {
+      launchFlight(state, "cross", goalLine(crosser.side, crosserSpot), { type: "corner", side: crosser.side }, [], 0, cross("blocked"));
+    } else {
+      const landing = scatter(state, crosserSpot, 2, 6);
+      launchFlight(state, "cross", landing, { type: "loose", side: closer.side, runnerId: null }, [], 0, cross("blocked"));
+    }
     return;
   }
 
   if (state.rng() > action.delivery) {
-    cross("overhit");
-    placeBall(state, scatter(state, target.pos, 5, 15), crosser.side);
+    const landing = scatter(state, targetSpot, 5, 15);
+    launchFlight(state, "cross", landing, { type: "loose", side: crosser.side, runnerId: null }, [], 0, cross("overhit"));
     return;
   }
   if (offside) {
-    emit(state, { type: "offside", side: crosser.side, playerId: target.id, passerId: crosser.id });
-    awardFreeKick(state, opponent(crosser.side), { ...target.pos }, false);
+    launchFlight(state, "cross", targetSpot, { type: "offside", side: crosser.side }, [target.id], 0,
+      [{ type: "offside", side: crosser.side, playerId: target.id, passerId: crosser.id }]);
     return;
   }
   const keeper = keeperOf(state, opponent(crosser.side));
   if (keeper && state.rng() < action.claim) {
-    cross("claimed");
-    giveBall(state, keeper, KEEPER_HOLD_TICKS);
+    launchFlight(state, "cross", targetSpot, { type: "receive", playerId: keeper.id, controlTicks: KEEPER_HOLD_TICKS }, [keeper.id], 0, cross("claimed"));
     return;
   }
   if (state.rng() < action.duel) {
-    cross("won");
-    resolveShot(state, target, action.xg, "header");
-    return;
-  }
-  cross("cleared");
-  // Headed away from goal, or only as far as behind for a corner
-  if (state.rng() < HEADED_BEHIND) {
-    behindGoalLine(state, crosser.side, target.pos);
+    launchFlight(state, "cross", targetSpot, { type: "header", playerId: target.id, xg: action.xg }, [target.id], HEADER_HEIGHT, cross("won"));
     return;
   }
   const clearer = action.defender ?? target;
+  if (state.rng() < HEADED_BEHIND) {
+    launchFlight(state, "cross", targetSpot, {
+      type: "follow_on", kind: "clearance", destination: goalLine(crosser.side, targetSpot),
+      arrival: { type: "corner", side: crosser.side },
+    }, [clearer.id], HEADER_HEIGHT, cross("cleared"));
+    return;
+  }
   const away = normalize(sub(clearer.pos, attackingGoal(crosser.side)));
-  placeBall(state, scatter(state, add(clearer.pos, scale(away, 18)), 0, 12), opponent(crosser.side));
+  const landing = scatter(state, add(clearer.pos, scale(away, 18)), 0, 12);
+  launchFlight(state, "cross", targetSpot, {
+    type: "follow_on", kind: "clearance", destination: landing,
+    arrival: { type: "loose", side: opponent(crosser.side), runnerId: null },
+  }, [clearer.id], HEADER_HEIGHT, cross("cleared"));
 }
 
 function resolveDribble(state: MatchState, carrier: MatchPlayer, action: Action & { kind: "dribble" }): void {
   const { defender } = action;
   if (state.rng() < action.beat) {
-    tire(carrier, dist(carrier.pos, action.to));
-    carrier.pos = action.to;
     giveBall(state, carrier, 1);
+    carrier.carryTarget = action.to;
     if (defender) defender.cooldown = TACKLE_COOLDOWN;
     emit(state, { type: "dribble", side: carrier.side, playerId: carrier.id, defenderId: defender?.id ?? null });
     // Beaten defenders sometimes pull their man back rather than let him go
@@ -272,8 +279,9 @@ function resolveDribble(state: MatchState, carrier: MatchPlayer, action: Action 
 }
 
 function resolveClear(state: MatchState, carrier: MatchPlayer, action: Action & { kind: "clear" }): void {
-  emit(state, { type: "clearance", side: carrier.side, playerId: carrier.id });
-  placeBall(state, scatter(state, clearanceTarget(carrier, action.distance), 0, 12), carrier.side);
+  const landing = scatter(state, clearanceTarget(carrier, action.distance), 0, 12);
+  launchFlight(state, "clearance", landing, { type: "loose", side: carrier.side, runnerId: null }, [], 0,
+    [{ type: "clearance", side: carrier.side, playerId: carrier.id }]);
 }
 
 export function act(state: MatchState, carrier: MatchPlayer, action: Action): void {

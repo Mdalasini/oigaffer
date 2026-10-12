@@ -2,9 +2,9 @@ import type { Manager } from "../manager";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
 import type { FormationName, Mentality, Tactics } from "../tactics";
-import { CONTROL_RADIUS, CONTROL_TICKS } from "./constants";
+import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
-import { dist, PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
+import { dist, distSq, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, type Vec } from "./geometry";
 
 export type Side = "home" | "away";
 
@@ -20,6 +20,9 @@ export interface MatchPlayer {
   energy: number; // 1 fresh … 0 exhausted
   slot: Vec; // formation position in the team frame
   pos: Vec; // world position
+  vel: Vec; // world velocity, m/s
+  facing: number; // world angle, radians
+  carryTarget?: Vec; // a successful take-on, pursued in the movement phase
   cooldown: number; // ticks before this player can challenge again
   yellow: boolean;
 }
@@ -35,12 +38,48 @@ export interface OffPitch {
 
 export type SetPiece = "kickoff" | "throw_in" | "goal_kick" | "corner" | "free_kick" | "indirect_free_kick" | "penalty";
 
+export type FlightKind = "pass" | "driven" | "through" | "cross" | "shot" | "clearance";
+
+export type EventPayload = DistributiveOmit<MatchEvent, "time" | "period" | "clock">;
+
+// Outcomes are rolled at launch, except a header struck when the cross arrives.
+export type Arrival =
+  | { type: "receive"; playerId: Id; controlTicks?: number }
+  | { type: "loose"; side: Side; runnerId: Id | null }
+  | { type: "offside"; side: Side }
+  | { type: "goal"; side: Side }
+  | { type: "goal_kick"; side: Side }
+  | { type: "corner"; side: Side }
+  | { type: "header"; playerId: Id; xg: number }
+  | { type: "follow_on"; kind: FlightKind; destination: Vec; arrival: Arrival };
+
+// Public renderer data. Sample at a fractional tick with sampleFlight().
+export interface BallFlight {
+  kind: FlightKind;
+  origin: Vec;
+  destination: Vec;
+  launchTick: number;
+  arrivalTick: number;
+  peakHeight: number; // metres above the interpolated endpoint heights
+  launchHeight: number;
+  arrivalHeight: number;
+  meetIds: Id[]; // players moving to the landing point
+  penalty: boolean; // the period cannot end before this flight arrives
+  arrival: Arrival;
+  events: EventPayload[];
+}
+
 export interface Ball {
   pos: Vec;
+  height: number; // metres above the pitch
+  flight: BallFlight | null;
   ownerId: Id | null;
   lastSide: Side; // team that last had possession
   lastTouch: Side; // team that last touched it, for deciding restarts
   readyAt: number; // tick from which the owner can act
+  controlledAt: number; // touch ends; remaining delay is looking up
+  pendingTouch: boolean; // roll a heavy touch once per reception
+  receiving: boolean; // carries belong to receptions, not an extra successful dribble
   runnerId: Id | null; // player a through ball was played for
   setPiece: SetPiece | null; // the restart about to be taken; limits what the taker can do
 }
@@ -114,7 +153,7 @@ export interface MatchState {
 // Each team sees the pitch as attacking towards x = PITCH_LENGTH.
 // The away team's frame is the world rotated 180°, so the conversion is its own inverse.
 export function toTeamFrame(side: Side, v: Vec): Vec {
-  return side === "home" ? { ...v } : { x: PITCH_LENGTH - v.x, y: PITCH_WIDTH - v.y };
+  return side === "home" ? { x: v.x, y: v.y } : { x: PITCH_LENGTH - v.x, y: PITCH_WIDTH - v.y };
 }
 export const fromTeamFrame = toTeamFrame;
 
@@ -136,9 +175,14 @@ export const keeperOf = (state: MatchState, side: Side): MatchPlayer | undefined
   state.players.find((p) => p.side === side && p.position === "GK");
 
 export function nearest(players: MatchPlayer[], to: Vec): MatchPlayer | undefined {
+  // Only players within a hair of the closest squared distance can win, so hypot runs on those alone
+  let closestSq = Infinity;
+  for (const p of players) closestSq = Math.min(closestSq, distSq(p.pos, to));
+  const limit = closestSq * REJECT_MARGIN + 1e-12;
   let best: MatchPlayer | undefined;
   let bestDist = Infinity;
   for (const p of players) {
+    if (distSq(p.pos, to) > limit) continue;
     const d = dist(p.pos, to);
     if (d < bestDist) {
       best = p;
@@ -165,18 +209,39 @@ export function emit(state: MatchState, event: DistributiveOmit<MatchEvent, "tim
   state.events.push({ ...event, time: state.time, period: state.period, clock: state.clock } as MatchEvent);
 }
 
-export function giveBall(state: MatchState, p: MatchPlayer, controlTicks = CONTROL_TICKS, setPiece: SetPiece | null = null): void {
+export function giveBall(state: MatchState, p: MatchPlayer, controlTicks?: number, setPiece: SetPiece | null = null): void {
+  const previous = owner(state);
+  if (previous) delete previous.carryTarget;
+  const automaticTouch = controlTicks === undefined && p.position !== "GK" && setPiece === null;
+  if (controlTicks === undefined) {
+    const defender = nearest(opponents(state, p), p.pos);
+    const pressure = defender ? Math.max(0, 1 - dist(defender.pos, p.pos) / PRESSURE_RANGE) : 0;
+    const skill = (p.attributes.passing + p.attributes.dribbling) / 2;
+    controlTicks = p.position === "GK" ? KEEPER_HOLD_TICKS : Math.max(CONTROL_MIN_TICKS, Math.min(CONTROL_TICKS,
+      Math.round(CONTROL_TICKS - (skill - 1) * CONTROL_SKILL_FACTOR + pressure * CONTROL_PRESSURE_TICKS)));
+  }
+  state.ball.flight = null;
+  state.ball.height = 0;
   state.ball.ownerId = p.id;
   state.ball.lastSide = p.side;
   state.ball.lastTouch = p.side;
-  state.ball.pos = { ...p.pos };
-  state.ball.readyAt = state.time + controlTicks;
+  state.ball.pos = { x: p.pos.x, y: p.pos.y };
+  state.ball.controlledAt = state.time + controlTicks;
+  state.ball.readyAt = state.ball.controlledAt + (automaticTouch ? DECISION_PAUSE_TICKS : 0);
+  state.ball.pendingTouch = automaticTouch;
+  state.ball.receiving = automaticTouch;
   state.ball.runnerId = null;
   state.ball.setPiece = setPiece;
 }
 
 export function looseBall(state: MatchState, pos: Vec, runnerId: Id | null = null): void {
+  const previous = owner(state);
+  if (previous) delete previous.carryTarget;
+  state.ball.flight = null;
+  state.ball.height = 0;
   state.ball.ownerId = null;
+  state.ball.pendingTouch = false;
+  state.ball.receiving = false;
   state.ball.pos = { ...pos };
   state.ball.runnerId = runnerId;
   state.ball.setPiece = null;

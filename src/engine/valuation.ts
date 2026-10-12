@@ -34,7 +34,7 @@ import {
   XG_DECAY,
   XG_MAX,
 } from "./constants";
-import { add, dist, distToSegment, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
+import { add, dist, distSq, distToSegment, normalize, PITCH_LENGTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
 import {
   attackingGoal,
   challengeSkill,
@@ -65,9 +65,15 @@ export const possessionValue = (side: Side, pos: Vec): number =>
 // Losing the ball here hands the opponent that much value
 export const turnoverCost = (side: Side, pos: Vec): number => possessionValue(opponent(side), pos);
 
+// True when the nearest opponent is inside the pressure range. That is the same as asking
+// whether any opponent is, so the scan stops at the first one found.
 export function underPressure(state: MatchState, p: MatchPlayer): boolean {
-  const marker = nearest(opponents(state, p), p.pos);
-  return marker !== undefined && dist(marker.pos, p.pos) < PRESSURE_RANGE;
+  const limit = PRESSURE_RANGE * PRESSURE_RANGE * REJECT_MARGIN;
+  for (const o of state.players) {
+    if (o.side === p.side || distSq(o.pos, p.pos) > limit) continue;
+    if (dist(o.pos, p.pos) < PRESSURE_RANGE) return true;
+  }
+  return false;
 }
 
 export function shotXg(state: MatchState, shooter: MatchPlayer): number {
@@ -86,6 +92,11 @@ export interface PassAssessment {
   risks: InterceptRisk[];
 }
 
+// Interception risks at or below this are ignored
+const RISK_CUTOFF = 0.01;
+// Beyond this distance an opponent's risk is below RISK_CUTOFF (with a sub-ppb margin)
+const INTERCEPT_REACH = INTERCEPT_FALLOFF * Math.log(INTERCEPT_MAX / RISK_CUTOFF) * (1 + 1e-9);
+
 // Accuracy falls with distance and pressure; every opponent near the lane
 // gets a chance to cut it out
 export function assessPass(state: MatchState, passer: MatchPlayer, target: Vec): PassAssessment {
@@ -95,10 +106,16 @@ export function assessPass(state: MatchState, passer: MatchPlayer, target: Vec):
 
   const laneStart = add(passer.pos, scale(normalize(sub(target, passer.pos)), Math.min(PASS_CLEAR_START, d)));
   const risks: InterceptRisk[] = [];
+  // The lane lies inside its bounding box, so a body whose box is further away than
+  // INTERCEPT_REACH cannot reach the risk cut-off (skills are at most 20, so the factor is at most 1).
+  const minX = Math.min(laneStart.x, target.x), maxX = Math.max(laneStart.x, target.x);
+  const minY = Math.min(laneStart.y, target.y), maxY = Math.max(laneStart.y, target.y);
   for (const o of opponents(state, passer)) {
+    const bx = Math.max(minX - o.pos.x, 0, o.pos.x - maxX), by = Math.max(minY - o.pos.y, 0, o.pos.y - maxY);
+    if (bx * bx + by * by > INTERCEPT_REACH * INTERCEPT_REACH) continue;
     const gap = distToSegment(o.pos, laneStart, target);
     const risk = INTERCEPT_MAX * Math.exp(-gap / INTERCEPT_FALLOFF) * (0.7 + challengeSkill(o) * 0.015);
-    if (risk > 0.01) {
+    if (risk > RISK_CUTOFF) {
       risks.push({ player: o, risk });
       success *= 1 - risk;
     }

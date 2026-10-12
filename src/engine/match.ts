@@ -8,6 +8,7 @@ import { HALF_TIME, HALF_TIME_RECOVERY, MANAGER_INTERVAL, MATCH_SECONDS, MIN_ADD
 import { chooseAction } from "./decide";
 import { refreshAttributes } from "./fatigue";
 import { kickoff } from "./formation";
+import { advanceFlight, sampleFlight } from "./flight";
 import { PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { applyTactics, bench, makePendingSubs, requestSub, subsLeft } from "./lineup";
 import { moveOffBall, pickUpLooseBall } from "./movement";
@@ -70,6 +71,8 @@ export function createMatchState(
         energy: 1,
         slot: { x: 0, y: i }, // placeholder ordering; arrangeSide sets the real slot
         pos: { x: 0, y: 0 },
+        vel: { x: 0, y: 0 },
+        facing: side === "home" ? 0 : Math.PI,
         cooldown: 0,
         yellow: false,
       });
@@ -93,9 +96,14 @@ export function createMatchState(
     ball: {
       pos: { x: PITCH_LENGTH / 2, y: PITCH_WIDTH / 2 },
       ownerId: null,
+      height: 0,
+      flight: null,
       lastSide: "home",
       lastTouch: "home",
       readyAt: 0,
+      controlledAt: 0,
+      pendingTouch: false,
+      receiving: false,
       runnerId: null,
       setPiece: null,
     },
@@ -170,7 +178,13 @@ export function tick(state: MatchState): void {
   }
 
   if (isFullTime(state)) return;
+  if (state.ball.flight) {
+    const sample = sampleFlight(state.ball.flight, state.time);
+    state.ball.pos = sample.pos;
+    state.ball.height = sample.height;
+  }
   moveOffBall(state);
+  advanceFlight(state);
   if (state.ball.ownerId === null) pickUpLooseBall(state);
 }
 
@@ -224,18 +238,20 @@ export function stepEventMatch(state: MatchState): void {
     state.periodEnd = state.announcedEnd + state.stoppage - state.announcedStoppage;
   }
   // A late penalty must be taken, but the whistle still prevents rebound play.
-  if (state.clock >= state.periodEnd && state.ball.setPiece !== "penalty") {
+  if (state.clock >= state.periodEnd && state.ball.setPiece !== "penalty" && !state.ball.flight?.penalty) {
     const phase = state.period === 1 ? "half_time" : "full_time";
     emit(state, { type: "whistle", side: "home", phase });
     state.phase = phase;
+    state.ball.flight = null;
+    state.ball.height = 0;
     return;
   }
 
-  const latePenalty = state.clock >= state.periodEnd && state.ball.setPiece === "penalty";
+  const latePenalty = state.clock >= state.periodEnd && (state.ball.setPiece === "penalty" || !!state.ball.flight?.penalty);
   if (state.clock % MANAGER_INTERVAL === 0 || somethingHappened(state)) consultManagers(state);
   if (ballDead(state)) makePendingSubs(state);
   tick(state);
-  if (latePenalty && state.ball.setPiece !== "penalty") {
+  if (latePenalty && state.ball.setPiece !== "penalty" && !state.ball.flight?.penalty) {
     // Extending a period solely for a penalty doesn't allow a goal celebration
     // or a rebound to start another spell of play.
     state.periodEnd = state.clock;

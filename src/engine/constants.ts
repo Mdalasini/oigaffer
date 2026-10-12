@@ -6,12 +6,49 @@ export const MATCH_SECONDS = 90 * 60;
 export const HALF_TIME = 45 * 60;
 
 // Movement (metres per tick)
+// Steering uses seconds and metres; decisions still run once per second.
+export const STEER_ACCEL = 4; // m/s²
+export const STEER_BRAKE = 6; // m/s²
+export const STEER_MAX_SPEED = 9; // m/s
+export const STEER_SUBSTEPS = 2;
+export const STEER_CLOSE_ACCEL = 8; // m/s²: committed pressers and markers close promptly
+export const STEER_DEFEND_ACCEL = 6; // m/s²: retreating defenders and midfield cover
+export const STEER_ARRIVAL_TIME = 0.7; // seconds: damp small target changes
+export const STEER_FACE_SPEED = 0.3; // m/s: below this, watch the ball
+export const STEER_JOG_TURN = 2 * Math.PI; // radians/s
+export const STEER_SPRINT_TURN = Math.PI; // radians/s
+export const STEER_SEPARATION_RADIUS = 1.4; // m
+export const STEER_SEPARATION_SPEED = 2; // m/s at coincident centres
+export const STEER_BODY_RADIUS = 0.5; // m
+export const STEER_CONTACT_PASSES = 4;
+export const STEER_RESTART_MARGIN = 0.05; // m: arrival tolerance outside the legal radius
+export const STEER_CLOSE_ARRIVAL_TIME = 0.5; // s: reach tackling/marking distance without a trailing gap
+export const STEER_ANTICIPATION = 0.5; // s: pursue a moving carrier
 export const MOVE_SPEED = 6;
 export const PRESS_SPEED = 7;
 export const KEEPER_SPEED = 5;
 export const CONTROL_RADIUS = 1.5;
 // Ticks between gaining the ball and being able to act with it (taking a touch)
-export const CONTROL_TICKS = 3;
+export const CONTROL_TICKS = 3; // maximum first-touch time
+export const CONTROL_MIN_TICKS = 1;
+export const CONTROL_SKILL_FACTOR = 0.1; // seconds saved per passing/dribbling point above 1
+export const CONTROL_PRESSURE_TICKS = 0.75; // extra seconds under close pressure
+export const FIRST_TOUCH_SPEED = 0.7; // m/s: protect the receiving touch
+export const CARRIER_JOG_SPEED = 0.7; // m/s: faster jogging still gives free territory with steering
+export const DECISION_PAUSE_TICKS = 1; // seconds after control
+export const TOUCH_ESCAPE_RANGE = 8; // metres: sense the nearest opponent
+export const TOUCH_ESCAPE_WEIGHT = 1.3;
+export const POOR_TOUCH_CHANCE = 0.15; // maximum at point-blank pressure and skill 1
+export const TOUCH_SKILL_MAX = 20;
+export const POOR_TOUCH_DISTANCE = 4; // metres: a contestable heavy touch, possibly out
+
+// Scheduled ball flight: m/s and arc height in metres; arrivals use whole ticks.
+export const BALL_SPEED = { pass: 15, driven: 20, through: 20, cross: 20, shot: 25, clearance: 22 } as const;
+export const BALL_PEAK = { pass: 0, driven: 0, through: 2, cross: 5, shot: 0.5, clearance: 9 } as const;
+export const DRIVEN_PASS_DISTANCE = 30; // metres: longer passes are struck harder
+export const MIN_FLIGHT_TICKS = 1; // seconds: even a short strike arrives on a later tick
+export const HEADER_HEIGHT = 1.8; // aerial contact height in metres
+export const SHOT_MISS_WIDTH = 5; // metres from goal centre for an off-target shot
 export const KEEPER_HOLD_TICKS = 6;
 // Pressers close down to this distance rather than standing on the carrier
 export const PRESS_STAND_OFF = 1.5;
@@ -55,7 +92,7 @@ export const DECISION_TEMPERATURE = 0.003;
 // Passing
 export const PASS_MAX_DISTANCE = 45;
 export const KEEPER_PASS_MAX_DISTANCE = 35;
-export const PASS_BASE = 0.99;
+export const PASS_BASE = 0.97;
 export const PASS_SKILL = 0.003; // accuracy per point of passing
 export const PASS_DISTANCE_PENALTY = 0.004;
 export const PRESSURE_RANGE = 2.5;
@@ -64,6 +101,7 @@ export const INTERCEPT_MAX = 0.4;
 export const INTERCEPT_FALLOFF = 1.5;
 // The first few metres of a pass are covered by pressure, not interception
 export const PASS_CLEAR_START = 2;
+export const PASS_ERROR_RADIUS: [number, number] = [10, 30]; // metres: mis-hit deliveries can run out
 
 // Shooting
 export const SHOT_PRESSURE_FACTOR = 0.6;
@@ -99,12 +137,12 @@ export const KEEPER_KICK_DISTANCE = 50;
 
 // Tackling
 export const TACKLE_RANGE = 2;
-export const TACKLE_ATTEMPT = 0.1;
+export const TACKLE_ATTEMPT = 0.24; // chance/s: inertial closing and ball flight reduce seconds in tackle range
 export const TACKLE_BASE = 0.35;
 export const TACKLE_SKILL = 0.004;
 export const TACKLE_COOLDOWN = 3;
-export const TACKLE_LOOSE = 0.35; // won tackles that poke the ball away rather than come away with it
-export const TACKLE_LOOSE_DISTANCE: [number, number] = [2, 8];
+export const TACKLE_LOOSE = 0.55; // won tackles that poke the ball away rather than come away with it
+export const TACKLE_LOOSE_DISTANCE: [number, number] = [4, 16];
 
 // ---------- Rules, restarts and the referee ----------
 
@@ -117,8 +155,8 @@ export const WALL_DISTANCE = 9.15; // opponents stand this far from a free kick 
 export const THROW_IN_DISTANCE = 2;
 
 // Dead-ball time before a restart is taken (ticks). The clock keeps running.
-export const SETUP_TICKS = { throw_in: 12.5, goal_kick: 20, corner: 27.5, free_kick: 20, penalty: 45, kickoff: 1 } as const;
-export const DANGEROUS_FREE_KICK_TICKS = 30; // seconds to line up a wall in shooting range
+export const SETUP_TICKS = { throw_in: 24, goal_kick: 36, corner: 40, free_kick: 36, penalty: 45, kickoff: 1 } as const;
+export const DANGEROUS_FREE_KICK_TICKS = 45; // seconds to line up a wall in shooting range
 export const GOAL_CELEBRATION_TICKS = 50; // seconds including the walk back for kickoff
 export const RESTART_DISTANCE_EPSILON = 1e-6; // metres: avoid pinning players to a radius through rounding
 export const RESTART_VARIATION = 0.3; // fractional variation in dead-ball duration
@@ -156,7 +194,7 @@ export const BLOCK_FOR_CORNER = 0.3; // blocked shots deflected behind
 export const HEADED_BEHIND = 0.3; // crosses headed out for a corner
 export const CROSS_BLOCK_RANGE = 2.5; // a defender this close to the crosser can get in the way
 export const CROSS_BLOCK = 0.3;
-export const CROSS_BLOCK_FOR_CORNER = 0.6;
+export const CROSS_BLOCK_FOR_CORNER = 0.75;
 
 // Fouls and cards (per foul unless noted)
 export const FOUL_ON_FAILED_TACKLE = 0.25;
@@ -177,7 +215,7 @@ export const REFEREE_STRICTNESS: [number, number] = [0.75, 1.3];
 // and passers misjudge a run that's only just off
 export const OFFSIDE_TOLERANCE = 0.3;
 export const OFFSIDE_PERCEPTION = 0.8;
-export const OFFSIDE_GAMBLE = 2; // how far a forward will cheat past the line hunting space
+export const OFFSIDE_GAMBLE = 3; // how far a forward will cheat past the line hunting space
 export const OFFSIDE_GAMBLE_CHANCE = 0.5; // per tick
 
 // Stoppage time (seconds added per stoppage)

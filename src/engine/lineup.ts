@@ -60,6 +60,8 @@ function abandonIfShort(state: MatchState, side: Side): void {
   }
   emit(state, { type: "whistle", side, phase: "abandoned" });
   state.phase = "abandoned";
+  state.ball.flight = null;
+  state.ball.height = 0;
 }
 
 // Down to ten: the shape closes up around the gap (the front line loses a player first).
@@ -126,6 +128,8 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     energy: 1,
     slot: off.slot,
     pos: { x: CENTRE.x, y: 0 },
+    vel: { x: 0, y: 0 },
+    facing: Math.PI / 2,
     cooldown: 0,
     yellow: false,
   };

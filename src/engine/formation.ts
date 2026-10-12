@@ -12,7 +12,7 @@ import {
   SHIFT_X,
   SHIFT_Y,
 } from "./constants";
-import { add, CENTRE, clampToPitch, dist, normalize, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
+import { add, CENTRE, clampToPitch, dist, normalize, PITCH_LENGTH, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
 import {
   emit,
   fromTeamFrame,
@@ -65,15 +65,23 @@ export function arrangeSide(state: MatchState, side: Side): void {
 // Mentality sets how many bodies commit forward when the team has the ball.
 export function anchor(state: MatchState, p: MatchPlayer, inPossession: boolean): Vec {
   const mentality = state.teams[p.side].tactics.mentality;
-  const ball = toTeamFrame(p.side, state.ball.pos);
+  // Scalar frame conversions (same arithmetic as toTeamFrame/fromTeamFrame) avoid allocating per call
+  const away = p.side !== "home";
+  const ballX = away ? PITCH_LENGTH - state.ball.pos.x : state.ball.pos.x;
+  const ballY = away ? PITCH_WIDTH - state.ball.pos.y : state.ball.pos.y;
   const x =
     p.slot.x +
-    (ball.x - CENTRE.x) * SHIFT_X +
+    (ballX - CENTRE.x) * SHIFT_X +
     (inPossession ? ATTACK_PUSH + mentality * MENTALITY_PUSH : -DEFEND_DROP);
   const width = inPossession ? 1 + (ATTACK_WIDTH - 1) * (1 + MENTALITY_WIDTH * mentality) : DEFEND_WIDTH;
-  const y = CENTRE.y + (p.slot.y - CENTRE.y) * width + (ball.y - CENTRE.y) * SHIFT_Y;
-  const [minX, maxX] = LINE_RANGE[p.position];
-  return fromTeamFrame(p.side, clampToPitch({ x: Math.min(maxX, Math.max(minX, x)), y }));
+  const y = CENTRE.y + (p.slot.y - CENTRE.y) * width + (ballY - CENTRE.y) * SHIFT_Y;
+  const range = LINE_RANGE[p.position];
+  const minX = range[0], maxX = range[1];
+  const clampedX = Math.min(PITCH_LENGTH, Math.max(0, Math.min(maxX, Math.max(minX, x))));
+  const clampedY = Math.min(PITCH_WIDTH, Math.max(0, y));
+  return away
+    ? { x: PITCH_LENGTH - clampedX, y: PITCH_WIDTH - clampedY }
+    : { x: clampedX, y: clampedY };
 }
 
 // Interpose between the ball and the middle of the goal, staying near the line
@@ -92,7 +100,12 @@ export function kickoffPosition(p: MatchPlayer): Vec {
 
 export function kickoff(state: MatchState, kicking: Side, delay: number = SETUP_TICKS.kickoff, placePlayers = false): void {
   for (const p of state.players) {
-    if (placePlayers) p.pos = kickoffPosition(p);
+    if (placePlayers) {
+      p.pos = kickoffPosition(p);
+      p.vel.x = p.vel.y = 0;
+      p.facing = p.side === "home" ? 0 : Math.PI;
+      delete p.carryTarget;
+    }
     p.cooldown = 0;
   }
   const kicker =
