@@ -34,6 +34,7 @@ src/
   commentary.ts   Turns match events into commentary lines (only the moments a manager reacts to)
   stats.ts        Per-team box-score stats counted from the event log
   engine/         Event-based match engine (see below)
+  analysis/       Match recordings and analyst views for checking player behaviour (see below)
   calibrate.ts, main.ts, watch.ts   CLI entry points
   test-helpers.ts Shared fixtures: player(), squad(), strongVsWeak()
 ui/               Vite + React app; imports the game straight from src/
@@ -62,6 +63,7 @@ Both implement `MatchEngine` and return a `MatchResult`, so `playSeason` can use
   - **Outcomes**: `resolve.ts` rolls results from attributes, separately from the decision: passes, crosses (block, delivery, keeper claim, aerial duel, header), shots, dribbles, tackles and the fouls that come from them. Every outcome is emitted as a `MatchEvent`; the score is derived from the events.
   - **Ball flight**: `flight.ts`. A struck ball (pass, through ball, cross, shot, clearance) flies at a realistic speed and arc (`BALL_SPEED`, `BALL_PEAK`) and lands on a later tick. The outcome is still rolled when the ball is struck, but it is stored on `ball.flight` as plain data (an `Arrival` plus the events to emit) and applied on landing, so match state stays serialisable. While the ball is in the air nobody owns it, tackles it or picks it up. The intended receiver runs to the landing spot, and if they haven't reached it the ball drops loose with no completed pass recorded. A header is rolled when the cross arrives. Renderers read `ball.height` and call `sampleFlight(flight, tick)` with fractional ticks for smooth motion.
   - **Rules**: `referee.ts` judges fouls (advantage, free kick or penalty), cards (yellow, second yellow, straight red, last-man fouls) and offside; the referee has a seeded strictness. `restarts.ts` decides what happens when the ball goes out (throw-in, corner, goal kick) and sets up free kicks and penalties. A restart puts the ball on the spot and the taker walks to it; the ball stays dead (`ballDead`) until the setup time (seeded, realistic durations) has passed *and* the taker is at the ball, and nobody may challenge until the restart is taken. Players reach kickoff, penalty, corner and wall positions by moving, never by teleporting (only the two half-starting kickoffs place players), so a renderer can draw every tick. `lineup.ts` handles tactics changes, substitutions (five, made only at a dead ball or half time), injuries and sending-offs; a side down to ten re-fits its shape and finds an emergency keeper. `fatigue.ts` lowers attributes and speed as energy drops.
+  - `debug.ts` defines the optional `state.debug` hook: per-player intents from `movement.ts` and scored options from `decide.ts`. It is for throwaway probes only. The engine never reads it back, nothing in `src/` sets it, and a new movement behaviour should add its own `Intent`.
   - `valuation.ts` holds xG, possession value, pass risk, race, cross, free-kick and penalty estimates; `state.ts` holds the match state and sensing queries; `constants.ts` holds every tuning knob.
 
 The match clock runs in two periods. `state.clock` is match time (0–2700 s first half, 2700–5400 s second, then added time); `state.time` counts every tick and keeps events in order. At 45' and 90' the added time is announced from the half's stoppages (goals, subs, cards, injuries, penalties), and `state.phase` moves through `first_half`, `half_time`, `second_half` and `full_time` (or `abandoned` if a side drops below seven players, which awards the match 3-0). Stoppages during added time extend it, and a penalty awarded at the death is always taken before the whistle. Show minutes with `minuteLabel(period, clock)` (for example 45+2').
@@ -69,6 +71,12 @@ The match clock runs in two periods. `state.clock` is match time (0–2700 s fir
 `simulateEventMatch` plays a whole match in one go. The UI drives the same loop one second at a time with `startEventMatch` and `stepEventMatch`, applies the player's tactics immediately with `applyTactics`, and queues their substitutions with `requestSub`. The player's side uses `humanManager`, which never changes tactics or makes subs on its own. Injured players are replaced like-for-like automatically for both sides. Keep the two paths identical: a test checks that stepping and simulating produce the same events.
 
 Each team works in its own **team frame**, attacking towards x = 105. Convert with `toTeamFrame`/`fromTeamFrame` instead of special-casing home and away.
+
+## Checking player behaviour
+
+`src/analysis/` records a match the way an analyst would see it: every player's position each second, touches, and every pass, cross, shot and clearance. Views turn that into average positions, heat, touch and pass maps, running, action mix and a passing network, and `compare()` measures a change between a control and a treatment over the same seeds. Recording only reads state, so a recorded match is identical to `simulateEventMatch`.
+
+After changing how players behave (a new instruction, a tactical option, movement or decisions), confirm it with the workflow in `.claude/skills/verify-player-behaviour/SKILL.md`. That file also lists what normal numbers look like and the pitfalls, and has throwaway recipes for debugging behaviour that doesn't change as expected: an intent log, "why" traces of decisions, and hand-built scenarios.
 
 ## Determinism
 

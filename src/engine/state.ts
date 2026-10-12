@@ -1,4 +1,5 @@
 import type { Manager } from "../manager";
+import type { DebugHook } from "./debug";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
 import type { FormationName, Mentality, Tactics } from "../tactics";
@@ -148,6 +149,7 @@ export interface MatchState {
   teams: Record<Side, TeamState>;
   events: MatchEvent[];
   rng: Rng;
+  debug?: DebugHook; // throwaway probes only; see debug.ts
 }
 
 // Each team sees the pitch as attacking towards x = PITCH_LENGTH.

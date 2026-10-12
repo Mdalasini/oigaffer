@@ -32,6 +32,7 @@ import {
   STEER_ANTICIPATION,
   STEER_DEFEND_ACCEL,
 } from "./constants";
+import type { Intent } from "./debug";
 import { movementBuffer, restartRadiusFor, separateBodies, separation, steerPlayer } from "./steering";
 import { anchor, keeperPosition, kickoffPosition } from "./formation";
 import { add, CENTRE, clampToPitch, dist, distSq, normalize, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
@@ -139,12 +140,14 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
   if (state.ball.setPiece !== null) return;
   if (carrier.carryTarget) {
     // A committed take-on is a burst, not the restrained touch/look-up carry.
+    state.debug?.intent?.(state, carrier, "take_on", carrier.carryTarget, RUN_SPEED);
     steerPlayer(carrier, carrier.carryTarget, RUN_SPEED, 0, state.ball.pos, 0, 0, STEER_CLOSE_ACCEL);
     delete carrier.carryTarget;
     state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
     return;
   }
   if (!state.ball.receiving || carrier.position === "GK" || state.time >= state.ball.readyAt) {
+    state.debug?.intent?.(state, carrier, "hold", carrier.pos, 0);
     steerPlayer(carrier, carrier.pos, 0, 0, state.ball.pos);
     state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
     return;
@@ -165,9 +168,12 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
       return;
     }
   }
-  const speed = state.time < state.ball.controlledAt ? FIRST_TOUCH_SPEED : CARRIER_JOG_SPEED;
+  const touching = state.time < state.ball.controlledAt;
+  const speed = touching ? FIRST_TOUCH_SPEED : CARRIER_JOG_SPEED;
   // Aim beyond this tick's displacement so arrival slowing does not turn a jog into a walk.
-  steerPlayer(carrier, add(carrier.pos, scale(direction, RUN_SPEED)), speed, 0, state.ball.pos);
+  const aim = add(carrier.pos, scale(direction, RUN_SPEED));
+  state.debug?.intent?.(state, carrier, touching ? "first_touch" : "look_up", aim, speed);
+  steerPlayer(carrier, aim, speed, 0, state.ball.pos);
   state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
 }
 
@@ -187,18 +193,23 @@ export function moveOffBall(state: MatchState): void {
   for (let i = 0; i < state.players.length; i++) {
     const p = state.players[i]!;
     if (p === carrier) {
-      if (state.ball.setPiece !== null) steerPlayer(p, state.ball.pos, MOVE_SPEED, 0, state.ball.pos);
+      if (state.ball.setPiece !== null) {
+        state.debug?.intent?.(state, p, "walk_to_restart", state.ball.pos, MOVE_SPEED);
+        steerPlayer(p, state.ball.pos, MOVE_SPEED, 0, state.ball.pos);
+      }
       continue;
     }
     let target: Vec;
     let speed: number;
     let standOff = 0;
+    let intent: Intent = "shape";
     const setPieceSpot = cornerPosition(state, p);
     // Membership cannot change inside this loop, so look each player up once
     const isChasing = chasing.has(p), isMarking = marking.has(p);
     if (state.ball.setPiece === "kickoff") {
       target = kickoffPosition(p);
       speed = MOVE_SPEED;
+      intent = "kickoff";
     } else if (state.ball.setPiece === "penalty" && carrier) {
       if (p.side !== carrier.side && p.position === "GK") {
         target = ownGoal(p.side);
@@ -209,12 +220,16 @@ export function moveOffBall(state: MatchState): void {
         });
       }
       speed = MOVE_SPEED;
+      intent = "penalty_position";
     } else if (setPieceSpot) {
       target = setPieceSpot;
       speed = MOVE_SPEED;
+      intent = "set_piece_position";
     } else if (isChasing) {
       target = state.ball.flight?.destination ?? state.ball.pos;
-      speed = p.id === state.ball.runnerId || state.ball.flight?.meetIds.includes(p.id) ? RUN_SPEED : PRESS_SPEED;
+      const receiving = p.id === state.ball.runnerId || !!state.ball.flight?.meetIds.includes(p.id);
+      speed = receiving ? RUN_SPEED : PRESS_SPEED;
+      intent = receiving ? "receive" : carrier ? "press" : "chase";
       if (carrier) {
         target = add(target, scale(carrier.vel, STEER_ANTICIPATION));
         standOff = PRESS_STAND_OFF;
@@ -222,9 +237,11 @@ export function moveOffBall(state: MatchState): void {
     } else if (p.position === "GK") {
       target = keeperPosition(state, p);
       speed = KEEPER_SPEED;
+      intent = "keeper";
     } else if (isMarking) {
       target = marking.get(p)!;
       speed = MOVE_SPEED;
+      intent = "mark";
     } else {
       target = anchor(state, p, p.side === possessionSide);
       // Frame conversions are written out as scalars (same operations as toTeamFrame) to avoid allocating per player
@@ -235,6 +252,7 @@ export function moveOffBall(state: MatchState): void {
         const ty = flip ? PITCH_WIDTH - target.y : target.y;
         const x = Math.max(tx - COVER_DROP, 6);
         target = { x: flip ? PITCH_LENGTH - x : x, y: flip ? PITCH_WIDTH - ty : ty };
+        intent = "cover";
       }
       if (p.side === possessionSide) {
         // Stay onside; forwards play right on the shoulder of the last defender,
@@ -243,15 +261,19 @@ export function moveOffBall(state: MatchState): void {
         const ty = flip ? PITCH_WIDTH - target.y : target.y;
         const gamble = state.rng() < OFFSIDE_GAMBLE_CHANCE ? state.rng() * OFFSIDE_GAMBLE : 0;
         const x = p.position === "FWD" ? onside - 1 + gamble : Math.min(tx, onside);
+        if (p.position === "FWD") intent = "on_shoulder";
         const ux = flip ? PITCH_LENGTH - x : x, uy = flip ? PITCH_WIDTH - ty : ty;
         target = { x: Math.min(PITCH_LENGTH, Math.max(0, ux)), y: Math.min(PITCH_WIDTH, Math.max(0, uy)) };
       }
       speed = MOVE_SPEED;
     }
     if (carrier && state.ball.setPiece !== null) {
-      target = keepDistance(state, carrier, p, target);
+      const room = keepDistance(state, carrier, p, target);
+      if (room !== target) intent = "give_room";
+      target = room;
       speed = MOVE_SPEED;
     }
+    state.debug?.intent?.(state, p, intent, target, speed);
     buffer.orders[i * 5] = target.x;
     buffer.orders[i * 5 + 1] = target.y;
     buffer.orders[i * 5 + 2] = speed;
