@@ -87,7 +87,7 @@ export const COVER_DROP = 3; // spare defenders with nobody to mark drop this fa
 export const POSSESSION_VALUE = 0.015;
 export const PROGRESS_VALUE = 0.01; // extra for having the ball at the opponent's end vs your own
 export const THREAT_SCALE = 0.6;
-export const XG_MAX = 0.95;
+export const XG_MAX = 0.98; // carries no longer drift towards goal and more balls go out: about 0.2 fewer goals a game
 export const XG_DECAY = 7;
 export const DECISION_TEMPERATURE = 0.003;
 
