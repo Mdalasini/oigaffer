@@ -1,6 +1,6 @@
 # Probe harness for engine workflows
 
-Scratch measurement scripts for pi workflows that tune the event engine. Copy them into each
+Scratch measurement scripts for parallel workflows that tune the event engine, on pi or as Claude subagents and workflows. Copy them into each
 worktree's `probes/` folder (they import `../src`), and never commit them from a worktree.
 
 | Script | Matches | Use |
