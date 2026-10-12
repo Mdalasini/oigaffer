@@ -1,0 +1,73 @@
+# Baseline: main at 5240753, measured 2026-10-12 18:43
+
+## bash probes/calib.sh
+
+Poisson (540 matches)
+  goals/game        2.57
+  home W / D / A    38.3% / 23.3% / 38.3%
+  favourite W / L   52.8% / 23.7%
+  strength→GD corr  0.43
+
+Event (540 matches)
+  goals/game        2.83
+  home W / D / A    36.1% / 28.7% / 35.2%
+  favourite W / L   48.0% / 23.0%
+  strength→GD corr  0.37
+  per team per game:
+    passes          250.0  (80% completed)
+    shots           12.3  (on target 31%)
+    xG              1.71
+    tackles won     21.0
+    through balls   10.8
+    carries         105.2
+    take-ons won    5.7
+    clearances      3.0
+    interceptions   16.9
+    crosses         5.8  (won 1.8)
+    corners         4.2
+    throw-ins       9.9
+    goal kicks      8.9
+    fouls           7.1  (advantage 1.9)
+    offsides        1.7
+    yellow / red    1.0 / 0.1
+    penalties       0.1
+    injuries        0.1
+    subs            3.0
+  goals by type:     headers 8%, free kicks 1%, penalties 7%
+  added time:        1.8 + 3.7 minutes
+
+Event engine: 130.2 ms/match
+
+## bash probes/corr.sh
+oigaffer-baseline.HY15 n=450 fav 54.0/22.2 corrGD 0.462 corrXG 0.628
+oigaffer-baseline.HY15 n=450 fav 52.0/19.3 corrGD 0.447 corrXG 0.532
+
+## bun probes/metrics.ts 60 1
+{"matches":60,"seed":1,"goalsPerGame":2.7333333333333334,"homeWinPct":38.333333333333336,"drawPct":33.333333333333336,"passesPerTeam":251.56666666666666,"passCompletion":0.7974429416737109,"shotsPerTeam":12.266666666666667,"ballInPlayMin":60.321111111111115,"msPerMatch":172.10382645,"distancePerOutfieldKm":10.294717795327179,"fullMatchOutfieldPlayers":806,"playerSpeed":{"p50":0.67,"p99":5.98,"max":7.999238954470717},"playerAccel":{"p99":5.99,"max":10.422915365871523},"reversalPct":13.09007220185281,"overlapPerTick":0,"worstOverlapM":0,"minPlayerSeparationM":0.8476891405599706,"ballSpeed":{"p50":0.69,"p99":19.16,"max":24.42928220345111,"teleportPct":0},"receiverFreezeS":1.0992677512342202,"receiverFreezeSamples":30181,"inFlightPct":34.582972609552584,"maxHeight":9.9,"heightAbove1mPct":2.645103059551659}
+
+## bun probes/tisrc.ts
+60 pass_astray 8.91 | tackle 0.63 | clearance 0.09 | pass 0.02 | cross:blocked 0.01 | foul 0.01 | recovery 0.01
+
+## bash probes/tactics.sh 400
+4-4-2 1: 1.45-1.36  ppg 1.47
+4-4-2 0: 1.36-1.26  ppg 1.42
+4-4-2 2: 1.46-1.42  ppg 1.36
+4-4-2 -2: 1.25-1.24  ppg 1.35
+4-5-1 0: 1.49-1.39  ppg 1.42
+5-4-1 0: 1.33-1.59  ppg 1.19
+4-4-2 -1: 1.26-1.27  ppg 1.35
+5-3-2 0: 1.16-1.44  ppg 1.19
+4-3-3 0: 1.81-1.35  ppg 1.63
+3-4-3 0: 1.76-1.79  ppg 1.28
+
+## bash probes/tactics.sh 100 (screening size; compare screens with this, not the 400 run)
+4-4-2 -1: 1.13-1.26  ppg 1.32
+4-4-2 1: 1.47-1.22  ppg 1.57
+4-4-2 -2: 1.24-0.97  ppg 1.54
+3-4-3 0: 1.79-1.80  ppg 1.24
+5-4-1 0: 1.55-1.41  ppg 1.47
+4-5-1 0: 1.53-1.33  ppg 1.48
+4-4-2 2: 1.53-1.46  ppg 1.41
+4-4-2 0: 1.55-1.18  ppg 1.66
+4-3-3 0: 1.74-1.29  ppg 1.56
+5-3-2 0: 1.25-1.46  ppg 1.32
