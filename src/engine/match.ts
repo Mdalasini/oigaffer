@@ -71,6 +71,8 @@ export function createMatchState(
         energy: 1,
         slot: { x: 0, y: i }, // placeholder ordering; arrangeSide sets the real slot
         pos: { x: 0, y: 0 },
+        vel: { x: 0, y: 0 },
+        facing: side === "home" ? 0 : Math.PI,
         cooldown: 0,
         yellow: false,
       });

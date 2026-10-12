@@ -26,10 +26,15 @@ import {
   THROW_IN_DISTANCE,
   WALL_DISTANCE,
   RESTART_DISTANCE_EPSILON,
+  STEER_RESTART_MARGIN,
+  STEER_ACCEL,
+  STEER_CLOSE_ACCEL,
+  STEER_ANTICIPATION,
+  STEER_DEFEND_ACCEL,
 } from "./constants";
-import { speedFactor, tire } from "./fatigue";
+import { movementBuffer, restartRadius, separateBodies, separation, steerPlayer } from "./steering";
 import { anchor, keeperPosition, kickoffPosition } from "./formation";
-import { add, CENTRE, clampToPitch, dist, moveTowards, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
+import { add, CENTRE, clampToPitch, dist, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition, placeBall } from "./restarts";
 import {
@@ -128,7 +133,19 @@ function markingTargets(state: MatchState, defending: Side, busy: Set<MatchPlaye
 
 // Protect a receiving touch, then carry while looking up. This is not a take-on.
 export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
-  if (!state.ball.receiving || carrier.position === "GK" || state.ball.setPiece !== null || state.time >= state.ball.readyAt) return;
+  if (state.ball.setPiece !== null) return;
+  if (carrier.carryTarget) {
+    // A committed take-on is a burst, not the restrained touch/look-up carry.
+    steerPlayer(carrier, carrier.carryTarget, RUN_SPEED, 0, state.ball.pos, 0, 0, STEER_CLOSE_ACCEL);
+    delete carrier.carryTarget;
+    state.ball.pos = { ...carrier.pos };
+    return;
+  }
+  if (!state.ball.receiving || carrier.position === "GK" || state.time >= state.ball.readyAt) {
+    steerPlayer(carrier, carrier.pos, 0, 0, state.ball.pos);
+    state.ball.pos = { ...carrier.pos };
+    return;
+  }
   const defender = nearest(opponents(state, carrier), carrier.pos);
   const distance = defender ? dist(defender.pos, carrier.pos) : Infinity;
   const forward = normalize(sub(attackingGoal(carrier.side), carrier.pos));
@@ -146,9 +163,8 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
     }
   }
   const speed = state.time < state.ball.controlledAt ? FIRST_TOUCH_SPEED : CARRIER_JOG_SPEED;
-  const from = carrier.pos;
-  carrier.pos = clampToPitch(add(from, scale(direction, speed * speedFactor(carrier))));
-  tire(carrier, dist(from, carrier.pos));
+  // Aim beyond this tick's displacement so arrival slowing does not turn a jog into a walk.
+  steerPlayer(carrier, add(carrier.pos, scale(direction, RUN_SPEED)), speed, 0, state.ball.pos);
   state.ball.pos = { ...carrier.pos };
 }
 
@@ -163,13 +179,12 @@ export function moveOffBall(state: MatchState): void {
   const marking = markingTargets(state, opponent(possessionSide), chasing);
   const onside = offsideLine(state, possessionSide);
 
-  for (const p of state.players) {
+  const buffer = movementBuffer(state);
+  separation(state, buffer);
+  for (let i = 0; i < state.players.length; i++) {
+    const p = state.players[i]!;
     if (p === carrier) {
-      if (state.ball.setPiece !== null) {
-        const from = p.pos;
-        p.pos = moveTowards(p.pos, state.ball.pos, MOVE_SPEED * speedFactor(p));
-        tire(p, dist(from, p.pos));
-      }
+      if (state.ball.setPiece !== null) steerPlayer(p, state.ball.pos, MOVE_SPEED, 0, state.ball.pos);
       continue;
     }
     let target: Vec;
@@ -195,7 +210,10 @@ export function moveOffBall(state: MatchState): void {
     } else if (chasing.has(p)) {
       target = state.ball.flight?.destination ?? state.ball.pos;
       speed = p.id === state.ball.runnerId || state.ball.flight?.meetIds.includes(p.id) ? RUN_SPEED : PRESS_SPEED;
-      if (carrier) standOff = PRESS_STAND_OFF;
+      if (carrier) {
+        target = add(target, scale(carrier.vel, STEER_ANTICIPATION));
+        standOff = PRESS_STAND_OFF;
+      }
     } else if (p.position === "GK") {
       target = keeperPosition(state, p);
       speed = KEEPER_SPEED;
@@ -223,10 +241,27 @@ export function moveOffBall(state: MatchState): void {
       target = keepDistance(state, carrier, p, target);
       speed = MOVE_SPEED;
     }
-    const from = p.pos;
-    p.pos = moveTowards(p.pos, target, speed * speedFactor(p), standOff);
-    tire(p, dist(from, p.pos));
+    buffer.orders[i * 5] = target.x;
+    buffer.orders[i * 5 + 1] = target.y;
+    buffer.orders[i * 5 + 2] = speed;
+    buffer.orders[i * 5 + 3] = standOff;
+    // Retreating defenders and midfield cover must not lag behind their shape.
+    const defendingLine = (p.position === "DEF" || p.position === "MID") && p.side !== possessionSide;
+    buffer.orders[i * 5 + 4] = chasing.has(p) || marking.has(p) ? STEER_CLOSE_ACCEL :
+      defendingLine ? STEER_DEFEND_ACCEL : STEER_ACCEL;
   }
+  // All targets are chosen before any off-ball player moves.
+  const target = { x: 0, y: 0 };
+  for (let i = 0; i < state.players.length; i++) {
+    const p = state.players[i]!;
+    if (p === carrier) continue;
+    target.x = buffer.orders[i * 5]!;
+    target.y = buffer.orders[i * 5 + 1]!;
+    steerPlayer(p, target, buffer.orders[i * 5 + 2]!, buffer.orders[i * 5 + 3]!, state.ball.pos,
+      buffer.separation[i * 2]!, buffer.separation[i * 2 + 1]!, buffer.orders[i * 5 + 4]!, restartRadius(state, p));
+  }
+  separateBodies(state);
+  if (carrier && state.ball.setPiece === null) state.ball.pos = { ...carrier.pos };
   moveReferee(state);
 }
 
@@ -236,10 +271,10 @@ function keepDistance(state: MatchState, taker: MatchPlayer, p: MatchPlayer, tar
   if (kind === "penalty") {
     if (p.side !== taker.side && p.position === "GK") return target;
     if (dist(target, state.ball.pos) >= WALL_DISTANCE) return target;
-    return add(state.ball.pos, scale(normalize(sub(target, state.ball.pos)), WALL_DISTANCE));
+    return add(state.ball.pos, scale(normalize(sub(target, state.ball.pos)), WALL_DISTANCE + STEER_RESTART_MARGIN));
   }
   if (p.side === taker.side) return target;
-  const required = kind === "throw_in" ? THROW_IN_DISTANCE : WALL_DISTANCE;
+  const required = (kind === "throw_in" ? THROW_IN_DISTANCE : WALL_DISTANCE) + STEER_RESTART_MARGIN;
   // Escape to the nearest legal point first, rather than taking a second movement step.
   const point = dist(p.pos, state.ball.pos) < required - RESTART_DISTANCE_EPSILON ? p.pos : target;
   if (dist(point, state.ball.pos) >= required) return target;

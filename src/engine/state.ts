@@ -20,6 +20,9 @@ export interface MatchPlayer {
   energy: number; // 1 fresh … 0 exhausted
   slot: Vec; // formation position in the team frame
   pos: Vec; // world position
+  vel: Vec; // world velocity, m/s
+  facing: number; // world angle, radians
+  carryTarget?: Vec; // a successful take-on, pursued in the movement phase
   cooldown: number; // ticks before this player can challenge again
   yellow: boolean;
 }
@@ -202,6 +205,8 @@ export function emit(state: MatchState, event: DistributiveOmit<MatchEvent, "tim
 }
 
 export function giveBall(state: MatchState, p: MatchPlayer, controlTicks?: number, setPiece: SetPiece | null = null): void {
+  const previous = owner(state);
+  if (previous) delete previous.carryTarget;
   const automaticTouch = controlTicks === undefined && p.position !== "GK" && setPiece === null;
   if (controlTicks === undefined) {
     const defender = nearest(opponents(state, p), p.pos);
@@ -225,6 +230,8 @@ export function giveBall(state: MatchState, p: MatchPlayer, controlTicks?: numbe
 }
 
 export function looseBall(state: MatchState, pos: Vec, runnerId: Id | null = null): void {
+  const previous = owner(state);
+  if (previous) delete previous.carryTarget;
   state.ball.flight = null;
   state.ball.height = 0;
   state.ball.ownerId = null;

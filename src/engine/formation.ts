@@ -92,7 +92,12 @@ export function kickoffPosition(p: MatchPlayer): Vec {
 
 export function kickoff(state: MatchState, kicking: Side, delay: number = SETUP_TICKS.kickoff, placePlayers = false): void {
   for (const p of state.players) {
-    if (placePlayers) p.pos = kickoffPosition(p);
+    if (placePlayers) {
+      p.pos = kickoffPosition(p);
+      p.vel.x = p.vel.y = 0;
+      p.facing = p.side === "home" ? 0 : Math.PI;
+      delete p.carryTarget;
+    }
     p.cooldown = 0;
   }
   const kicker =

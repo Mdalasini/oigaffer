@@ -30,7 +30,6 @@ import {
   TACTICAL_FOUL,
 } from "./constants";
 import { clearanceTarget, type Action } from "./decide";
-import { tire } from "./fatigue";
 import { launchFlight } from "./flight";
 import { add, dist, distToSegment, normalize, PITCH_LENGTH, PITCH_WIDTH, scale, sub, type Vec } from "./geometry";
 import { flaggedOffside, judgeFoul } from "./referee";
@@ -260,9 +259,8 @@ function resolveCross(state: MatchState, crosser: MatchPlayer, action: Action & 
 function resolveDribble(state: MatchState, carrier: MatchPlayer, action: Action & { kind: "dribble" }): void {
   const { defender } = action;
   if (state.rng() < action.beat) {
-    tire(carrier, dist(carrier.pos, action.to));
-    carrier.pos = action.to;
     giveBall(state, carrier, 1);
+    carrier.carryTarget = action.to;
     if (defender) defender.cooldown = TACKLE_COOLDOWN;
     emit(state, { type: "dribble", side: carrier.side, playerId: carrier.id, defenderId: defender?.id ?? null });
     // Beaten defenders sometimes pull their man back rather than let him go

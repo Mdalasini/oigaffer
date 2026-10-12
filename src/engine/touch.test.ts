@@ -136,6 +136,8 @@ describe("moving first touch with ball flight", () => {
     moveOffBall(state);
     expect(state.ball.pos).toEqual(spot);
     const keeper = owner(state)!;
+    // A stationary keeper holds it; a running claimant now brakes rather than snapping to a stop.
+    keeper.vel = { x: 0, y: 0 };
     giveBall(state, keeper);
     const from = { ...keeper.pos };
     moveCarrier(state, keeper);

@@ -128,6 +128,8 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     energy: 1,
     slot: off.slot,
     pos: { x: CENTRE.x, y: 0 },
+    vel: { x: 0, y: 0 },
+    facing: Math.PI / 2,
     cooldown: 0,
     yellow: false,
   };
