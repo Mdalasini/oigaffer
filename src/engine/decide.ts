@@ -255,9 +255,14 @@ export function chooseAction(state: MatchState, carrier: MatchPlayer): Action {
   const total = weights.reduce((a, b) => a + b, 0);
 
   let roll = state.rng() * total;
+  let chosen = options.length - 1;
   for (let i = 0; i < options.length; i++) {
     roll -= weights[i]!;
-    if (roll <= 0) return options[i]!.action;
+    if (roll <= 0) {
+      chosen = i;
+      break;
+    }
   }
-  return options[options.length - 1]!.action;
+  state.debug?.decision?.(state, carrier, options, weights.map((w) => w / total), chosen);
+  return options[chosen]!.action;
 }
