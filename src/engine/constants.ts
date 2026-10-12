@@ -104,6 +104,8 @@ export const INTERCEPT_FALLOFF = 1.5;
 // The first few metres of a pass are covered by pressure, not interception
 export const PASS_CLEAR_START = 2;
 export const PASS_ERROR_RADIUS: [number, number] = [10, 30]; // metres: mis-hit deliveries can run out
+export const WIDE_PASS_ERROR_RANGE = 12; // metres from the touchline: wide outlets can overrun it
+export const WIDE_PASS_ERROR_SPREAD = Math.PI / 3; // radians either side of the struck lane
 
 // Shooting
 export const SHOT_PRESSURE_FACTOR = 0.6;

@@ -8,6 +8,8 @@ import {
   CROSS_BLOCK_FOR_CORNER,
   CROSS_BLOCK_RANGE,
   PASS_ERROR_RADIUS,
+  WIDE_PASS_ERROR_RANGE,
+  WIDE_PASS_ERROR_SPREAD,
   DRIVEN_PASS_DISTANCE,
   HEADER_HEIGHT,
   SHOT_MISS_WIDTH,
@@ -132,7 +134,16 @@ function resolvePass(state: MatchState, passer: MatchPlayer, action: Action & { 
       [{ type: "interception", side: interceptor.side, playerId: passer.id, interceptorId: interceptor.id }]);
     return;
   }
-  const landing = scatter(state, action.kind === "through" ? action.target : receiverSpot, ...PASS_ERROR_RADIUS);
+  const intended = action.kind === "through" ? action.target : receiverSpot;
+  const wide = Math.min(intended.y, PITCH_WIDTH - intended.y) < WIDE_PASS_ERROR_RANGE;
+  // Wide outlets are often overrun rather than knocked back infield. Preserve
+  // the struck lane for these errors; central mis-hits can still go either way.
+  const angle = wide
+    ? Math.atan2(intended.y - passer.pos.y, intended.x - passer.pos.x) + (state.rng() * 2 - 1) * WIDE_PASS_ERROR_SPREAD
+    : state.rng() * Math.PI * 2;
+  const [lo, hi] = PASS_ERROR_RADIUS;
+  const error = lo + state.rng() * (hi - lo);
+  const landing = { x: intended.x + Math.cos(angle) * error, y: intended.y + Math.sin(angle) * error };
   launchFlight(state, flightKind, landing, { type: "loose", side: passer.side, runnerId: null }, [], 0,
     [{ type: "pass_astray", side: passer.side, playerId: passer.id }]);
 }
