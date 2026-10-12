@@ -33,8 +33,10 @@ export const CONTROL_TICKS = 3; // maximum first-touch time
 export const CONTROL_MIN_TICKS = 1;
 export const CONTROL_SKILL_FACTOR = 0.1; // seconds saved per passing/dribbling point above 1
 export const CONTROL_PRESSURE_TICKS = 0.75; // extra seconds under close pressure
-export const FIRST_TOUCH_SPEED = 0.7; // m/s: protect the receiving touch
-export const CARRIER_JOG_SPEED = 0.7; // m/s: faster jogging still gives free territory with steering
+// Carries move at 1.5 m/s: a jog that follows the run, not a sprint. 2.5 m/s towards goal gave 3.4-4.5 goals a game
+// by handing out free territory, and 0.7 m/s looked like walking.
+export const FIRST_TOUCH_SPEED = 1.5; // m/s: the receiving touch keeps the ball moving with the run
+export const CARRIER_JOG_SPEED = 1.5; // m/s: look-up jog
 export const DECISION_PAUSE_TICKS = 1; // seconds after control
 export const TOUCH_ESCAPE_RANGE = 8; // metres: sense the nearest opponent
 export const TOUCH_ESCAPE_WEIGHT = 1.3;
@@ -85,7 +87,7 @@ export const COVER_DROP = 3; // spare defenders with nobody to mark drop this fa
 export const POSSESSION_VALUE = 0.015;
 export const PROGRESS_VALUE = 0.01; // extra for having the ball at the opponent's end vs your own
 export const THREAT_SCALE = 0.6;
-export const XG_MAX = 0.95;
+export const XG_MAX = 0.98; // carries no longer drift towards goal and more balls go out: about 0.2 fewer goals a game
 export const XG_DECAY = 7;
 export const DECISION_TEMPERATURE = 0.003;
 
@@ -102,6 +104,8 @@ export const INTERCEPT_FALLOFF = 1.5;
 // The first few metres of a pass are covered by pressure, not interception
 export const PASS_CLEAR_START = 2;
 export const PASS_ERROR_RADIUS: [number, number] = [10, 30]; // metres: mis-hit deliveries can run out
+export const WIDE_PASS_ERROR_RANGE = 12; // metres from the touchline: wide outlets can overrun it
+export const WIDE_PASS_ERROR_SPREAD = Math.PI / 3; // radians either side of the struck lane
 
 // Shooting
 export const SHOT_PRESSURE_FACTOR = 0.6;
