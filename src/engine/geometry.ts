@@ -14,6 +14,13 @@ export const scale = (v: Vec, k: number): Vec => ({ x: v.x * k, y: v.y * k });
 export const dot = (a: Vec, b: Vec): number => a.x * b.x + a.y * b.y;
 export const length = (v: Vec): number => Math.hypot(v.x, v.y);
 export const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y);
+// Squared distance, for cheap rejection before the exact dist() test. Any margin above
+// the exact threshold is safe because hypot is within a few ulps of sqrt(dx*dx + dy*dy).
+export const distSq = (a: Vec, b: Vec): number => {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return dx * dx + dy * dy;
+};
+export const REJECT_MARGIN = 1 + 1e-9;
 
 export function normalize(v: Vec): Vec {
   const l = length(v);
@@ -38,7 +45,7 @@ export function clampToPitch(v: Vec): Vec {
 // Kinematic arrive: step towards the target, stopping `standOff` metres short of it
 export function moveTowards(from: Vec, to: Vec, maxStep: number, standOff = 0): Vec {
   const d = dist(from, to);
-  if (d <= standOff) return { ...from };
+  if (d <= standOff) return { x: from.x, y: from.y };
   const step = Math.min(maxStep, d - standOff);
   return add(from, scale(sub(to, from), step / d));
 }

@@ -32,9 +32,9 @@ import {
   STEER_ANTICIPATION,
   STEER_DEFEND_ACCEL,
 } from "./constants";
-import { movementBuffer, restartRadius, separateBodies, separation, steerPlayer } from "./steering";
+import { movementBuffer, restartRadiusFor, separateBodies, separation, steerPlayer } from "./steering";
 import { anchor, keeperPosition, kickoffPosition } from "./formation";
-import { add, CENTRE, clampToPitch, dist, normalize, PITCH_LENGTH, scale, sub, type Vec } from "./geometry";
+import { add, CENTRE, clampToPitch, dist, distSq, normalize, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition, placeBall } from "./restarts";
 import {
@@ -81,13 +81,12 @@ function chasers(state: MatchState): Set<MatchPlayer> {
   for (const side of sides) {
     const keeperCanCome = dist(state.ball.pos, ownGoal(side)) < KEEPER_BOX;
     // Forwards stay up as an outlet rather than pressing; they still chase loose balls
-    const candidates = state.players.filter(
-      (p) =>
-        p.side === side &&
-        p.cooldown === 0 &&
-        (p.position !== "GK" || keeperCanCome) &&
-        (p.position !== "FWD" || !carrier),
-    );
+    const candidates: MatchPlayer[] = [];
+    for (const p of state.players) {
+      if (p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome) && (p.position !== "FWD" || !carrier)) {
+        candidates.push(p);
+      }
+    }
     // A through ball's runner goes for it rather than whoever happens to be nearest
     const runner = !carrier ? candidates.find((p) => p.id === state.ball.runnerId) : undefined;
     const chaser = runner ?? nearest(candidates, state.ball.pos);
@@ -102,19 +101,23 @@ function chasers(state: MatchState): Set<MatchPlayer> {
 // attacker near their zone in their own half, nearest pairs first, one attacker each.
 function markingTargets(state: MatchState, defending: Side, busy: Set<MatchPlayer>): Map<MatchPlayer, Vec> {
   const goal = ownGoal(defending);
-  const attackers = state.players.filter(
-    (p) =>
-      p.side !== defending &&
-      p.position !== "GK" &&
-      p.id !== state.ball.ownerId &&
-      toTeamFrame(defending, p.pos).x < CENTRE.x + MARK_HALF_MARGIN,
-  );
-  const markers = state.players.filter((p) => p.side === defending && p.position !== "GK" && !busy.has(p));
+  // Same test as toTeamFrame(defending, p.pos).x, without allocating a point per player
+  const flip = defending !== "home";
+  const attackers: MatchPlayer[] = [];
+  const markers: MatchPlayer[] = [];
+  for (const p of state.players) {
+    if (p.side !== defending && p.position !== "GK" && p.id !== state.ball.ownerId &&
+      (flip ? PITCH_LENGTH - p.pos.x : p.pos.x) < CENTRE.x + MARK_HALF_MARGIN) attackers.push(p);
+    if (p.side === defending && p.position !== "GK" && !busy.has(p)) markers.push(p);
+  }
+
+  if (markers.length === 0 || attackers.length === 0) return new Map();
 
   const pairs: { marker: MatchPlayer; attacker: MatchPlayer; d: number }[] = [];
   for (const marker of markers) {
     const home = anchor(state, marker, false);
     for (const attacker of attackers) {
+      if (distSq(home, attacker.pos) > MARK_RANGE * MARK_RANGE * REJECT_MARGIN) continue;
       const d = dist(home, attacker.pos);
       if (d < MARK_RANGE) pairs.push({ marker, attacker, d });
     }
@@ -138,12 +141,12 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
     // A committed take-on is a burst, not the restrained touch/look-up carry.
     steerPlayer(carrier, carrier.carryTarget, RUN_SPEED, 0, state.ball.pos, 0, 0, STEER_CLOSE_ACCEL);
     delete carrier.carryTarget;
-    state.ball.pos = { ...carrier.pos };
+    state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
     return;
   }
   if (!state.ball.receiving || carrier.position === "GK" || state.time >= state.ball.readyAt) {
     steerPlayer(carrier, carrier.pos, 0, 0, state.ball.pos);
-    state.ball.pos = { ...carrier.pos };
+    state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
     return;
   }
   const defender = nearest(opponents(state, carrier), carrier.pos);
@@ -165,7 +168,7 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
   const speed = state.time < state.ball.controlledAt ? FIRST_TOUCH_SPEED : CARRIER_JOG_SPEED;
   // Aim beyond this tick's displacement so arrival slowing does not turn a jog into a walk.
   steerPlayer(carrier, add(carrier.pos, scale(direction, RUN_SPEED)), speed, 0, state.ball.pos);
-  state.ball.pos = { ...carrier.pos };
+  state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
 }
 
 export function moveOffBall(state: MatchState): void {
@@ -191,6 +194,8 @@ export function moveOffBall(state: MatchState): void {
     let speed: number;
     let standOff = 0;
     const setPieceSpot = cornerPosition(state, p);
+    // Membership cannot change inside this loop, so look each player up once
+    const isChasing = chasing.has(p), isMarking = marking.has(p);
     if (state.ball.setPiece === "kickoff") {
       target = kickoffPosition(p);
       speed = MOVE_SPEED;
@@ -207,7 +212,7 @@ export function moveOffBall(state: MatchState): void {
     } else if (setPieceSpot) {
       target = setPieceSpot;
       speed = MOVE_SPEED;
-    } else if (chasing.has(p)) {
+    } else if (isChasing) {
       target = state.ball.flight?.destination ?? state.ball.pos;
       speed = p.id === state.ball.runnerId || state.ball.flight?.meetIds.includes(p.id) ? RUN_SPEED : PRESS_SPEED;
       if (carrier) {
@@ -217,23 +222,29 @@ export function moveOffBall(state: MatchState): void {
     } else if (p.position === "GK") {
       target = keeperPosition(state, p);
       speed = KEEPER_SPEED;
-    } else if (marking.has(p)) {
+    } else if (isMarking) {
       target = marking.get(p)!;
       speed = MOVE_SPEED;
     } else {
       target = anchor(state, p, p.side === possessionSide);
+      // Frame conversions are written out as scalars (same operations as toTeamFrame) to avoid allocating per player
+      const flip = p.side !== "home";
       if (p.side !== possessionSide && p.position === "DEF") {
         // A spare defender covers the space behind the line
-        const t = toTeamFrame(p.side, target);
-        target = toTeamFrame(p.side, { x: Math.max(t.x - COVER_DROP, 6), y: t.y });
+        const tx = flip ? PITCH_LENGTH - target.x : target.x;
+        const ty = flip ? PITCH_WIDTH - target.y : target.y;
+        const x = Math.max(tx - COVER_DROP, 6);
+        target = { x: flip ? PITCH_LENGTH - x : x, y: flip ? PITCH_WIDTH - ty : ty };
       }
       if (p.side === possessionSide) {
         // Stay onside; forwards play right on the shoulder of the last defender,
         // and now and then gamble on a run a little too early
-        const t = toTeamFrame(p.side, target);
+        const tx = flip ? PITCH_LENGTH - target.x : target.x;
+        const ty = flip ? PITCH_WIDTH - target.y : target.y;
         const gamble = state.rng() < OFFSIDE_GAMBLE_CHANCE ? state.rng() * OFFSIDE_GAMBLE : 0;
-        const x = p.position === "FWD" ? onside - 1 + gamble : Math.min(t.x, onside);
-        target = clampToPitch(toTeamFrame(p.side, { x, y: t.y }));
+        const x = p.position === "FWD" ? onside - 1 + gamble : Math.min(tx, onside);
+        const ux = flip ? PITCH_LENGTH - x : x, uy = flip ? PITCH_WIDTH - ty : ty;
+        target = { x: Math.min(PITCH_LENGTH, Math.max(0, ux)), y: Math.min(PITCH_WIDTH, Math.max(0, uy)) };
       }
       speed = MOVE_SPEED;
     }
@@ -247,7 +258,7 @@ export function moveOffBall(state: MatchState): void {
     buffer.orders[i * 5 + 3] = standOff;
     // Retreating defenders and midfield cover must not lag behind their shape.
     const defendingLine = (p.position === "DEF" || p.position === "MID") && p.side !== possessionSide;
-    buffer.orders[i * 5 + 4] = chasing.has(p) || marking.has(p) ? STEER_CLOSE_ACCEL :
+    buffer.orders[i * 5 + 4] = isChasing || isMarking ? STEER_CLOSE_ACCEL :
       defendingLine ? STEER_DEFEND_ACCEL : STEER_ACCEL;
   }
   // All targets are chosen before any off-ball player moves.
@@ -258,10 +269,10 @@ export function moveOffBall(state: MatchState): void {
     target.x = buffer.orders[i * 5]!;
     target.y = buffer.orders[i * 5 + 1]!;
     steerPlayer(p, target, buffer.orders[i * 5 + 2]!, buffer.orders[i * 5 + 3]!, state.ball.pos,
-      buffer.separation[i * 2]!, buffer.separation[i * 2 + 1]!, buffer.orders[i * 5 + 4]!, restartRadius(state, p));
+      buffer.separation[i * 2]!, buffer.separation[i * 2 + 1]!, buffer.orders[i * 5 + 4]!, restartRadiusFor(state, carrier, p));
   }
   separateBodies(state);
-  if (carrier && state.ball.setPiece === null) state.ball.pos = { ...carrier.pos };
+  if (carrier && state.ball.setPiece === null) state.ball.pos = { x: carrier.pos.x, y: carrier.pos.y };
   moveReferee(state);
 }
 
@@ -287,7 +298,8 @@ function keepDistance(state: MatchState, taker: MatchPlayer, p: MatchPlayer, tar
 // the closest player from each side contests it 50/50.
 export function pickUpLooseBall(state: MatchState): void {
   if (state.ball.flight) return;
-  const inReach = state.players.filter((p) => dist(p.pos, state.ball.pos) <= CONTROL_RADIUS);
+  const reachSq = CONTROL_RADIUS * CONTROL_RADIUS * REJECT_MARGIN;
+  const inReach = state.players.filter((p) => distSq(p.pos, state.ball.pos) <= reachSq && dist(p.pos, state.ball.pos) <= CONTROL_RADIUS);
   const contenders = (["home", "away"] as const)
     .map((side) => nearest(inReach.filter((p) => p.side === side), state.ball.pos))
     .filter((p) => p !== undefined);

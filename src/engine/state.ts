@@ -4,7 +4,7 @@ import type { ClubStrength } from "../strength";
 import type { FormationName, Mentality, Tactics } from "../tactics";
 import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
-import { dist, PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
+import { dist, distSq, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, type Vec } from "./geometry";
 
 export type Side = "home" | "away";
 
@@ -153,7 +153,7 @@ export interface MatchState {
 // Each team sees the pitch as attacking towards x = PITCH_LENGTH.
 // The away team's frame is the world rotated 180°, so the conversion is its own inverse.
 export function toTeamFrame(side: Side, v: Vec): Vec {
-  return side === "home" ? { ...v } : { x: PITCH_LENGTH - v.x, y: PITCH_WIDTH - v.y };
+  return side === "home" ? { x: v.x, y: v.y } : { x: PITCH_LENGTH - v.x, y: PITCH_WIDTH - v.y };
 }
 export const fromTeamFrame = toTeamFrame;
 
@@ -175,9 +175,14 @@ export const keeperOf = (state: MatchState, side: Side): MatchPlayer | undefined
   state.players.find((p) => p.side === side && p.position === "GK");
 
 export function nearest(players: MatchPlayer[], to: Vec): MatchPlayer | undefined {
+  // Only players within a hair of the closest squared distance can win, so hypot runs on those alone
+  let closestSq = Infinity;
+  for (const p of players) closestSq = Math.min(closestSq, distSq(p.pos, to));
+  const limit = closestSq * REJECT_MARGIN + 1e-12;
   let best: MatchPlayer | undefined;
   let bestDist = Infinity;
   for (const p of players) {
+    if (distSq(p.pos, to) > limit) continue;
     const d = dist(p.pos, to);
     if (d < bestDist) {
       best = p;
@@ -220,7 +225,7 @@ export function giveBall(state: MatchState, p: MatchPlayer, controlTicks?: numbe
   state.ball.ownerId = p.id;
   state.ball.lastSide = p.side;
   state.ball.lastTouch = p.side;
-  state.ball.pos = { ...p.pos };
+  state.ball.pos = { x: p.pos.x, y: p.pos.y };
   state.ball.controlledAt = state.time + controlTicks;
   state.ball.readyAt = state.ball.controlledAt + (automaticTouch ? DECISION_PAUSE_TICKS : 0);
   state.ball.pendingTouch = automaticTouch;
