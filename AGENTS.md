@@ -8,7 +8,7 @@ Conventions for anyone changing this repo, people and agents alike.
 bun install          # install dev dependencies
 bun test             # run the tests
 bun run typecheck    # tsc --noEmit (strict, noUncheckedIndexedAccess)
-bun run sandbox      # click-to-dribble viewer at http://localhost:3000
+bun run sandbox      # Vite dev server for the sandbox views at http://localhost:3000
 ```
 
 Run `bun test` and `bun run typecheck` before every commit.
@@ -19,6 +19,7 @@ Run `bun test` and `bun run typecheck` before every commit.
 - Quantities are in SI units: metres, seconds, radians, m/s and m/s². Names say what a value is (`BRAKING`, `TOUCH_REACH`), not its unit.
 - Tuning numbers live in `src/constants.ts`.
 - Game state lives in bitECS components, and behaviour in systems that query them.
+- The sandbox is a React app in `sandbox/`. Each view is a component in `sandbox/views/`, listed in `sandbox/views.ts`, which gives it a route and a link on the index page.
 
 ## Branches and pull requests
 
