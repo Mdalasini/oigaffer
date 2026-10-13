@@ -38,3 +38,10 @@ export function timeToRun(distance: number, topSpeed: number, startSpeed = 0): n
   if (distance <= speedingUp) return (Math.sqrt(start * start + 2 * ACCELERATION * distance) - start) / ACCELERATION;
   return (topSpeed - start) / ACCELERATION + (distance - speedingUp) / topSpeed;
 }
+
+export function distanceRunIn(time: number, topSpeed: number, startSpeed = 0): number {
+  const start = Math.max(0, Math.min(topSpeed, startSpeed));
+  const speedingUpFor = (topSpeed - start) / ACCELERATION;
+  if (time <= speedingUpFor) return start * time + (ACCELERATION * time * time) / 2;
+  return (topSpeed * topSpeed - start * start) / (2 * ACCELERATION) + topSpeed * (time - speedingUpFor);
+}
