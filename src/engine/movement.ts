@@ -3,6 +3,7 @@ import {
   CARRIER_JOG_SPEED,
   FIRST_TOUCH_SPEED,
   POOR_TOUCH_CHANCE,
+  SHIELD_STRENGTH,
   POOR_TOUCH_DISTANCE,
   PRESSURE_RANGE,
   TOUCH_ESCAPE_RANGE,
@@ -173,8 +174,10 @@ export function moveCarrier(state: MatchState, carrier: MatchPlayer): void {
   if (state.ball.pendingTouch) {
     state.ball.pendingTouch = false;
     const skill = (carrier.attributes.passing + carrier.attributes.dribbling) / 2;
+    // A strong carrier holds the presser off, so the same pressure spills the ball less often
+    const shield = defender ? Math.min(1.5, Math.max(0.5, 1 - SHIELD_STRENGTH * (carrier.attributes.strength - defender.attributes.strength))) : 1;
     const risk = POOR_TOUCH_CHANCE * Math.max(0, 1 - distance / PRESSURE_RANGE) *
-      Math.max(0, (TOUCH_SKILL_MAX - skill) / (TOUCH_SKILL_MAX - 1));
+      Math.max(0, (TOUCH_SKILL_MAX - skill) / (TOUCH_SKILL_MAX - 1)) * shield;
     if (risk > 0 && state.rng() < risk) {
       placeBall(state, add(carrier.pos, scale(direction, POOR_TOUCH_DISTANCE)), carrier.side);
       return;

@@ -4,7 +4,9 @@ import {
   AERIAL_CROWD,
   AERIAL_CROWD_RANGE,
   AERIAL_FREE,
+  AERIAL_JUMP,
   AERIAL_SKILL,
+  AERIAL_STRENGTH,
   CROSS_BASE,
   CROSS_SKILL,
   FREE_KICK_XG_DECAY,
@@ -155,7 +157,8 @@ export interface CrossAssessment {
 }
 
 // A ball into the box for `target`: it has to be delivered, get past the keeper,
-// and be won in the air. Shooting stands in for heading, tackling for defensive heading.
+// and be won in the air. Shooting stands in for heading and tackling for defensive heading;
+// jumping and strength decide the physical side of the duel.
 export function assessCross(state: MatchState, crosser: MatchPlayer, target: MatchPlayer): CrossAssessment {
   const clamp01 = (v: number) => Math.min(0.95, Math.max(0.05, v));
   const delivery = clamp01(CROSS_BASE + CROSS_SKILL * (crosser.attributes.passing - 10));
@@ -174,7 +177,10 @@ export function assessCross(state: MatchState, crosser: MatchPlayer, target: Mat
     (o) => o !== defender && o.position !== "GK" && dist(o.pos, target.pos) < AERIAL_CROWD_RANGE,
   ).length;
   const oneOnOne = contested
-    ? AERIAL_BASE + AERIAL_SKILL * (target.attributes.shooting - defender.attributes.tackling)
+    ? AERIAL_BASE +
+      AERIAL_SKILL * (target.attributes.shooting - defender.attributes.tackling) +
+      AERIAL_JUMP * (target.attributes.jumping - defender.attributes.jumping) +
+      AERIAL_STRENGTH * (target.attributes.strength - defender.attributes.strength)
     : AERIAL_FREE;
   const duel = clamp01(oneOnOne * (1 - AERIAL_CROWD) ** crowd);
   const xg = Math.min(0.9, baseXg(target.side, target.pos) * HEADER_XG_FACTOR * (1 + SHOT_SKILL * (target.attributes.shooting - 10)));
