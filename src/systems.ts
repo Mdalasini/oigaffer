@@ -1,6 +1,7 @@
 import { addComponent, hasComponent, Not, query, removeComponent } from "bitecs";
 import {
   ACCELERATION,
+  BALL_ROLLING_DECELERATION,
   ARRIVAL_DISTANCE,
   BRAKING,
   DISTANCE_BEHIND_BALL,
@@ -28,7 +29,7 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
-import { closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
+import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
 import { bestShot, chanceOnceKeeperIsSet, onTheGrid, shotOptions, whereToStand } from "./chance";
 import { isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
@@ -399,20 +400,37 @@ export function support(world: Game): void {
   }
 }
 
-function ontoThePass(world: Game, receiver: number, ball: number): [x: number, y: number] {
-  const { Position, Velocity } = world.components;
-  const speed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!);
-  if (speed === 0) return [Position.x[ball]!, Position.y[ball]!];
-  const [alongX, alongY] = [Velocity.x[ball]! / speed, Velocity.y[ball]! / speed];
-  const ahead = Math.max(0, (Position.x[receiver]! - Position.x[ball]!) * alongX + (Position.y[receiver]! - Position.y[ball]!) * alongY);
-  return [Position.x[ball]! + alongX * ahead, Position.y[ball]! + alongY * ahead];
+function meetThePass(world: Game, receiver: number, ball: number, dt: number): void {
+  const { Position, Velocity, Passed } = world.components;
+  const [x, y] = [Position.x[receiver]!, Position.y[receiver]!];
+  const [vx, vy] = [Velocity.x[receiver]!, Velocity.y[receiver]!];
+  const from = pointOf(Position, ball);
+  const toThePassPoint = Math.hypot(Passed.x[ball]! - from[0], Passed.y[ball]! - from[1]);
+  let time = 0;
+  let meeting: Point = from;
+  for (const [at] of ballFlight(from, pointOf(Velocity, ball), dt)) {
+    time += dt;
+    meeting = at;
+    if (Math.hypot(at[0] - from[0], at[1] - from[1]) < toThePassPoint) continue;
+    const offCourse = Math.hypot(at[0] - (x + vx * time), at[1] - (y + vy * time));
+    if (offCourse - TOUCH_REACH <= (ACCELERATION * time * time) / 2) break;
+  }
+  const { Target, Facing } = world.components;
+  removeComponent(world, receiver, Target);
+  const wantX = (meeting[0] - x) / time;
+  const wantY = (meeting[1] - y) / time;
+  const wanted = Math.hypot(wantX, wantY);
+  const share = wanted > TOP_SPEED ? TOP_SPEED / wanted : 1;
+  accelerateTowards(world, receiver, wantX * share, wantY * share, dt);
+  const heading = wanted > STANDING_SPEED ? Math.atan2(wantY, wantX) : Math.atan2(from[1] - y, from[0] - x);
+  Facing[receiver] = turnTowards(Facing[receiver]!, heading, TURN_RATE * dt);
 }
 
-export function meetPass(world: Game): void {
+export function meetPass(world: Game, dt: number): void {
   const { Position, Receiving, Passed, Ball } = world.components;
   const ball = query(world, [Ball, Passed])[0];
   if (ball === undefined) return;
-  for (const eid of query(world, [Position, Receiving])) setTarget(world, eid, ...ontoThePass(world, eid, ball));
+  for (const eid of query(world, [Position, Receiving])) meetThePass(world, eid, ball, dt);
 }
 
 export function intercept(world: Game, dt: number): void {
@@ -437,11 +455,12 @@ export function intercept(world: Game, dt: number): void {
 }
 
 export function receive(world: Game): void {
-  const { Position, Receiving, Passed, Ball } = world.components;
+  const { Position, Velocity, Receiving, Passed, Ball } = world.components;
   const ball = query(world, [Ball, Passed])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Receiving])) {
     if (Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!) > TOUCH_REACH) continue;
+    [Velocity.x[ball], Velocity.y[ball], Velocity.z[ball]] = [Velocity.x[eid]!, Velocity.y[eid]!, 0];
     removeComponent(world, ball, Passed);
     removeComponent(world, eid, Receiving);
     setAttacking(world, eid);
@@ -479,15 +498,17 @@ function chanceOfGettingThere(spot: Point, carried: number, dribbling: number, d
     .reduce((chance, { tackling }) => chance * (1 - tackleWinChance(tackling, dribbling)), 1);
 }
 
-function bestChanceFurtherOn(from: Point, shooting: number, dribbling: number, keeper: Keeper | null, defenders: Opponent[], dt: number): number {
+type Runner = { shooting: number; dribbling: number };
+
+function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, takingThemOn = true): number {
   const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
   const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
   let best = 0;
   for (let carried = touch; carried < distance; carried += touch) {
     const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
-    const gettingThere = chanceOfGettingThere(next, carried, dribbling, defenders);
-    if (gettingThere <= best) continue;
-    best = Math.max(best, gettingThere * chanceOnceKeeperIsSet(next, shooting, keeper !== null, dt));
+    const gettingThere = chanceOfGettingThere(next, carried, runner.dribbling, defenders);
+    if (gettingThere <= best || (!takingThemOn && gettingThere < 1)) continue;
+    best = Math.max(best, gettingThere * chanceOnceKeeperIsSet(next, runner.shooting, keeper !== null, dt));
   }
   return best;
 }
@@ -534,7 +555,8 @@ function passWorth(world: Game, from: Point, receiver: number, keeper: Keeper | 
   const options = shotOptions(receivedAt, Shooting[receiver]!, dt);
   const setKeeper = keeper && (whereToStand(receivedAt, options, keeper, dt) ?? keeper);
   const shootingFirstTime = bestShot(options, setKeeper, dt, defendersThen.map(({ at }) => at)).chance;
-  return Math.max(shootingFirstTime, bestChanceFurtherOn(pass.to, Shooting[receiver]!, Dribbling[receiver]!, keeper, defendersThen, dt));
+  const runner = { shooting: Shooting[receiver]!, dribbling: Dribbling[receiver]! };
+  return Math.max(shootingFirstTime, bestChanceFurtherOn(pass.to, runner, keeper, defendersThen, dt, false));
 }
 
 function bestPass(world: Game, passer: number, ball: number, keeper: Keeper | null, defenders: Opponent[], dt: number) {
@@ -563,7 +585,8 @@ export function attack(world: Game, dt: number): void {
     const keeper = keeperPosition(world);
     const defenders = opponents(world);
     const now = bestShot(shotOptions(from, Shooting[eid]!, dt), keeper, dt, defenders.map(({ at }) => at));
-    const later = bestChanceFurtherOn(from, Shooting[eid]!, Dribbling[eid]!, keeper, defenders, dt);
+    const runner = { shooting: Shooting[eid]!, dribbling: Dribbling[eid]! };
+    const later = bestChanceFurtherOn(from, runner, keeper, defenders, dt);
     const pass = bestPass(world, eid, ball, keeper, defenders, dt);
     const passing = pass?.worth ?? 0;
     Attacking.chance[eid] = now.chance;
@@ -698,7 +721,7 @@ export function step(world: Game, dt = TIME_STEP): void {
   shoot(world);
   pass(world);
   support(world);
-  meetPass(world);
+  meetPass(world, dt);
   defend(world, dt);
   goalkeep(world, dt);
   runToTarget(world, dt);

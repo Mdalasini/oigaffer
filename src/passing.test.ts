@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { hasComponent } from "bitecs";
-import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, PITCH_LENGTH, SUPPORT_WIDTH, TIME_STEP, TOP_SPEED } from "./constants";
+import { hasComponent, query } from "bitecs";
+import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, PITCH_LENGTH, SUPPORT_WIDTH, TIME_STEP, TOP_SPEED, TOUCH_REACH } from "./constants";
 import { ballFlight } from "./flight";
 import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
@@ -66,6 +66,16 @@ describe("passing to a teammate", () => {
     const { received, passerSupports } = passAcross(null);
     expect(received).toBe(true);
     expect(passerSupports).toBe(true);
+  });
+
+  test("the first touch takes the pace off the ball", () => {
+    const { world, received } = passAcross(null);
+    expect(received).toBe(true);
+    const { Position, Velocity, Attacking, Ball } = world.components;
+    const receiver = query(world, [Attacking])[0]!;
+    const ball = query(world, [Ball])[0]!;
+    expect(Math.hypot(Velocity.x[ball]! - Velocity.x[receiver]!, Velocity.y[ball]! - Velocity.y[receiver]!)).toBeLessThan(1e-9);
+    expect(Math.hypot(Position.x[ball]! - Position.x[receiver]!, Position.y[ball]! - Position.y[receiver]!)).toBeLessThanOrEqual(TOUCH_REACH);
   });
 
   test("a teammate still speeding up gets onto the line of the ball rather than running past it", () => {
