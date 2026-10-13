@@ -1,14 +1,21 @@
-import { query, removeComponent } from "bitecs";
+import { addComponent, hasComponent, query, removeComponent } from "bitecs";
 import {
   ACCELERATION,
   ARRIVAL_DISTANCE,
+  BALL_BOUNCE_RESTITUTION,
   BALL_ROLLING_DECELERATION,
   BRAKING,
+  CROSSBAR_HEIGHT,
+  DISTANCE_BEHIND_BALL,
   DRIBBLE_BRAKING,
-  DRIBBLE_DISTANCE_BEHIND_BALL,
   DRIBBLE_STOP_DISTANCE,
+  GOAL_WIDTH,
+  GRAVITY,
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
+  PITCH_LENGTH,
+  PITCH_WIDTH,
+  SETTLING_SPEED,
   SIDEWAYS_SPEED,
   STANDING_SPEED,
   TIME_STEP,
@@ -17,6 +24,7 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
+import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setTarget, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
@@ -119,29 +127,51 @@ function touchAwayFromPlayer(world: Game, eid: number, ball: number, wantX: numb
   Velocity.y[ball] = Velocity.y[eid]! + awayY * share;
 }
 
+function directionFromBall(world: Game, ball: number, toX: number, toY: number) {
+  const { Position } = world.components;
+  const dx = toX - Position.x[ball]!;
+  const dy = toY - Position.y[ball]!;
+  const distance = Math.hypot(dx, dy);
+  return { distance, onwardX: distance > 0 ? dx / distance : 0, onwardY: distance > 0 ? dy / distance : 0 };
+}
+
+function whereBallIs(world: Game, eid: number, ball: number, onwardX: number, onwardY: number) {
+  const { Position, Facing } = world.components;
+  const toBallX = Position.x[ball]! - Position.x[eid]!;
+  const toBallY = Position.y[ball]! - Position.y[eid]!;
+  return {
+    withinReach: Math.hypot(toBallX, toBallY) <= TOUCH_REACH,
+    inFront: Math.abs(angleBetween(Facing[eid]!, Math.atan2(toBallY, toBallX))) <= Math.PI / 2,
+    onTheWay: toBallX * onwardX + toBallY * onwardY >= 0,
+  };
+}
+
+function getBehindBall(world: Game, eid: number, ball: number, onwardX: number, onwardY: number): void {
+  const { Position, Velocity } = world.components;
+  setTarget(
+    world,
+    eid,
+    Position.x[ball]! - onwardX * DISTANCE_BEHIND_BALL,
+    Position.y[ball]! - onwardY * DISTANCE_BEHIND_BALL,
+    Velocity.x[ball]!,
+    Velocity.y[ball]!,
+    Math.atan2(onwardY, onwardX),
+  );
+}
+
 export function dribble(world: Game, dt: number): void {
   const { Position, Velocity, Facing, Dribble, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Velocity, Facing, Dribble])) {
-    const ballX = Position.x[ball]!;
-    const ballY = Position.y[ball]!;
-    const toBallX = ballX - Position.x[eid]!;
-    const toBallY = ballY - Position.y[eid]!;
-    const dx = Dribble.x[eid]! - ballX;
-    const dy = Dribble.y[eid]! - ballY;
-    const distanceLeft = Math.hypot(dx, dy);
-    const onwardX = distanceLeft > 0 ? dx / distanceLeft : 0;
-    const onwardY = distanceLeft > 0 ? dy / distanceLeft : 0;
+    const { distance: distanceLeft, onwardX, onwardY } = directionFromBall(world, ball, Dribble.x[eid]!, Dribble.y[eid]!);
     Dribble.nextTouchIn[eid] = Math.max(0, Dribble.nextTouchIn[eid]! - dt);
 
     const arrived = distanceLeft < DRIBBLE_STOP_DISTANCE;
-    const withinReach = Math.hypot(toBallX, toBallY) <= TOUCH_REACH;
     const ready = Dribble.nextTouchIn[eid] === 0;
-    const ballInFront = Math.abs(angleBetween(Facing[eid]!, Math.atan2(toBallY, toBallX))) <= Math.PI / 2;
-    const ballOnTheWay = toBallX * onwardX + toBallY * onwardY >= 0;
+    const ballIs = whereBallIs(world, eid, ball, onwardX, onwardY);
 
-    if (withinReach && ready && ballInFront && (ballOnTheWay || arrived)) {
+    if (ballIs.withinReach && ready && ballIs.inFront && (ballIs.onTheWay || arrived)) {
       Dribble.nextTouchIn[eid] = TOUCH_INTERVAL;
       if (arrived) {
         Velocity.x[ball] = 0;
@@ -153,21 +183,45 @@ export function dribble(world: Game, dt: number): void {
       }
     }
 
-    setTarget(
-      world,
-      eid,
-      ballX - onwardX * DRIBBLE_DISTANCE_BEHIND_BALL,
-      ballY - onwardY * DRIBBLE_DISTANCE_BEHIND_BALL,
-      Velocity.x[ball]!,
-      Velocity.y[ball]!,
-      Math.atan2(onwardY, onwardX),
-    );
+    getBehindBall(world, eid, ball, onwardX, onwardY);
   }
 }
+
+function strike(world: Game, ball: number, shooter: number): void {
+  const { Position, Velocity, Shot, Shooting } = world.components;
+  const from: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
+  const aim: Point = [Shot.x[shooter]!, Shot.y[shooter]!, Shot.z[shooter]!];
+  const grade = Shooting[shooter]!;
+  const radius = spreadRadius(grade, from, aim);
+  const [vx, vy, vz] = kick(from, missAim(from, aim, radius, world.random), strikeSpeed(grade));
+  Velocity.x[ball] = vx;
+  Velocity.y[ball] = vy;
+  Velocity.z[ball] = vz;
+}
+
+export function shoot(world: Game): void {
+  const { Position, Velocity, Facing, Shooting, Shot, Ball } = world.components;
+  const ball = query(world, [Ball])[0];
+  if (ball === undefined) return;
+  for (const eid of query(world, [Position, Velocity, Facing, Shooting, Shot])) {
+    const { onwardX, onwardY } = directionFromBall(world, ball, Shot.x[eid]!, Shot.y[eid]!);
+    const ballIs = whereBallIs(world, eid, ball, onwardX, onwardY);
+    if (ballIs.withinReach && ballIs.inFront && ballIs.onTheWay) {
+      strike(world, ball, eid);
+      removeComponent(world, eid, Shot);
+      continue;
+    }
+    getBehindBall(world, eid, ball, onwardX, onwardY);
+  }
+}
+
+const onTheGround = (world: Game, eid: number) =>
+  world.components.Position.z[eid] === 0 && world.components.Velocity.z[eid] === 0;
 
 export function roll(world: Game, dt: number): void {
   const { Velocity, Ball } = world.components;
   for (const eid of query(world, [Ball, Velocity])) {
+    if (!onTheGround(world, eid)) continue;
     const vx = Velocity.x[eid]!;
     const vy = Velocity.y[eid]!;
     const speed = Math.hypot(vx, vy);
@@ -175,6 +229,20 @@ export function roll(world: Game, dt: number): void {
     const share = Math.max(0, speed - BALL_ROLLING_DECELERATION * dt) / speed;
     Velocity.x[eid] = vx * share;
     Velocity.y[eid] = vy * share;
+  }
+}
+
+export function fly(world: Game, dt: number): void {
+  const { Position, Velocity, Ball } = world.components;
+  for (const eid of query(world, [Ball, Position, Velocity])) {
+    if (onTheGround(world, eid)) continue;
+    const vz = Velocity.z[eid]!;
+    Position.z[eid] = Position.z[eid]! + vz * dt - 0.5 * GRAVITY * dt * dt;
+    Velocity.z[eid] = vz - GRAVITY * dt;
+    if (Position.z[eid]! > 0) continue;
+    const bounceSpeed = -Velocity.z[eid]! * BALL_BOUNCE_RESTITUTION;
+    Position.z[eid] = 0;
+    Velocity.z[eid] = bounceSpeed < SETTLING_SPEED ? 0 : bounceSpeed;
   }
 }
 
@@ -186,9 +254,28 @@ export function move(world: Game, dt: number): void {
   }
 }
 
+export function isGoal(y: number, z: number): boolean {
+  return Math.abs(y - PITCH_WIDTH / 2) < GOAL_WIDTH / 2 && z < CROSSBAR_HEIGHT;
+}
+
+export function watchGoalLine(world: Game): void {
+  const { Position, Velocity, GoalLineCrossing, Ball } = world.components;
+  for (const eid of query(world, [Ball, Position, Velocity])) {
+    const vx = Velocity.x[eid]!;
+    if (hasComponent(world, eid, GoalLineCrossing) || Position.x[eid]! < PITCH_LENGTH || vx <= 0) continue;
+    const timeSinceCrossing = (Position.x[eid]! - PITCH_LENGTH) / vx;
+    addComponent(world, eid, GoalLineCrossing);
+    GoalLineCrossing.y[eid] = Position.y[eid]! - Velocity.y[eid]! * timeSinceCrossing;
+    GoalLineCrossing.z[eid] = Math.max(0, Position.z[eid]! - Velocity.z[eid]! * timeSinceCrossing);
+  }
+}
+
 export function step(world: Game, dt = TIME_STEP): void {
   dribble(world, dt);
+  shoot(world);
   runToTarget(world, dt);
   roll(world, dt);
+  fly(world, dt);
   move(world, dt);
+  watchGoalLine(world);
 }
