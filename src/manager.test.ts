@@ -47,7 +47,7 @@ test("late in a level game the favourite pushes and the underdog settles", () =>
 });
 
 describe("substitutions", () => {
-  const attrs = (v: number) => ({ passing: v, shooting: v, dribbling: v, tackling: v, goalkeeping: v, stamina: v });
+  const attrs = (v: number) => ({ passing: v, shooting: v, dribbling: v, tackling: v, goalkeeping: v, stamina: v, pace: v, acceleration: v, jumping: v, strength: v });
   const onPitch = (id: string, role: "GK" | "DEF" | "MID" | "FWD", energy: number, natural = role) => ({
     id,
     role,

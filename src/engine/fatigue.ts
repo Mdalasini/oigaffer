@@ -21,6 +21,11 @@ export function refreshAttributes(p: MatchPlayer): void {
   attributes.tackling = base.tackling * k;
   attributes.goalkeeping = base.goalkeeping * k;
   attributes.stamina = base.stamina * k;
+  attributes.jumping = base.jumping * k;
+  attributes.strength = base.strength * k;
+  // speedFactor already slows tired players, so pace and acceleration stay at base
+  attributes.pace = base.pace;
+  attributes.acceleration = base.acceleration;
 }
 
 // ...and a little slower
