@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>oigaffer sandbox</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <canvas id="pitch" aria-label="Scenario view"></canvas>
+      <aside>
+        <h1>Sandbox</h1>
+        <label>
+          Scenario
+          <select id="scenario"></select>
+        </label>
+        <p id="description" class="dim"></p>
+        <label>
+          Seed
+          <input id="seed" type="number" min="0" step="1" value="0" />
+        </label>
+        <div class="row">
+          <button id="play">Play</button>
+          <button id="step" title="One 0.05 s step (→)">Step</button>
+          <button id="restart" title="R">Restart</button>
+          <button id="next" title="N">Next seed</button>
+        </div>
+        <div class="row" id="speeds" role="group" aria-label="Speed"></div>
+        <label class="check"><input id="loop" type="checkbox" checked /> Play the next seed when one ends</label>
+        <label class="check"><input id="follow" type="checkbox" checked /> Follow the play up close</label>
+        <label class="check"><input id="overlay" type="checkbox" checked /> Show intent, predicted path and touches</label>
+        <dl id="readout"></dl>
+        <p class="dim keys">Space play/pause · → step · R restart · N next seed</p>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
