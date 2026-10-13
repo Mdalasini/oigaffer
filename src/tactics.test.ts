@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Position } from "./model";
-import { assignRoles, FORMATIONS, lineCount, moveSpot, sameTactics, shapeName, shapeOf, type FormationName, type LineupPlayer, type Tactics } from "./tactics";
+import { assignRoles, FORMATIONS, lineCount, moveSpot, pairedSpot, sameTactics, shapeName, shapeOf, type FormationName, type LineupPlayer, type Tactics } from "./tactics";
 import { FOUR_FOUR_TWO, player } from "./test-helpers";
 
 // A 4-4-2 where each player's attacking lean rises with their index inside a line
@@ -85,4 +85,20 @@ test("an out-of-possession shape pairs each position with one to drop to", () =>
   const lwToLm = moveSpot(moveSpot(t, "LW", "LM", "out"), "RW", "RM", "out");
   const crossed = { ...lwToLm, outOfPossession: shapeOf(lwToLm, "out").map((s) => (s === "LM" ? "RM" : s === "RM" ? "LM" : s)) };
   expect(sameTactics(lwToLm, crossed)).toBe(false);
+});
+
+test("phases fall back on the shape with or without the ball until they get their own", () => {
+  const t = moveSpot({ formation: "4-3-3", mentality: 0 }, "LW", "LM", "out");
+  expect(shapeOf(t, "build_up")).toEqual(shapeOf(t));
+  expect(shapeOf(t, "low_block")).toEqual(shapeOf(t, "out"));
+  const lowBlock = moveSpot(t, "CF", "CAM", "low_block");
+  expect(shapeOf(lowBlock, "low_block")).toContain("CAM");
+  expect(shapeOf(lowBlock, "mid_block")).toEqual(shapeOf(t, "out"));
+  expect(pairedSpot(lowBlock, "CF", "low_block")).toBe("CAM");
+  expect(pairedSpot(lowBlock, "LW", "low_block")).toBe("LM");
+  expect(sameTactics(t, lowBlock)).toBe(false);
+  // A phase set on its own stays put when the shape it fell back on changes
+  const moved = moveSpot(lowBlock, "LM", "LWB", "out");
+  expect(pairedSpot(moved, "LW", "mid_block")).toBe("LWB");
+  expect(pairedSpot(moved, "LW", "low_block")).toBe("LM");
 });

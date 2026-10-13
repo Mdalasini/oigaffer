@@ -1,6 +1,6 @@
 import type { Id, Position } from "../model";
 import { lineRating } from "../squad";
-import { assignRoles, moveSpot as moveSpotOnBoard, sameTactics, shapeName, shapeOf, SPOTS, type Possession, type Spot, type Tactics } from "../tactics";
+import { assignRoles, moveSpot as moveSpotOnBoard, sameTactics, shapeName, shapeOf, SPOTS, type Board, type Spot, type Tactics } from "../tactics";
 import { ADDED, MAX_SUBS } from "./constants";
 import { arrangeSide } from "./formation";
 import { CENTRE } from "./geometry";
@@ -45,12 +45,12 @@ export function applyTactics(state: MatchState, side: Side, tactics: Tactics, fo
 }
 
 // The manager moves a position on one of the boards, and whoever played there goes with it.
-// Out of possession only the shape changes: players' positions without the ball follow from it.
-export function moveSpot(state: MatchState, side: Side, from: Spot, to: Spot, possession: Possession = "in"): boolean {
-  const tactics = moveSpotOnBoard(state.teams[side].tactics, from, to, possession);
+// On any other board only the shape changes: players' positions there follow from it.
+export function moveSpot(state: MatchState, side: Side, from: Spot, to: Spot, board: Board = "in"): boolean {
+  const tactics = moveSpotOnBoard(state.teams[side].tactics, from, to, board);
   if (tactics === state.teams[side].tactics) return false;
   const moved: Moves = [];
-  for (const p of onSide(state, side).filter((p) => possession === "in" && p.spot === from)) {
+  for (const p of onSide(state, side).filter((p) => board === "in" && p.spot === from)) {
     const line = SPOTS[to].line;
     if (line !== p.position) moved.push({ playerId: p.id, from: p.position, to: line });
     p.spot = to;
@@ -169,9 +169,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     side,
     position: off.position,
     spot: off.spot,
-    outSpot: off.outSpot,
-    outPosition: off.outPosition,
-    outSlot: off.outSlot,
+    roles: off.roles,
     natural: on.natural,
     base: on.attributes,
     attributes: { ...on.attributes },

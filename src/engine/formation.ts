@@ -1,9 +1,11 @@
 import type { Position } from "../model";
-import { shapeOf, SPOTS, type Tactics, type Spot } from "../tactics";
+import { pairedSpot, PLAY_PHASES, shapeOf, SPOTS, type PlayPhase, type Spot, type Tactics } from "../tactics";
 import {
   ATTACK_PUSH,
   ATTACK_WIDTH,
+  BUILD_UP_END,
   DEFEND_WIDTH,
+  FINAL_THIRD_START,
   DEFEND_DROP,
   KEEPER_MAX_ADVANCE,
   MENTALITY_PUSH,
@@ -22,6 +24,7 @@ import {
   toTeamFrame,
   type MatchPlayer,
   type MatchState,
+  type Role,
   type Side,
 } from "./state";
 
@@ -96,56 +99,73 @@ export function arrangeSide(state: MatchState, side: Side, tactics: Tactics, res
       p.spot = lineSpots[best] ?? LINE_SPOT[line];
     });
   }
-  arrangeOutOfPossession(team, tactics);
+  arrangePhases(team, tactics);
 }
 
-// Without the ball each player drops to the position paired with theirs in the out-of-possession shape.
-// A line with two players on one position (a side down to ten) spreads out evenly instead.
-function arrangeOutOfPossession(team: MatchPlayer[], tactics: Tactics): void {
-  if (!tactics.outOfPossession) {
-    for (const p of team) {
-      p.outSpot = p.spot;
-      p.outPosition = p.position;
-      p.outSlot = p.slot;
-    }
-    return;
-  }
+// In each phase of play every player takes the position paired with theirs in that phase's shape.
+// A phase that uses the side's own shape copies their roles; in one that doesn't, a line with
+// two players on one position (a side down to ten) spreads out evenly instead.
+function arrangePhases(team: MatchPlayer[], tactics: Tactics): void {
   const shape = shapeOf(tactics);
-  const out: Spot[] = ["GK", ...tactics.outOfPossession];
-  for (const p of team) {
-    const i = shape.indexOf(p.spot);
-    p.outSpot = p.position === "GK" ? "GK" : i < 0 ? p.spot : out[i + 1]!;
-    p.outPosition = p.position === "GK" ? "GK" : i < 0 ? p.position : SPOTS[p.outSpot].line;
-  }
-  for (const line of LINES) {
-    const players = team.filter((p) => p.outPosition === line);
-    const slots = players.map((p) => spotSlot(p.outSpot, out));
-    if (new Set(players.map((p) => p.outSpot)).size === players.length) {
-      players.forEach((p, i) => (p.outSlot = slots[i]!));
+  for (const phase of PLAY_PHASES) {
+    const phaseShape = shapeOf(tactics, phase);
+    if (phaseShape.every((s, i) => s === shape[i])) {
+      for (const p of team) p.roles[phase] = { spot: p.spot, position: p.position, slot: p.slot };
       continue;
     }
-    const x = slots.reduce((sum, s) => sum + s.x, 0) / slots.length;
-    players.forEach((p, i) => (p.outSlot = { x, y: (PITCH_WIDTH * (i + 1)) / (players.length + 1) }));
+    const spots: Spot[] = ["GK", ...phaseShape];
+    for (const p of team) {
+      const spot = p.position === "GK" ? "GK" : pairedSpot(tactics, p.spot, phase);
+      p.roles[phase] = { spot, position: SPOTS[spot].line, slot: p.slot };
+    }
+    for (const line of LINES) {
+      const roles = team.map((p) => p.roles[phase]).filter((r) => r.position === line);
+      const slots = roles.map((r) => spotSlot(r.spot, spots));
+      if (new Set(roles.map((r) => r.spot)).size === roles.length) {
+        roles.forEach((r, i) => (r.slot = slots[i]!));
+        continue;
+      }
+      const x = slots.reduce((sum, s) => sum + s.x, 0) / slots.length;
+      roles.forEach((r, i) => (r.slot = { x, y: (PITCH_WIDTH * (i + 1)) / (roles.length + 1) }));
+    }
   }
 }
+
+// The phase of play a side is in, from which third the ball is in (x in the side's team frame)
+export function phaseAt(ballX: number, inPossession: boolean): PlayPhase {
+  if (ballX < BUILD_UP_END) return inPossession ? "build_up" : "low_block";
+  if (ballX < FINAL_THIRD_START) return inPossession ? "middle_third" : "mid_block";
+  return inPossession ? "final_third" : "high_block";
+}
+
+// A player's role in the phase their side is in now
+export function roleOf(state: MatchState, p: MatchPlayer, inPossession: boolean): Role {
+  const ballX = p.side === "home" ? state.ball.pos.x : PITCH_LENGTH - state.ball.pos.x;
+  return p.roles[phaseAt(ballX, inPossession)];
+}
+
+// Before the first arrangement, every phase uses the player's starting role
+export const startingRoles = (role: Role): Record<PlayPhase, Role> =>
+  Object.fromEntries(PLAY_PHASES.map((phase) => [phase, role])) as Record<PlayPhase, Role>;
 
 // Where an off-ball player wants to be: their slot, slid towards the ball,
 // pushed up and spread wide when their team has the ball, dropped back and narrow when it doesn't.
 // Mentality sets how many bodies commit forward when the team has the ball.
 export function anchor(state: MatchState, p: MatchPlayer, inPossession: boolean): Vec {
-  const slot = inPossession ? p.slot : p.outSlot;
   const mentality = state.teams[p.side].tactics.mentality;
   // Scalar frame conversions (same arithmetic as toTeamFrame/fromTeamFrame) avoid allocating per call
   const away = p.side !== "home";
   const ballX = away ? PITCH_LENGTH - state.ball.pos.x : state.ball.pos.x;
   const ballY = away ? PITCH_WIDTH - state.ball.pos.y : state.ball.pos.y;
+  const role = p.roles[phaseAt(ballX, inPossession)];
+  const slot = role.slot;
   const x =
     slot.x +
     (ballX - CENTRE.x) * SHIFT_X +
     (inPossession ? ATTACK_PUSH + mentality * MENTALITY_PUSH : -DEFEND_DROP);
   const width = inPossession ? 1 + (ATTACK_WIDTH - 1) * (1 + MENTALITY_WIDTH * mentality) : DEFEND_WIDTH;
   const y = CENTRE.y + (slot.y - CENTRE.y) * width + (ballY - CENTRE.y) * SHIFT_Y;
-  const range = LINE_RANGE[inPossession ? p.position : p.outPosition];
+  const range = LINE_RANGE[role.position];
   const minX = range[0], maxX = range[1];
   const clampedX = Math.min(PITCH_LENGTH, Math.max(0, Math.min(maxX, Math.max(minX, x))));
   const clampedY = Math.min(PITCH_WIDTH, Math.max(0, y));

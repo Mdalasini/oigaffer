@@ -35,7 +35,7 @@ import {
 } from "./constants";
 import type { Intent } from "./debug";
 import { movementBuffer, restartRadiusFor, separateBodies, separation, steerPlayer } from "./steering";
-import { anchor, keeperPosition, kickoffPosition } from "./formation";
+import { anchor, keeperPosition, kickoffPosition, roleOf } from "./formation";
 import { add, CENTRE, clampToPitch, dist, distSq, normalize, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition, placeBall } from "./restarts";
@@ -84,7 +84,7 @@ function chasers(state: MatchState): Set<MatchPlayer> {
     // Forwards stay up as an outlet rather than pressing; they still chase loose balls
     const candidates: MatchPlayer[] = [];
     for (const p of state.players) {
-      if (p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome) && (p.outPosition !== "FWD" || !carrier)) {
+      if (p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome) && (!carrier || roleOf(state, p, false).position !== "FWD")) {
         candidates.push(p);
       }
     }
@@ -250,7 +250,7 @@ export function moveOffBall(state: MatchState): void {
       target = anchor(state, p, p.side === possessionSide);
       // Frame conversions are written out as scalars (same operations as toTeamFrame) to avoid allocating per player
       const flip = p.side !== "home";
-      if (p.side !== possessionSide && p.outPosition === "DEF") {
+      if (p.side !== possessionSide && roleOf(state, p, false).position === "DEF") {
         // A spare defender covers the space behind the line
         const tx = flip ? PITCH_LENGTH - target.x : target.x;
         const ty = flip ? PITCH_WIDTH - target.y : target.y;
@@ -283,7 +283,8 @@ export function moveOffBall(state: MatchState): void {
     buffer.orders[i * 5 + 2] = speed;
     buffer.orders[i * 5 + 3] = standOff;
     // Retreating defenders and midfield cover must not lag behind their shape.
-    const defendingLine = (p.outPosition === "DEF" || p.outPosition === "MID") && p.side !== possessionSide;
+    const line = p.side !== possessionSide ? roleOf(state, p, false).position : null;
+    const defendingLine = line === "DEF" || line === "MID";
     buffer.orders[i * 5 + 4] = isChasing || isMarking ? STEER_CLOSE_ACCEL :
       defendingLine ? STEER_DEFEND_ACCEL : STEER_ACCEL;
   }

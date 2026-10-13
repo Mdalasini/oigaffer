@@ -74,6 +74,10 @@ export const DEFEND_DROP = 3;
 // Teams stretch the pitch with the ball and squeeze it without (multiplies distance from the centre line)
 export const ATTACK_WIDTH = 1.45;
 export const DEFEND_WIDTH = 0.9;
+// Phases of play change where the ball crosses into another third (team frame, m from own goal):
+// building up or sitting in a low block below the first, the final third or a high block beyond the second
+export const BUILD_UP_END = 35;
+export const FINAL_THIRD_START = 70;
 export const KEEPER_MAX_ADVANCE = 6;
 export const KEEPER_BOX = 16.5;
 

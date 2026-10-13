@@ -8,7 +8,7 @@ import { shapeOf } from "../tactics";
 import { HALF_TIME, HALF_TIME_RECOVERY, MANAGER_INTERVAL, MATCH_SECONDS, MIN_ADDED_MINUTES } from "./constants";
 import { chooseAction } from "./decide";
 import { refreshAttributes } from "./fatigue";
-import { kickoff } from "./formation";
+import { kickoff, startingRoles } from "./formation";
 import { advanceFlight, sampleFlight } from "./flight";
 import { PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { applyTactics, bench, makePendingSubs, requestSub, subsLeft } from "./lineup";
@@ -68,13 +68,11 @@ export function createMatchState(
         position: p.position, // natural position until the manager's formation is applied
         natural: p.position,
         spot: "GK", // placeholder; arrangeSide sets the real position
-        outSpot: "GK",
-        outPosition: p.position,
         base: p.attributes,
         attributes: { ...p.attributes },
         energy: 1,
         slot: { x: 0, y: i }, // placeholder ordering; arrangeSide sets the real slot
-        outSlot: { x: 0, y: i },
+        roles: startingRoles({ spot: "GK", position: p.position, slot: { x: 0, y: i } }),
         pos: { x: 0, y: 0 },
         vel: { x: 0, y: 0 },
         facing: side === "home" ? 0 : Math.PI,

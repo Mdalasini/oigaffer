@@ -3,11 +3,16 @@ import { spotSlot } from "../src/engine/formation";
 import { PITCH_WIDTH } from "../src/engine/geometry";
 import {
   FORMATIONS,
+  isPlayPhase,
   MENTALITY_NAMES,
   shapeName,
   shapeOf,
   SPOTS,
   type FormationName,
+  PLAY_PHASE_NAMES,
+  PLAY_PHASE_POSSESSION,
+  PLAY_PHASES,
+  type Board as BoardName,
   type Mentality,
   type Possession,
   type Spot,
@@ -100,23 +105,26 @@ function Board({
 export function TacticsPicker({
   tactics,
   onChange,
-  onMove = (from, to, possession) => onChange(moveSpot(tactics, from, to, possession)),
+  onMove = (from, to, board) => onChange(moveSpot(tactics, from, to, board)),
   names,
   disabled = false,
 }: {
   tactics: Tactics;
   onChange: (t: Tactics) => void;
   // Moves a position on one of the boards, or swaps the players in two positions
-  onMove?: (from: Spot, to: Spot, possession: Possession) => void;
-  names?: Record<Possession, Names>;
+  onMove?: (from: Spot, to: Spot, board: BoardName) => void;
+  // Who plays each position on a board
+  names?: (board: BoardName) => Names;
   disabled?: boolean;
 }) {
-  const [possession, setPossession] = useState<Possession>("in");
+  const [board, setBoard] = useState<BoardName>("in");
+  const possession: Possession = isPlayPhase(board) ? PLAY_PHASE_POSSESSION[board] : board;
+  const boards: BoardName[] = [possession, ...PLAY_PHASES.filter((ph) => PLAY_PHASE_POSSESSION[ph] === possession)];
   const current = shapeName(tactics);
-  // Before kickoff, the board without the ball shows where each position drops from
+  // Before kickoff, the other boards show which in-possession position each one is paired with
   const inShape = shapeOf(tactics);
-  const dropsFrom: Names = Object.fromEntries(
-    shapeOf(tactics, "out").flatMap((s, i) => (s === inShape[i] ? [] : [[s, `from ${inShape[i]}`]])),
+  const pairedWith: Names = Object.fromEntries(
+    shapeOf(tactics, board).flatMap((s, i) => (s === inShape[i] ? [] : [[s, `from ${inShape[i]}`]])),
   );
   return (
     <div className="tactics">
@@ -135,20 +143,33 @@ export function TacticsPicker({
       </fieldset>
       <fieldset className="positions" disabled={disabled}>
         <legend>Positions</legend>
-        <div className="possession" role="group" aria-label="Which shape to edit">
+        <div className="possession" role="group" aria-label="With or without the ball">
           {(["in", "out"] as const).map((p) => (
-            <button key={p} aria-pressed={p === possession} onClick={() => setPossession(p)}>
+            <button key={p} aria-pressed={p === possession} onClick={() => setBoard(p)}>
               {p === "in" ? "With the ball" : "Without the ball"}
               <span className="shape-name">{shapeName(tactics, p)}</span>
             </button>
           ))}
         </div>
+        <div className="phases" role="group" aria-label="Phase of play">
+          {boards.map((b) => (
+            <button
+              key={b}
+              aria-pressed={b === board}
+              className={isPlayPhase(b) && tactics.phases?.[b] ? "own" : ""}
+              onClick={() => setBoard(b)}
+            >
+              {isPlayPhase(b) ? PLAY_PHASE_NAMES[b] : "Every phase"}
+              <span className="shape-name">{shapeName(tactics, b)}</span>
+            </button>
+          ))}
+        </div>
         <Board
-          key={possession}
-          shape={shapeOf(tactics, possession)}
-          names={names?.[possession]}
-          labels={names?.[possession] ?? (possession === "out" ? dropsFrom : undefined)}
-          onMove={(from, to) => onMove(from, to, possession)}
+          key={board}
+          shape={shapeOf(tactics, board)}
+          names={names?.(board)}
+          labels={names?.(board) ?? (board === "in" ? undefined : pairedWith)}
+          onMove={(from, to) => onMove(from, to, board)}
         />
       </fieldset>
       <fieldset className="mentality" disabled={disabled}>

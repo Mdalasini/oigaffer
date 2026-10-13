@@ -4,7 +4,7 @@ import { seededRng } from "../random";
 import { SLOW_TEST, strongVsWeak } from "../test-helpers";
 import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
-import { anchor, keeperPosition, spotSlot } from "./formation";
+import { anchor, keeperPosition, phaseAt, spotSlot } from "./formation";
 import { distToSegment, moveTowards, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { applyTactics, createMatchState, isFullTime, moveSpot, simulateEventMatch, startEventMatch, stepEventMatch, swapPlayers } from "./match";
 import { FORMATIONS, type Spot } from "../tactics";
@@ -113,11 +113,14 @@ describe("out-of-possession shape", () => {
   test("each player drops to their paired position, line and slot", () => {
     const state = fourThreeThree();
     const lw = at(state, "LW");
-    expect([lw.outSpot, lw.outPosition, lw.position]).toEqual(["LM", "MID", "FWD"]);
-    expect(lw.outSlot.x).toBeLessThan(lw.slot.x);
+    for (const block of ["high_block", "mid_block", "low_block"] as const) {
+      expect([lw.roles[block].spot, lw.roles[block].position]).toEqual(["LM", "MID"]);
+      expect(lw.roles[block].slot.x).toBeLessThan(lw.slot.x);
+    }
+    expect(lw.roles.final_third).toEqual({ spot: "LW", position: "FWD", slot: lw.slot });
     // Everyone else keeps their position
     const cf = at(state, "CF");
-    expect([cf.outSpot, cf.outSlot]).toEqual([cf.spot, cf.slot]);
+    expect([cf.roles.mid_block.spot, cf.roles.mid_block.slot]).toEqual([cf.spot, cf.slot]);
     expect(state.events.at(-1)).toMatchObject({ type: "tactics", formation: "4-3-3", outOfPossession: "4-1-4-1" });
     // The anchor without the ball is built on the deeper slot
     giveBall(state, state.players.find((p) => p.side === "away" && p.position === "MID")!);
@@ -129,14 +132,39 @@ describe("out-of-possession shape", () => {
     const lw = at(state, "LW");
     const lcm = at(state, "LCM");
     swapPlayers(state, "home", lw.id, lcm.id);
-    expect([lcm.spot, lcm.outSpot, lw.spot, lw.outSpot]).toEqual(["LW", "LM", "LCM", "LCM"]);
+    expect([lcm.spot, lcm.roles.mid_block.spot, lw.spot, lw.roles.mid_block.spot]).toEqual(["LW", "LM", "LCM", "LCM"]);
   });
 
   test("moving an in-possession position leaves the paired out-of-possession one alone", () => {
     const state = fourThreeThree();
     const lw = at(state, "LW");
     moveSpot(state, "home", "LW", "LAM");
-    expect([lw.spot, lw.outSpot]).toEqual(["LAM", "LM"]);
+    expect([lw.spot, lw.roles.mid_block.spot]).toEqual(["LAM", "LM"]);
+  });
+});
+
+describe("phases of play", () => {
+  test("the ball's third sets the phase", () => {
+    expect([10, 50, 90].map((x) => phaseAt(x, true))).toEqual(["build_up", "middle_third", "final_third"]);
+    expect([10, 50, 90].map((x) => phaseAt(x, false))).toEqual(["low_block", "mid_block", "high_block"]);
+  });
+
+  test("a phase's own shape takes over only while the ball is in that third", () => {
+    const state = createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+      home: fixedManager({ formation: "4-3-3", mentality: 0 }),
+    });
+    // Building up, the holding midfielder drops between the centre-backs
+    moveSpot(state, "home", "CDM", "CB", "build_up");
+    const cdm = state.players.find((p) => p.side === "home" && p.spot === "CDM")!;
+    expect(cdm.roles.build_up).toMatchObject({ spot: "CB", position: "DEF" });
+    expect(cdm.roles.middle_third.spot).toBe("CDM");
+    giveBall(state, cdm);
+    const depth = (ballX: number) => {
+      state.ball.pos = { x: ballX, y: PITCH_WIDTH / 2 };
+      return anchor(state, cdm, true).x - (ballX - PITCH_LENGTH / 2) * 0.6;
+    };
+    // Same ball-following shift either side of the line: only the slot changes
+    expect(depth(34)).toBeLessThan(depth(36) - 5);
   });
 });
 
