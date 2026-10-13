@@ -1,4 +1,4 @@
-import { FATIGUE_EFFECT, FATIGUE_PER_METRE, FATIGUE_SPEED, FATIGUE_STAMINA } from "./constants";
+import { ACCEL_EFFECT, FATIGUE_EFFECT, FATIGUE_PER_METRE, FATIGUE_SPEED, FATIGUE_STAMINA, PACE_EFFECT } from "./constants";
 import type { MatchPlayer } from "./state";
 
 // Covering ground wears players down; fitter players tire more slowly
@@ -30,3 +30,7 @@ export function refreshAttributes(p: MatchPlayer): void {
 
 // ...and a little slower
 export const speedFactor = (p: MatchPlayer): number => 1 - FATIGUE_SPEED * (1 - p.energy);
+
+// Pace scales top speed, acceleration scales how quickly a player reaches it (base values, not fatigued)
+export const paceFactor = (p: MatchPlayer): number => 1 + PACE_EFFECT * (p.base.pace - 10);
+export const accelFactor = (p: MatchPlayer): number => 1 + ACCEL_EFFECT * (p.base.acceleration - 10);

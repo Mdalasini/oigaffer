@@ -35,6 +35,7 @@ import {
   XG_MAX,
 } from "./constants";
 import { add, dist, distSq, distToSegment, normalize, PITCH_LENGTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
+import { paceFactor } from "./fatigue";
 import {
   attackingGoal,
   challengeSkill,
@@ -135,10 +136,10 @@ export function looseBallWinChance(state: MatchState, p: MatchPlayer, pos: Vec):
 
 // Chance the runner beats every opponent (keeper included) to a ball played into space
 export function raceWinChance(state: MatchState, runner: MatchPlayer, target: Vec): number {
-  const runnerTime = dist(runner.pos, target) / RUN_SPEED;
+  const runnerTime = dist(runner.pos, target) / (RUN_SPEED * paceFactor(runner));
   let defenderTime = Infinity;
   for (const o of opponents(state, runner)) {
-    const speed = o.position === "GK" ? KEEPER_SPEED : PRESS_SPEED;
+    const speed = (o.position === "GK" ? KEEPER_SPEED : PRESS_SPEED) * paceFactor(o);
     defenderTime = Math.min(defenderTime, dist(o.pos, target) / speed);
   }
   return 1 / (1 + Math.exp(-RACE_SHARPNESS * (defenderTime - runnerTime)));
