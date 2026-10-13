@@ -1,4 +1,4 @@
-import { hasComponent, removeComponent } from "bitecs";
+import { addComponent, hasComponent, removeComponent } from "bitecs";
 import { useEffect, useRef, useState } from "react";
 import {
   AVERAGE_SHOOTING_GRADE,
@@ -18,7 +18,7 @@ import {
   type Point,
 } from "../../src/shooting";
 import { isGoal } from "../../src/systems";
-import { addBall, addPlayer, createGame, setShot } from "../../src/world";
+import { addBall, addGoalkeeper, addPlayer, createGame, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
 import { COLOURS, createTopDown } from "../topDown";
@@ -39,6 +39,7 @@ export function ShootingView() {
   const readoutRef = useRef<HTMLParagraphElement>(null);
   const sandbox = useRef<Sandbox>(null);
   const [grade, setGrade] = useState(AVERAGE_SHOOTING_GRADE);
+  const [withKeeper, setWithKeeper] = useState(true);
 
   useEffect(() => {
     const running = runShootingSandbox(topDownRef.current!, playerViewRef.current!, readoutRef.current!);
@@ -47,6 +48,7 @@ export function ShootingView() {
   }, []);
 
   useEffect(() => sandbox.current?.changeGrade(grade), [grade]);
+  useEffect(() => sandbox.current?.putKeeperInGoal(withKeeper), [withKeeper]);
 
   return (
     <div className="shooting">
@@ -78,6 +80,10 @@ export function ShootingView() {
           />
           {grade}
         </label>
+        <label>
+          <input type="checkbox" checked={withKeeper} onChange={(e) => setWithKeeper(e.target.checked)} />
+          Goalkeeper
+        </label>
         <button type="submit">Shoot</button>
         <p ref={readoutRef} />
       </form>
@@ -100,8 +106,9 @@ function describeCrossing(y: number, z: number): string {
 
 function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvasElement, readout: HTMLElement) {
   const world = createGame();
-  const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing } = world.components;
+  const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing, Goalkeeper, Held } = world.components;
   const player = addPlayer(world, 0, 0);
+  const keeper = addGoalkeeper(world, PITCH_LENGTH, PITCH_WIDTH / 2);
   const ball = addBall(world, 0, 0);
   const topDown = createTopDown(topDownCanvas, ATTACKING_END);
   const playerView = createPlayerView(playerCanvas);
@@ -153,6 +160,10 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     removeComponent(world, player, Shot);
     removeComponent(world, player, Target);
     removeComponent(world, ball, GoalLineCrossing);
+    removeComponent(world, ball, Held);
+    Position.y[keeper] = PITCH_WIDTH / 2;
+    Velocity.y[keeper] = 0;
+    Goalkeeper.watchingShotFor[keeper] = 0;
     trail = [];
     shotTaken = false;
     playerView.standBehind(x, y);
@@ -183,6 +194,7 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
   }
 
   function describeShot(): string {
+    if (hasComponent(world, ball, Held)) return `Saved: ${describePoint(Position.y[ball]!, Position.z[ball]!)}`;
     if (hasComponent(world, ball, GoalLineCrossing)) return describeCrossing(GoalLineCrossing.y[ball]!, GoalLineCrossing.z[ball]!);
     if (hasComponent(world, player, Shot)) return "Running up…";
     const speed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!, Velocity.z[ball]!);
@@ -201,6 +213,14 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     Velocity.z[ball] = 0;
   }
 
+  const keeperInGoal = () => hasComponent(world, keeper, Goalkeeper);
+
+  function putKeeperInGoal(inGoal: boolean) {
+    if (inGoal) addComponent(world, keeper, Goalkeeper);
+    else removeComponent(world, keeper, Goalkeeper);
+    placeBallOnSpot();
+  }
+
   function draw() {
     holdBallWhereItCrossed();
     const ballAt: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
@@ -208,8 +228,9 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     topDown.drawPitch();
     topDown.drawLine(spot[0], spot[1], PITCH_LENGTH, aim[0], COLOURS.aim);
     topDown.drawPlayer(Position.x[player]!, Position.y[player]!, Facing[player]!);
+    if (keeperInGoal()) topDown.drawPlayer(Position.x[keeper]!, Position.y[keeper]!, Facing[keeper]!, COLOURS.keeper);
     topDown.drawBall(...ballAt);
-    playerView.draw(ballAt, trail, aimPoint(), circleAroundAim(plannedShot().radius));
+    playerView.draw(ballAt, trail, aimPoint(), circleAroundAim(plannedShot().radius), keeperInGoal() ? Position.y[keeper]! : null);
     readout.textContent = `${describeShot()} — ${describePlan()}`;
   }
 
@@ -227,6 +248,7 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
 
   return {
     shoot,
+    putKeeperInGoal,
     changeGrade(newGrade: number) {
       grade = newGrade;
     },
