@@ -1,13 +1,12 @@
 import {
-  BEST_SHOOTING_GRADE,
   BEST_SHOOTING_SPREAD,
   GRAVITY,
   MAX_RELEASE_ANGLE,
   STRONGEST_STRIKE_SPEED,
   WEAKEST_STRIKE_SPEED,
-  WORST_SHOOTING_GRADE,
   WORST_SHOOTING_SPREAD,
 } from "./constants";
+import { skill } from "./grade";
 import type { Random } from "./random";
 
 export type Point = [x: number, y: number, z: number];
@@ -16,7 +15,6 @@ const SEARCH_STEPS = 60;
 
 const horizontalDistance = (from: Point, to: Point) => Math.hypot(to[0] - from[0], to[1] - from[1]);
 const straightDistance = (from: Point, to: Point) => Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
-const skill = (grade: number) => (grade - WORST_SHOOTING_GRADE) / (BEST_SHOOTING_GRADE - WORST_SHOOTING_GRADE);
 
 export const strikeSpeed = (grade: number) => WEAKEST_STRIKE_SPEED + (STRONGEST_STRIKE_SPEED - WEAKEST_STRIKE_SPEED) * skill(grade);
 

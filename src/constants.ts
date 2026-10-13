@@ -33,13 +33,28 @@ export const LOWEST_BOOT_CONTACT = 0.03;
 export const MAX_RELEASE_ANGLE = Math.asin((BALL_RADIUS - LOWEST_BOOT_CONTACT) / BALL_RADIUS);
 export const WEAKEST_STRIKE_SPEED = 22;
 export const STRONGEST_STRIKE_SPEED = 32;
-export const WORST_SHOOTING_GRADE = 1;
-export const BEST_SHOOTING_GRADE = 20;
+export const WORST_GRADE = 1;
+export const BEST_GRADE = 20;
+export const AVERAGE_GRADE = 10;
+
+export const WORST_SHOOTING_GRADE = WORST_GRADE;
+export const BEST_SHOOTING_GRADE = BEST_GRADE;
 export const WORST_SHOOTING_SPREAD = 0.08;
 export const BEST_SHOOTING_SPREAD = 0.01;
-export const AVERAGE_SHOOTING_GRADE = 10;
+export const AVERAGE_SHOOTING_GRADE = AVERAGE_GRADE;
 
 export const KEEPER_REACTION_TIME = 0.25;
 export const KEEPER_DIVE_SPEED = 5;
 export const KEEPER_REACH = 1;
 export const KEEPER_HIGHEST_REACH = 2.5;
+
+export const TACKLE_REACH = 1;
+export const EVEN_TACKLE_WIN_CHANCE = 0.5;
+export const LOPSIDED_TACKLE_WIN_CHANCE = 0.9;
+export const TACKLE_RECOVERY_TIME = 1;
+export const TACKLE_CLEARANCE_SPEED = 6;
+export const GOAL_SIDE_DISTANCE = 0.5;
+export const BLOCKING_REACH = 0.5;
+export const HIGHEST_BLOCK = 1.8;
+export const PASSING_GAP = 1.5;
+export const SHARPEST_TAKE_ON = Math.PI / 6;

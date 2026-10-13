@@ -1,5 +1,5 @@
 import { KEEPER_DIVE_SPEED, KEEPER_HIGHEST_REACH, KEEPER_REACH, KEEPER_REACTION_TIME } from "./constants";
-import type { StraightFlight } from "./flight";
+import { firstStepAlongFrom, type StraightFlight } from "./flight";
 import type { Point } from "./shooting";
 
 export type Keeper = [x: number, y: number];
@@ -13,17 +13,6 @@ const reachAfterDiving = (steps: number, dt: number) => KEEPER_REACH + KEEPER_DI
 
 export const isWithinReach = ([keeperX, keeperY]: Keeper, [x, y, z]: Point) =>
   Math.hypot(x - keeperX, y - keeperY) <= KEEPER_REACH && z <= KEEPER_HIGHEST_REACH;
-
-function firstStepAlongFrom(along: number[], distance: number): number {
-  let low = 0;
-  let high = along.length;
-  while (low < high) {
-    const middle = (low + high) >> 1;
-    if (along[middle]! < distance) low = middle + 1;
-    else high = middle;
-  }
-  return low;
-}
 
 export function bestInterception(
   [keeperX, keeperY]: Keeper,

@@ -2,8 +2,9 @@ import { hasComponent } from "bitecs";
 import { useEffect, useRef } from "react";
 import { AVERAGE_SHOOTING_GRADE, PITCH_LENGTH, TOUCH_REACH } from "../../src/constants";
 import { GOAL_CENTRE, isGoal } from "../../src/goal";
-import { acrossTheShot, spreadRadius, type Point } from "../../src/shooting";
+import type { Point } from "../../src/shooting";
 import { addBall, addGoalkeeper, addPlayer, createGame, setAttacking, type Game } from "../../src/world";
+import { circleAroundAim, holdBallWhereItCrossed, percent } from "../attackingRound";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
 import { COLOURS, createTopDown } from "../topDown";
@@ -15,7 +16,6 @@ const WIDEST_START = 20;
 const PAUSE_BETWEEN_ROUNDS = 1500;
 const LONGEST_ROUND = 15;
 const LONGEST_TRAIL = 600;
-const POINTS_ON_CIRCLE = 48;
 
 type Outcome = "Goal" | "Saved" | "Claimed at the attacker's feet" | "Wide or over" | "Fell short" | "Ran out of time";
 type Tally = Record<Outcome, number>;
@@ -50,8 +50,6 @@ export function OneOnOneView() {
     </div>
   );
 }
-
-const percent = (chance: number) => `${Math.round(chance * 100)}%`;
 
 function randomStart(): [number, number] {
   const distance = NEAREST_START + Math.random() * (FURTHEST_START - NEAREST_START);
@@ -89,31 +87,13 @@ function runOneOnOnes(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvas
   function play() {
     round++;
     const { world, attacker, ball, keeper, startedAt } = setUpRound();
-    const { Position, Facing, Attacking, Struck, Target, GoalLineCrossing } = world.components;
+    const { Position, Facing, Attacking, Struck, Target } = world.components;
     const trail: Point[] = [];
     let shot: { from: Point; chance: number; aim: Point } | null = null;
     let outcome: Outcome | null = null;
     let aim: Point = [PITCH_LENGTH, GOAL_CENTRE, 1];
     let chance = 0;
     let furtherOn = 0;
-
-    function holdBallWhereItCrossed() {
-      if (!hasComponent(world, ball, GoalLineCrossing)) return;
-      [Position.x[ball], Position.y[ball], Position.z[ball]] = [PITCH_LENGTH, GoalLineCrossing.y[ball]!, GoalLineCrossing.z[ball]!];
-      world.components.Velocity.x[ball] = 0;
-      world.components.Velocity.y[ball] = 0;
-      world.components.Velocity.z[ball] = 0;
-    }
-
-    function circleAroundAim(from: Point): Point[] {
-      const radius = spreadRadius(AVERAGE_SHOOTING_GRADE, from, aim);
-      const [acrossX, acrossY] = acrossTheShot(from, aim);
-      return Array.from({ length: POINTS_ON_CIRCLE }, (_, i) => {
-        const angle = (i / POINTS_ON_CIRCLE) * 2 * Math.PI;
-        const across = radius * Math.cos(angle);
-        return [aim[0] + acrossX * across, aim[1] + acrossY * across, aim[2] + radius * Math.sin(angle)];
-      });
-    }
 
     function describe(): string {
       if (outcome && shot) return `${outcome}, from a ${percent(shot.chance)} chance ${(PITCH_LENGTH - shot.from[0]).toFixed(0)} m out`;
@@ -125,7 +105,7 @@ function runOneOnOnes(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvas
 
     function draw() {
       const seconds = (performance.now() - startedAt) / 1000;
-      holdBallWhereItCrossed();
+      holdBallWhereItCrossed(world, ball);
       const ballAt: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
       if (hasComponent(world, attacker, Attacking) && !Number.isNaN(Attacking.aimY[attacker]!)) {
         aim = [PITCH_LENGTH, Attacking.aimY[attacker]!, Attacking.aimZ[attacker]!];
@@ -153,7 +133,7 @@ function runOneOnOnes(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvas
 
       const behind = shot ? shot.from : ballAt;
       playerView.standBehind(behind[0], behind[1]);
-      playerView.draw(ballAt, trail, shot ? shot.aim : aim, shot ? [] : circleAroundAim(ballAt), [Position.x[keeper]!, Position.y[keeper]!]);
+      playerView.draw(ballAt, trail, shot ? shot.aim : aim, shot ? [] : circleAroundAim(AVERAGE_SHOOTING_GRADE, ballAt, aim), [Position.x[keeper]!, Position.y[keeper]!]);
 
       readout.textContent = `Round ${round}: ${describe()}`;
       tallyOut.textContent = Object.entries(tally)

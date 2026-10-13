@@ -6,14 +6,20 @@ import {
   DISTANCE_BEHIND_BALL,
   DRIBBLE_BRAKING,
   DRIBBLE_STOP_DISTANCE,
+  GOAL_SIDE_DISTANCE,
   KEEPER_DIVE_SPEED,
   KEEPER_HIGHEST_REACH,
   KEEPER_REACH,
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
+  PASSING_GAP,
   PITCH_LENGTH,
+  SHARPEST_TAKE_ON,
   SIDEWAYS_SPEED,
   STANDING_SPEED,
+  TACKLE_CLEARANCE_SPEED,
+  TACKLE_REACH,
+  TACKLE_RECOVERY_TIME,
   TIME_STEP,
   TOP_SPEED,
   TOUCH_INTERVAL,
@@ -22,6 +28,7 @@ import {
 } from "./constants";
 import { closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight } from "./flight";
 import { bestShot, shotOptions, whereToStand } from "./chance";
+import { isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Keeper } from "./keeper";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
@@ -216,6 +223,91 @@ export function shoot(world: Game): void {
   }
 }
 
+function nearestDribbler(world: Game, ball: number): number | undefined {
+  const { Position, Dribbling, Tackled } = world.components;
+  let nearest: number | undefined;
+  let nearestDistance = Infinity;
+  for (const eid of query(world, [Position, Dribbling, Not(Tackled)])) {
+    const distance = Math.hypot(Position.x[eid]! - Position.x[ball]!, Position.y[eid]! - Position.y[ball]!);
+    if (distance < nearestDistance) [nearest, nearestDistance] = [eid, distance];
+  }
+  return nearest;
+}
+
+function loseTheBall(world: Game, attacker: number, ball: number): void {
+  const { Position, Velocity, Attacking, Dribble, Shot, Tackled } = world.components;
+  const { onwardX, onwardY } = directionTo([PITCH_LENGTH, GOAL_CENTRE, 0], Position.x[ball]!, Position.y[ball]!);
+  Velocity.x[ball] = onwardX * TACKLE_CLEARANCE_SPEED;
+  Velocity.y[ball] = onwardY * TACKLE_CLEARANCE_SPEED;
+  removeComponent(world, attacker, Attacking);
+  removeComponent(world, attacker, Dribble);
+  removeComponent(world, attacker, Shot);
+  addComponent(world, attacker, Tackled);
+  setTarget(world, attacker, Position.x[attacker]!, Position.y[attacker]!);
+}
+
+function tackle(world: Game, defender: number, attacker: number, ball: number): void {
+  const { Tackling, Dribbling, Grounded } = world.components;
+  if (world.random() < tackleWinChance(Tackling[defender]!, Dribbling[attacker]!)) {
+    loseTheBall(world, attacker, ball);
+    standStill(world, defender);
+    return;
+  }
+  standStill(world, defender);
+  addComponent(world, defender, Grounded);
+  Grounded.recoversIn[defender] = TACKLE_RECOVERY_TIME;
+}
+
+function closeDown(world: Game, defender: number, ball: number): void {
+  const { Position, Velocity } = world.components;
+  const from = pointOf(Position, ball);
+  const { onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
+  const spotX = from[0] + onwardX * GOAL_SIDE_DISTANCE;
+  const spotY = from[1] + onwardY * GOAL_SIDE_DISTANCE;
+  setTarget(world, defender, spotX, spotY, Velocity.x[ball]!, Velocity.y[ball]!, Math.atan2(from[1] - spotY, from[0] - spotX));
+}
+
+const isInPlay = (world: Game, ball: number) =>
+  [world.components.Struck, world.components.Held, world.components.Blocked].every((part) => !hasComponent(world, ball, part));
+
+export function defend(world: Game, dt: number): void {
+  const { Position, Tackling, Grounded, Ball } = world.components;
+  const ball = query(world, [Ball])[0];
+  if (ball === undefined) return;
+  for (const eid of query(world, [Position, Tackling])) {
+    if (hasComponent(world, eid, Grounded)) {
+      standStill(world, eid);
+      Grounded.recoversIn[eid] = Grounded.recoversIn[eid]! - dt;
+      if (Grounded.recoversIn[eid]! <= 0) removeComponent(world, eid, Grounded);
+      continue;
+    }
+    const attacker = nearestDribbler(world, ball);
+    if (attacker === undefined || !isInPlay(world, ball)) {
+      standStill(world, eid);
+      continue;
+    }
+    const toBall = Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!);
+    if (toBall <= TACKLE_REACH) tackle(world, eid, attacker, ball);
+    else closeDown(world, eid, ball);
+  }
+}
+
+export function block(world: Game, dt: number): void {
+  const { Position, Velocity, Tackling, Struck, Blocked, Ball } = world.components;
+  for (const ball of query(world, [Ball, Position, Velocity, Struck])) {
+    for (const defender of query(world, [Position, Tackling])) {
+      const at: Defender = [Position.x[defender]!, Position.y[defender]!];
+      const nearest = closestPassThisStep(at[0], at[1], pointOf(Position, ball), pointOf(Velocity, ball), dt);
+      if (!isWithinBlockingReach(at, nearest)) continue;
+      [Position.x[ball], Position.y[ball], Position.z[ball]] = nearest;
+      [Velocity.x[ball], Velocity.y[ball], Velocity.z[ball]] = [0, 0, 0];
+      removeComponent(world, ball, Struck);
+      addComponent(world, ball, Blocked);
+      break;
+    }
+  }
+}
+
 function keeperPosition(world: Game): Keeper | null {
   const { Position, Goalkeeper } = world.components;
   const keeper = query(world, [Position, Goalkeeper])[0];
@@ -228,24 +320,67 @@ function isOnTheBall(world: Game, eid: number, ball: number, dt: number): boolea
   return ready && Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!) <= TOUCH_REACH;
 }
 
-function bestChanceFurtherOn(from: Point, grade: number, keeper: Keeper | null, dt: number): number {
+type Opponent = { at: Defender; tackling: number; recoversIn: number };
+
+function opponents(world: Game): Opponent[] {
+  const { Position, Tackling, Grounded } = world.components;
+  return Array.from(query(world, [Position, Tackling]), (eid): Opponent => ({
+    at: [Position.x[eid]!, Position.y[eid]!],
+    tackling: Tackling[eid]!,
+    recoversIn: hasComponent(world, eid, Grounded) ? Grounded.recoversIn[eid]! : 0,
+  }));
+}
+
+function chanceOfGettingThere(spot: Point, carried: number, dribbling: number, defenders: Opponent[]): number {
+  const timeThere = timeToRun(carried, MAX_DRIBBLE_TOUCH_SPEED);
+  return defenders
+    .filter(({ at, recoversIn }) => recoversIn + timeToRun(Math.max(0, Math.hypot(spot[0] - at[0], spot[1] - at[1]) - TACKLE_REACH), TOP_SPEED) <= timeThere)
+    .reduce((chance, { tackling }) => chance * (1 - tackleWinChance(tackling, dribbling)), 1);
+}
+
+function bestChanceFurtherOn(from: Point, shooting: number, dribbling: number, keeper: Keeper | null, defenders: Opponent[], dt: number): number {
   const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
   const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
   let best = 0;
   for (let carried = touch; carried < distance; carried += touch) {
     const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
-    const options = shotOptions(next, grade, dt);
+    const gettingThere = chanceOfGettingThere(next, carried, dribbling, defenders);
+    if (gettingThere <= best) continue;
+    const options = shotOptions(next, shooting, dt);
     const setKeeper = keeper && (whereToStand(next, options, keeper, dt) ?? keeper);
-    best = Math.max(best, bestShot(options, setKeeper, dt).chance);
+    best = Math.max(best, gettingThere * bestShot(options, setKeeper, dt).chance);
   }
   return best;
 }
 
+function wayPast(from: Point, inTheWay: Defender[]): [x: number, y: number] | null {
+  const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
+  const nearest = inTheWay
+    .map((at) => {
+      const along = (at[0] - from[0]) * onwardX + (at[1] - from[1]) * onwardY;
+      const across = (at[0] - from[0]) * -onwardY + (at[1] - from[1]) * onwardX;
+      return { at, along, across };
+    })
+    .filter(({ along, across }) => along > 0 && along < distance && Math.abs(across) < PASSING_GAP)
+    .sort((a, b) => a.along - b.along)[0];
+  if (!nearest) return null;
+  const side = nearest.across >= 0 ? -1 : 1;
+  const swerve = side * Math.min(SHARPEST_TAKE_ON, Math.atan2(PASSING_GAP - Math.abs(nearest.across), nearest.along));
+  const heading = Math.atan2(onwardY, onwardX) + swerve;
+  return [from[0] + Math.cos(heading) * distance, from[1] + Math.sin(heading) * distance];
+}
+
+function carryOn(world: Game, eid: number, way: [x: number, y: number]): void {
+  const { Dribble } = world.components;
+  if (!hasComponent(world, eid, Dribble)) setDribble(world, eid, ...way);
+  [Dribble.x[eid], Dribble.y[eid]] = way;
+}
+
 export function attack(world: Game, dt: number): void {
-  const { Position, Shooting, Attacking, Struck, Held, Shot, Dribble, Ball } = world.components;
+  const { Position, Shooting, Dribbling, Attacking, Struck, Held, Shot, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
-  for (const eid of query(world, [Position, Shooting, Attacking])) {
+  for (const eid of query(world, [Position, Shooting, Dribbling, Attacking])) {
     if (hasComponent(world, ball, Struck) || hasComponent(world, ball, Held)) {
       removeComponent(world, eid, Attacking);
       continue;
@@ -253,14 +388,15 @@ export function attack(world: Game, dt: number): void {
     if (hasComponent(world, eid, Shot) || !isOnTheBall(world, eid, ball, dt)) continue;
     const from = pointOf(Position, ball);
     const keeper = keeperPosition(world);
-    const now = bestShot(shotOptions(from, Shooting[eid]!, dt), keeper, dt);
-    const later = bestChanceFurtherOn(from, Shooting[eid]!, keeper, dt);
+    const defenders = opponents(world);
+    const now = bestShot(shotOptions(from, Shooting[eid]!, dt), keeper, dt, defenders.map(({ at }) => at));
+    const later = bestChanceFurtherOn(from, Shooting[eid]!, Dribbling[eid]!, keeper, defenders, dt);
     Attacking.chance[eid] = now.chance;
     Attacking.bestChanceFurtherOn[eid] = later;
     Attacking.aimY[eid] = now.aim[1];
     Attacking.aimZ[eid] = now.aim[2];
     if (now.chance === 1 || (now.chance > 0 && now.chance >= later)) setShot(world, eid, ...now.aim);
-    else if (!hasComponent(world, eid, Dribble)) setDribble(world, eid, PITCH_LENGTH, GOAL_CENTRE);
+    else carryOn(world, eid, wayPast(from, defenders.map(({ at }) => at)) ?? [PITCH_LENGTH, GOAL_CENTRE]);
   }
 }
 
@@ -382,11 +518,13 @@ export function step(world: Game, dt = TIME_STEP): void {
   attack(world, dt);
   dribble(world, dt);
   shoot(world);
+  defend(world, dt);
   goalkeep(world, dt);
   runToTarget(world, dt);
   roll(world, dt);
   fly(world, dt);
   move(world, dt);
+  block(world, dt);
   save(world, dt);
   watchGoalLine(world);
 }
