@@ -7,21 +7,24 @@ import { addBall, addPlayer, createGame, setDribble } from "./world";
 // A player takes the ball from one point to another; records the gap between them
 function dribble(player: [number, number], ball: [number, number], to: [number, number]) {
   const world = createGame();
-  const { Position, Velocity, Dribble, Target } = world.components;
+  const { Position, Velocity, Dribble, Target, Facing } = world.components;
   const p = addPlayer(world, ...player);
   const b = addBall(world, ...ball);
   setDribble(world, p, ...to);
   const gaps: number[] = [];
   const ballSpeeds: number[] = [];
+  const facingAtTouches: number[] = [];
   let time = 0;
   while ((hasComponent(world, p, Dribble) || hasComponent(world, p, Target)) && time < 30) {
     step(world);
     time += DT;
     gaps.push(Math.hypot(Position.x[b]! - Position.x[p]!, Position.y[b]! - Position.y[p]!));
-    ballSpeeds.push(Math.hypot(Velocity.x[b]!, Velocity.y[b]!));
+    const ballSpeed = Math.hypot(Velocity.x[b]!, Velocity.y[b]!);
+    if (ballSpeed > (ballSpeeds.at(-1) ?? 0)) facingAtTouches.push(Facing[p]!);
+    ballSpeeds.push(ballSpeed);
   }
   const ballTo = Math.hypot(Position.x[b]! - to[0], Position.y[b]! - to[1]);
-  return { time, gaps, ballSpeeds, ballTo, ballStill: ballSpeeds.at(-1) === 0, finalGap: gaps.at(-1)! };
+  return { time, gaps, ballSpeeds, facingAtTouches, ballTo, ballStill: ballSpeeds.at(-1) === 0, finalGap: gaps.at(-1)! };
 }
 
 describe("a ball rolling on its own", () => {
@@ -61,10 +64,12 @@ describe("a player running with the ball", () => {
     expect(Math.max(...ballSpeeds)).toBeLessThanOrEqual(DRIBBLE_SPEED + 1e-9);
   });
 
-  test("can take the ball back the way they came", () => {
+  test("turns round with the ball to take it back the way they came", () => {
     const run = dribble([50, 34], [50.3, 34], [30, 34]);
     expect(run.ballTo).toBeLessThan(DRIBBLED);
     expect(run.finalGap).toBeLessThanOrEqual(REACH);
+    expect(run.facingAtTouches.length).toBeGreaterThan(3);
+    for (const facing of run.facingAtTouches) expect(Math.cos(facing - Math.PI)).toBeGreaterThan(0);
   });
 
   test("goes and gets a ball that isn't at their feet first", () => {

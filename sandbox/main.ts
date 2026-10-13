@@ -11,7 +11,7 @@ const readout = document.getElementById("readout")!;
 const ctx = canvas.getContext("2d")!;
 
 const world = createGame();
-const { Position, Velocity, Dribble } = world.components;
+const { Position, Velocity, Facing, Dribble } = world.components;
 const player = addPlayer(world, PITCH_LENGTH / 2, PITCH_WIDTH / 2);
 const ball = addBall(world, PITCH_LENGTH / 2 + 0.3, PITCH_WIDTH / 2);
 
@@ -60,6 +60,15 @@ function draw() {
   ctx.beginPath();
   ctx.arc(toScreen(Position.x[player]!), toScreen(Position.y[player]!), 0.5 * scale, 0, Math.PI * 2);
   ctx.fill();
+
+  const px = toScreen(Position.x[player]!);
+  const py = toScreen(Position.y[player]!);
+  ctx.strokeStyle = "#102c1c";
+  ctx.lineWidth = Math.max(2, 0.15 * scale);
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + Math.cos(Facing[player]!) * 0.5 * scale, py + Math.sin(Facing[player]!) * 0.5 * scale);
+  ctx.stroke();
 
   ctx.fillStyle = "#eef1e6";
   ctx.beginPath();

@@ -6,6 +6,9 @@ export const PITCH_WIDTH = 68; // m
 export const TOP_SPEED = 8; // m/s
 export const ACCEL = 4; // m/s²
 export const BRAKE = 6; // m/s²: stopping is quicker than starting
+export const TURN_RATE = 6; // rad/s: half a turn in about half a second
+export const MOVING = 0.5; // m/s: below this a player turns to face where their target says, not where they're going
+export const SIDEWAYS_SPEED = 2.5; // m/s: fastest a player moves sideways or backwards from the way they face
 export const ARRIVED = 0.05; // m: close enough to call it there
 
 export const ROLL_DECEL = 1; // m/s²: a rolling ball slows on the grass

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
-import { ACCEL, BRAKE, DT, TOP_SPEED } from "./constants";
+import { ACCEL, BRAKE, DT, SIDEWAYS_SPEED, TOP_SPEED } from "./constants";
 import { step } from "./systems";
 import { addPlayer, createGame, setTarget } from "./world";
 
@@ -65,5 +65,27 @@ describe("a player running from one point to another", () => {
     const { speeds } = run([20, 34], [24, 34]);
     expect(Math.max(...speeds)).toBeGreaterThan(4);
     expect(Math.max(...speeds)).toBeLessThan(5);
+  });
+
+  test("turns to face where they're going, half a turn in about half a second", () => {
+    const world = createGame();
+    const { Facing } = world.components;
+    const eid = addPlayer(world, 50, 34, Math.PI);
+    setTarget(world, eid, 80, 34);
+    for (let t = 0; t < 0.3; t += DT) step(world);
+    expect(Math.cos(Facing[eid]!)).toBeLessThan(0.5);
+    for (let t = 0; t < 0.3; t += DT) step(world);
+    expect(Math.cos(Facing[eid]!)).toBeCloseTo(1, 5);
+  });
+
+  test("moves slowly until they've turned to face the way they're going", () => {
+    const world = createGame();
+    const { Facing, Velocity } = world.components;
+    const eid = addPlayer(world, 50, 34, Math.PI);
+    setTarget(world, eid, 80, 34);
+    while (Math.cos(Facing[eid]!) < 0) {
+      step(world);
+      expect(Math.hypot(Velocity.x[eid]!, Velocity.y[eid]!)).toBeLessThanOrEqual(SIDEWAYS_SPEED + 1e-9);
+    }
   });
 });
