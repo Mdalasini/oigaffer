@@ -1,6 +1,7 @@
 import { addComponent, addEntity, createWorld, removeComponent } from "bitecs";
 import { AVERAGE_SHOOTING_GRADE } from "./constants";
 import { seededRandom } from "./random";
+import type { Point } from "./shooting";
 
 export const ANY_FACING = NaN;
 
@@ -24,6 +25,7 @@ export function createGame(seed = 1) {
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
       Goalkeeper: { watchingShotFor: [] as number[] },
       Held: {},
+      Struck: {},
       Ball: {},
     },
   });
@@ -116,4 +118,12 @@ export function setShot(world: Game, eid: number, x: number, y: number, z: numbe
   Shot.x[eid] = x;
   Shot.y[eid] = y;
   Shot.z[eid] = z;
+}
+
+export function strikeBall(world: Game, ball: number, [vx, vy, vz]: Point): void {
+  const { Velocity, Struck } = world.components;
+  Velocity.x[ball] = vx;
+  Velocity.y[ball] = vy;
+  Velocity.z[ball] = vz;
+  addComponent(world, ball, Struck);
 }
