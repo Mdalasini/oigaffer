@@ -1,4 +1,4 @@
-import { addComponent, hasComponent, query, removeComponent } from "bitecs";
+import { addComponent, hasComponent, Not, query, removeComponent } from "bitecs";
 import {
   ACCELERATION,
   ARRIVAL_DISTANCE,
@@ -8,6 +8,10 @@ import {
   DRIBBLE_BRAKING,
   DRIBBLE_STOP_DISTANCE,
   GOAL_WIDTH,
+  KEEPER_DIVE_SPEED,
+  KEEPER_HIGHEST_REACH,
+  KEEPER_REACH,
+  KEEPER_REACTION_TIME,
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   PITCH_LENGTH,
@@ -20,7 +24,7 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
-import { crossing, flying, isOnTheGround, rolling } from "./flight";
+import { crossing, flying, isOnTheGround, rolling, whereBallCrosses } from "./flight";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setTarget, type Game } from "./world";
 
@@ -216,16 +220,16 @@ const onTheGround = (world: Game, eid: number) =>
   isOnTheGround(world.components.Position.z[eid]!, world.components.Velocity.z[eid]!);
 
 export function roll(world: Game, dt: number): void {
-  const { Velocity, Ball } = world.components;
-  for (const eid of query(world, [Ball, Velocity])) {
+  const { Velocity, Ball, Held } = world.components;
+  for (const eid of query(world, [Ball, Velocity, Not(Held)])) {
     if (!onTheGround(world, eid)) continue;
     [Velocity.x[eid], Velocity.y[eid]] = rolling(Velocity.x[eid]!, Velocity.y[eid]!, dt);
   }
 }
 
 export function fly(world: Game, dt: number): void {
-  const { Position, Velocity, Ball } = world.components;
-  for (const eid of query(world, [Ball, Position, Velocity])) {
+  const { Position, Velocity, Ball, Held } = world.components;
+  for (const eid of query(world, [Ball, Position, Velocity, Not(Held)])) {
     if (onTheGround(world, eid)) continue;
     [Position.z[eid], Velocity.z[eid]] = flying(Position.z[eid]!, Velocity.z[eid]!, dt);
   }
@@ -254,12 +258,60 @@ export function watchGoalLine(world: Game): void {
   }
 }
 
+function whereShotCrosses(world: Game, ball: number, lineX: number, dt: number) {
+  const { Position, Velocity, Held } = world.components;
+  if (hasComponent(world, ball, Held)) return null;
+  return whereBallCrosses(lineX, pointOf(Position, ball), pointOf(Velocity, ball), dt);
+}
+
+export function goalkeep(world: Game, dt: number): void {
+  const { Position, Velocity, Goalkeeper, Ball } = world.components;
+  const ball = query(world, [Ball])[0];
+  if (ball === undefined) return;
+  for (const eid of query(world, [Position, Velocity, Goalkeeper])) {
+    const crossesAt = whereShotCrosses(world, ball, Position.x[eid]!, dt);
+    if (crossesAt === null) {
+      Goalkeeper.watchingShotFor[eid] = 0;
+      Velocity.y[eid] = 0;
+      continue;
+    }
+    Goalkeeper.watchingShotFor[eid] = Goalkeeper.watchingShotFor[eid]! + dt;
+    if (Goalkeeper.watchingShotFor[eid]! < KEEPER_REACTION_TIME) continue;
+    const gap = crossesAt[0] - Position.y[eid]!;
+    Velocity.y[eid] = Math.sign(gap) * Math.min(KEEPER_DIVE_SPEED, Math.abs(gap) / dt);
+  }
+}
+
+const withinKeeperReach = (keeperY: number, y: number, z: number) =>
+  Math.abs(y - keeperY) <= KEEPER_REACH && z <= KEEPER_HIGHEST_REACH;
+
+export function save(world: Game, dt: number): void {
+  const { Position, Velocity, Goalkeeper, Held, Ball } = world.components;
+  for (const ball of query(world, [Ball, Position, Velocity, Not(Held)])) {
+    const x = Position.x[ball]!;
+    const vx = Velocity.x[ball]!;
+    for (const keeper of query(world, [Position, Goalkeeper])) {
+      const lineX = Position.x[keeper]!;
+      const crossedThisStep = vx > 0 && x >= lineX && x - vx * dt < lineX;
+      if (!crossedThisStep) continue;
+      const [y, z] = crossing(lineX, pointOf(Position, ball), pointOf(Velocity, ball));
+      if (!withinKeeperReach(Position.y[keeper]!, y, z)) continue;
+      [Position.x[ball], Position.y[ball], Position.z[ball]] = [lineX, y, z];
+      [Velocity.x[ball], Velocity.y[ball], Velocity.z[ball]] = [0, 0, 0];
+      addComponent(world, ball, Held);
+      break;
+    }
+  }
+}
+
 export function step(world: Game, dt = TIME_STEP): void {
   dribble(world, dt);
   shoot(world);
+  goalkeep(world, dt);
   runToTarget(world, dt);
   roll(world, dt);
   fly(world, dt);
   move(world, dt);
+  save(world, dt);
   watchGoalLine(world);
 }

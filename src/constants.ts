@@ -38,3 +38,8 @@ export const BEST_SHOOTING_GRADE = 20;
 export const WORST_SHOOTING_SPREAD = 0.08;
 export const BEST_SHOOTING_SPREAD = 0.01;
 export const AVERAGE_SHOOTING_GRADE = 10;
+
+export const KEEPER_REACTION_TIME = 0.25;
+export const KEEPER_DIVE_SPEED = 5;
+export const KEEPER_REACH = 1;
+export const KEEPER_HIGHEST_REACH = 2.5;

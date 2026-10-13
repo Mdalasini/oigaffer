@@ -22,6 +22,8 @@ export function createGame(seed = 1) {
       Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
       Shot: { x: [] as number[], y: [] as number[], z: [] as number[] },
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
+      Goalkeeper: { watchingShotFor: [] as number[] },
+      Held: {},
       Ball: {},
     },
   });
@@ -44,6 +46,24 @@ export function addPlayer(world: Game, x: number, y: number, facing = 0, shootin
   Velocity.y[eid] = 0;
   Velocity.z[eid] = 0;
   Facing[eid] = facing;
+  return eid;
+}
+
+export function addGoalkeeper(world: Game, x: number, y: number, facing = Math.PI): number {
+  const { Position, Velocity, Facing, Goalkeeper } = world.components;
+  const eid = addEntity(world);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Velocity);
+  addComponent(world, eid, Facing);
+  addComponent(world, eid, Goalkeeper);
+  Position.x[eid] = x;
+  Position.y[eid] = y;
+  Position.z[eid] = 0;
+  Velocity.x[eid] = 0;
+  Velocity.y[eid] = 0;
+  Velocity.z[eid] = 0;
+  Facing[eid] = facing;
+  Goalkeeper.watchingShotFor[eid] = 0;
   return eid;
 }
 
