@@ -20,6 +20,7 @@ import {
   PRESS_SPEED,
   PRESS_STAND_OFF,
   PRESS_TRIGGER,
+  HIGH_PRESS_TRIGGER,
   OFFSIDE_GAMBLE,
   OFFSIDE_GAMBLE_CHANCE,
   RUN_SPEED,
@@ -36,6 +37,7 @@ import {
 import type { Intent } from "./debug";
 import { movementBuffer, restartRadiusFor, separateBodies, separation, steerPlayer } from "./steering";
 import { anchor, keeperPosition, kickoffPosition, roleOf } from "./formation";
+import { SPOTS } from "../tactics";
 import { add, CENTRE, clampToPitch, dist, distSq, normalize, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, scale, sub, type Vec } from "./geometry";
 import { moveReferee, offsideLine } from "./referee";
 import { cornerPosition, placeBall } from "./restarts";
@@ -54,6 +56,9 @@ import {
   type MatchState,
   type Side,
 } from "./state";
+
+// The board row of attacking midfielders and wingers
+const ATTACKING_MIDFIELD_ROW = 4;
 
 // Who goes for the ball. With a loose ball, the nearest player on each side chases it.
 // Against a carrier, the nearest defender presses only if the ball has come into
@@ -92,7 +97,10 @@ function chasers(state: MatchState): Set<MatchPlayer> {
     const runner = !carrier ? candidates.find((p) => p.id === state.ball.runnerId) : undefined;
     const chaser = runner ?? nearest(candidates, state.ball.pos);
     if (!chaser) continue;
-    const inZone = dist(anchor(state, chaser, false), state.ball.pos) < PRESS_TRIGGER;
+    const role = roleOf(state, chaser, false);
+    const attackingMidfielder = role.position === "MID" && SPOTS[role.spot].row >= ATTACKING_MIDFIELD_ROW;
+    const trigger = attackingMidfielder ? HIGH_PRESS_TRIGGER : PRESS_TRIGGER;
+    const inZone = dist(anchor(state, chaser, false), state.ball.pos) < trigger;
     if (!carrier || inZone || chaser.position === "GK") result.add(chaser);
   }
   return result;
