@@ -43,6 +43,8 @@ export const DECISION_PAUSE_TICKS = 1; // seconds after control
 export const TOUCH_ESCAPE_RANGE = 8; // metres: sense the nearest opponent
 export const TOUCH_ESCAPE_WEIGHT = 1.3;
 export const POOR_TOUCH_CHANCE = 0.15; // maximum at point-blank pressure and skill 1
+// A strong player holds off the presser: each point of strength over the presser's scales the risk by this share
+export const SHIELD_STRENGTH = 0.04;
 export const TOUCH_SKILL_MAX = 20;
 export const POOR_TOUCH_DISTANCE = 4; // metres: a contestable heavy touch, possibly out
 
@@ -154,6 +156,7 @@ export const TACKLE_RANGE = 2;
 export const TACKLE_ATTEMPT = 0.24; // chance/s: inertial closing and ball flight reduce seconds in tackle range
 export const TACKLE_BASE = 0.35;
 export const TACKLE_SKILL = 0.004;
+export const TACKLE_STRENGTH = 0.004; // per point of strength over the carrier: winning a physical challenge
 export const TACKLE_COOLDOWN = 3;
 export const TACKLE_LOOSE = 0.55; // won tackles that poke the ball away rather than come away with it
 export const TACKLE_LOOSE_DISTANCE: [number, number] = [4, 16];
@@ -189,6 +192,8 @@ export const KEEPER_CLAIM = 0.25; // average keeper claiming a good cross
 export const KEEPER_CLAIM_SKILL = 0.015;
 export const AERIAL_BASE = 0.4; // attacker winning a contested header
 export const AERIAL_SKILL = 0.01;
+export const AERIAL_JUMP = 0.015; // per point of jumping over the defender: reach in the air, the bigger effect
+export const AERIAL_STRENGTH = 0.008; // per point of strength over the defender: holding off in the box
 export const AERIAL_FREE = 0.8; // nobody near the target
 export const AERIAL_CONTEST_RANGE = 3;
 export const AERIAL_CROWD_RANGE = 7; // other defenders this close to the target crowd them out

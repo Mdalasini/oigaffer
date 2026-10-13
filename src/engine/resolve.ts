@@ -29,6 +29,7 @@ import {
   TACKLE_COOLDOWN,
   TACKLE_RANGE,
   TACKLE_SKILL,
+  TACKLE_STRENGTH,
   TACTICAL_FOUL,
 } from "./constants";
 import { clearanceTarget, type Action } from "./decide";
@@ -80,7 +81,12 @@ export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean 
   if (state.rng() > TACKLE_ATTEMPT) return false;
 
   tackler.cooldown = TACKLE_COOLDOWN;
-  const winChance = clamp(TACKLE_BASE + TACKLE_SKILL * (challengeSkill(tackler) - carrier.attributes.dribbling), 0.1, 0.8);
+  const winChance = clamp(
+    TACKLE_BASE + TACKLE_SKILL * (challengeSkill(tackler) - carrier.attributes.dribbling) +
+      TACKLE_STRENGTH * (tackler.attributes.strength - carrier.attributes.strength),
+    0.1,
+    0.8,
+  );
   const won = state.rng() < winChance;
   emit(state, { type: "tackle", side: tackler.side, playerId: tackler.id, carrierId: carrier.id, won });
   if (won) {
