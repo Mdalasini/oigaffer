@@ -1,10 +1,21 @@
-// Click to send the player somewhere with the ball and watch them dribble there.
 import { hasComponent } from "bitecs";
-import { DT, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
+import { PITCH_LENGTH, PITCH_WIDTH, TIME_STEP } from "../src/constants";
 import { step } from "../src/systems";
 import { addBall, addPlayer, createGame, setDribble } from "../src/world";
 
-const MARGIN = 3; // m of grass drawn around the pitch
+const GRASS_AROUND_PITCH = 3;
+const PLAYER_RADIUS = 0.5;
+const BALL_RADIUS = 0.35;
+const DESTINATION_MARK_SIZE = 0.6;
+const MAX_SECONDS_TO_CATCH_UP = 0.25;
+
+const COLOURS = {
+  grass: "#173b26",
+  lines: "rgba(238, 241, 230, 0.6)",
+  player: "#f2b33d",
+  facing: "#102c1c",
+  ball: "#eef1e6",
+};
 
 const canvas = document.getElementById("pitch") as HTMLCanvasElement;
 const readout = document.getElementById("readout")!;
@@ -15,82 +26,94 @@ const { Position, Velocity, Facing, Dribble } = world.components;
 const player = addPlayer(world, PITCH_LENGTH / 2, PITCH_WIDTH / 2);
 const ball = addBall(world, PITCH_LENGTH / 2 + 0.3, PITCH_WIDTH / 2);
 
-// Metres to pixels, fitting the pitch to the window
-let scale = 1;
-const toScreen = (m: number) => (m + MARGIN) * scale;
-function fit() {
+let pixelsPerMetre = 1;
+const toScreen = (metres: number) => (metres + GRASS_AROUND_PITCH) * pixelsPerMetre;
+const toPitch = (cssPixels: number) => (cssPixels * devicePixelRatio) / pixelsPerMetre - GRASS_AROUND_PITCH;
+const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
+
+function fitPitchToWindow() {
   canvas.width = innerWidth * devicePixelRatio;
   canvas.height = innerHeight * devicePixelRatio;
-  scale = Math.min(canvas.width / (PITCH_LENGTH + 2 * MARGIN), canvas.height / (PITCH_WIDTH + 2 * MARGIN));
+  pixelsPerMetre = Math.min(
+    canvas.width / (PITCH_LENGTH + 2 * GRASS_AROUND_PITCH),
+    canvas.height / (PITCH_WIDTH + 2 * GRASS_AROUND_PITCH),
+  );
 }
-addEventListener("resize", fit);
-fit();
+addEventListener("resize", fitPitchToWindow);
+fitPitchToWindow();
 
 canvas.addEventListener("click", (e) => {
-  const x = (e.offsetX * devicePixelRatio) / scale - MARGIN;
-  const y = (e.offsetY * devicePixelRatio) / scale - MARGIN;
-  setDribble(world, player, Math.max(0, Math.min(PITCH_LENGTH, x)), Math.max(0, Math.min(PITCH_WIDTH, y)));
+  setDribble(world, player, clamp(toPitch(e.offsetX), PITCH_LENGTH), clamp(toPitch(e.offsetY), PITCH_WIDTH));
 });
 
-function draw() {
-  ctx.fillStyle = "#173b26";
+function drawPitch() {
+  ctx.fillStyle = COLOURS.grass;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "rgba(238, 241, 230, 0.6)";
-  ctx.lineWidth = Math.max(1, 0.15 * scale);
-  ctx.strokeRect(toScreen(0), toScreen(0), PITCH_LENGTH * scale, PITCH_WIDTH * scale);
+  ctx.strokeStyle = COLOURS.lines;
+  ctx.lineWidth = Math.max(1, 0.15 * pixelsPerMetre);
+  ctx.strokeRect(toScreen(0), toScreen(0), PITCH_LENGTH * pixelsPerMetre, PITCH_WIDTH * pixelsPerMetre);
   ctx.beginPath();
   ctx.moveTo(toScreen(PITCH_LENGTH / 2), toScreen(0));
   ctx.lineTo(toScreen(PITCH_LENGTH / 2), toScreen(PITCH_WIDTH));
   ctx.stroke();
-
-  // where they're taking the ball, until it's there
-  if (hasComponent(world, player, Dribble)) {
-    const x = toScreen(Dribble.x[player]!);
-    const y = toScreen(Dribble.y[player]!);
-    const r = 0.6 * scale;
-    ctx.beginPath();
-    ctx.moveTo(x - r, y - r);
-    ctx.lineTo(x + r, y + r);
-    ctx.moveTo(x + r, y - r);
-    ctx.lineTo(x - r, y + r);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = "#f2b33d";
-  ctx.beginPath();
-  ctx.arc(toScreen(Position.x[player]!), toScreen(Position.y[player]!), 0.5 * scale, 0, Math.PI * 2);
-  ctx.fill();
-
-  const px = toScreen(Position.x[player]!);
-  const py = toScreen(Position.y[player]!);
-  ctx.strokeStyle = "#102c1c";
-  ctx.lineWidth = Math.max(2, 0.15 * scale);
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.cos(Facing[player]!) * 0.5 * scale, py + Math.sin(Facing[player]!) * 0.5 * scale);
-  ctx.stroke();
-
-  ctx.fillStyle = "#eef1e6";
-  ctx.beginPath();
-  ctx.arc(toScreen(Position.x[ball]!), toScreen(Position.y[ball]!), 0.35 * scale, 0, Math.PI * 2);
-  ctx.fill();
-
-  const speed = Math.hypot(Velocity.x[player]!, Velocity.y[player]!);
-  const ballSpeed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!);
-  readout.textContent = `player ${speed.toFixed(1)} m/s, ball ${ballSpeed.toFixed(1)} m/s — click anywhere on the pitch to take the ball there.`;
 }
 
-// Fixed simulation steps, however often the screen refreshes
-let owed = 0;
-let last = performance.now();
+function drawDestination() {
+  if (!hasComponent(world, player, Dribble)) return;
+  const x = toScreen(Dribble.x[player]!);
+  const y = toScreen(Dribble.y[player]!);
+  const half = DESTINATION_MARK_SIZE * pixelsPerMetre;
+  ctx.beginPath();
+  ctx.moveTo(x - half, y - half);
+  ctx.lineTo(x + half, y + half);
+  ctx.moveTo(x + half, y - half);
+  ctx.lineTo(x - half, y + half);
+  ctx.stroke();
+}
+
+function drawPlayer() {
+  const x = toScreen(Position.x[player]!);
+  const y = toScreen(Position.y[player]!);
+  const radius = PLAYER_RADIUS * pixelsPerMetre;
+  ctx.fillStyle = COLOURS.player;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = COLOURS.facing;
+  ctx.lineWidth = Math.max(2, 0.15 * pixelsPerMetre);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + Math.cos(Facing[player]!) * radius, y + Math.sin(Facing[player]!) * radius);
+  ctx.stroke();
+}
+
+function drawBall() {
+  ctx.fillStyle = COLOURS.ball;
+  ctx.beginPath();
+  ctx.arc(toScreen(Position.x[ball]!), toScreen(Position.y[ball]!), BALL_RADIUS * pixelsPerMetre, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function showSpeeds() {
+  const playerSpeed = Math.hypot(Velocity.x[player]!, Velocity.y[player]!);
+  const ballSpeed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!);
+  readout.textContent = `player ${playerSpeed.toFixed(1)} m/s, ball ${ballSpeed.toFixed(1)} m/s — click anywhere on the pitch to take the ball there.`;
+}
+
+let unsimulatedSeconds = 0;
+let lastFrame = performance.now();
 function frame(now: number) {
-  owed += Math.min(0.25, (now - last) / 1000);
-  last = now;
-  while (owed >= DT) {
+  unsimulatedSeconds += Math.min(MAX_SECONDS_TO_CATCH_UP, (now - lastFrame) / 1000);
+  lastFrame = now;
+  while (unsimulatedSeconds >= TIME_STEP) {
     step(world);
-    owed -= DT;
+    unsimulatedSeconds -= TIME_STEP;
   }
-  draw();
+  drawPitch();
+  drawDestination();
+  drawPlayer();
+  drawBall();
+  showSpeeds();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
