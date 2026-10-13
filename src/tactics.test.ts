@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Position } from "./model";
-import { assignRoles, FORMATIONS, lineCount, moveSpot, shapeName, type FormationName, type LineupPlayer, type Tactics } from "./tactics";
+import { assignRoles, FORMATIONS, lineCount, moveSpot, sameTactics, shapeName, shapeOf, type FormationName, type LineupPlayer, type Tactics } from "./tactics";
 import { FOUR_FOUR_TWO, player } from "./test-helpers";
 
 // A 4-4-2 where each player's attacking lean rises with their index inside a line
@@ -71,4 +71,18 @@ test("custom shapes are named row by row, presets by their own name", () => {
   expect(shapeName(fourTwoThreeOne)).toBe("4-2-3-1");
   // Wing-backs count in the defence
   expect(shapeName(moveSpot({ formation: "5-3-2", mentality: 0 }, "CM", "CAM"))).toBe("5-2-1-2");
+});
+
+test("an out-of-possession shape pairs each position with one to drop to", () => {
+  const t: Tactics = { formation: "4-3-3", mentality: 0 };
+  expect(shapeOf(t, "out")).toEqual(shapeOf(t));
+  const out = moveSpot(t, "LW", "LM", "out");
+  expect(out.shape).toEqual(FORMATIONS["4-3-3"]);
+  expect(shapeOf(out, "out")).toEqual(FORMATIONS["4-3-3"].map((s) => (s === "LW" ? "LM" : s)));
+  expect(shapeName(out, "out")).toBe("4-1-3-1-1");
+  expect(sameTactics(t, out)).toBe(false);
+  // The same positions paired the other way round are different tactics
+  const lwToLm = moveSpot(moveSpot(t, "LW", "LM", "out"), "RW", "RM", "out");
+  const crossed = { ...lwToLm, outOfPossession: shapeOf(lwToLm, "out").map((s) => (s === "LM" ? "RM" : s === "RM" ? "LM" : s)) };
+  expect(sameTactics(lwToLm, crossed)).toBe(false);
 });

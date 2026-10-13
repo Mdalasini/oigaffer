@@ -68,19 +68,29 @@ export interface Tactics {
   mentality: Mentality;
   // The manager's own rearrangement of the formation, if they've moved positions on the board
   shape?: Shape;
+  // Where the same players stand when the other side has the ball, in the same order as the shape:
+  // whoever plays shape[i] drops to outOfPossession[i]. The shape itself if not set.
+  outOfPossession?: Shape;
 }
 
-export const shapeOf = (t: Tactics): Shape => t.shape ?? FORMATIONS[t.formation];
+// With the ball or without it
+export type Possession = "in" | "out";
 
-const sameSpots = (a: Shape, b: Shape) => a.length === b.length && a.every((s) => b.includes(s));
+export const shapeOf = (t: Tactics, possession: Possession = "in"): Shape =>
+  (possession === "out" ? t.outOfPossession : undefined) ?? t.shape ?? FORMATIONS[t.formation];
+
+const sameSpots = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((s) => b.includes(s));
+
+// Each player's pair of positions, which is what matters when the shapes are compared
+const pairs = (t: Tactics) => shapeOf(t).map((s, i) => `${s}>${shapeOf(t, "out")[i]}`);
 
 export const sameTactics = (a: Tactics, b: Tactics): boolean =>
-  a.formation === b.formation && a.mentality === b.mentality && sameSpots(shapeOf(a), shapeOf(b));
+  a.formation === b.formation && a.mentality === b.mentality && sameSpots(pairs(a), pairs(b));
 
 // A preset's own name, or a custom shape counted row by row from the back the way managers name them
 // (4-2-3-1), with wing-backs counted in the defence
-export function shapeName(t: Tactics): string {
-  const shape = shapeOf(t);
+export function shapeName(t: Tactics, possession: Possession = "in"): string {
+  const shape = shapeOf(t, possession);
   const preset = (Object.keys(FORMATIONS) as FormationName[]).find((f) => sameSpots(FORMATIONS[f], shape));
   if (preset) return preset;
   const rows = [0, 0, 0, 0, 0];
@@ -91,12 +101,14 @@ export function shapeName(t: Tactics): string {
   return rows.filter((n) => n > 0).join("-");
 }
 
-// Moves a position on the board, keeping the player who was there: LM up to LW, say.
+// Moves a position on one of the boards, keeping the player who was there: LM up to LW, say.
+// Moving an in-possession position leaves the player's out-of-possession position where it was.
 // The keeper stays in goal.
-export function moveSpot(t: Tactics, from: Spot, to: Spot): Tactics {
-  const shape = shapeOf(t);
+export function moveSpot(t: Tactics, from: Spot, to: Spot, possession: Possession = "in"): Tactics {
+  const shape = shapeOf(t, possession);
   if (from === "GK" || to === "GK" || !shape.includes(from) || shape.includes(to)) return t;
-  return { ...t, shape: shape.map((s) => (s === from ? to : s)) };
+  const moved = shape.map((s) => (s === from ? to : s));
+  return possession === "in" ? { ...t, shape: moved } : { ...t, shape: shapeOf(t), outOfPossession: moved };
 }
 
 const LINE_ORDER: Position[] = ["DEF", "MID", "FWD"];
