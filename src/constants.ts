@@ -28,7 +28,11 @@ export const SETTLING_SPEED = 1;
 export const GOAL_WIDTH = 7.32;
 export const CROSSBAR_HEIGHT = 2.44;
 
-export const MAX_SHOT_SPEED = 30;
+export const BALL_RADIUS = 0.11;
+export const LOWEST_BOOT_CONTACT = 0.03;
+export const MAX_RELEASE_ANGLE = Math.asin((BALL_RADIUS - LOWEST_BOOT_CONTACT) / BALL_RADIUS);
+export const WEAKEST_STRIKE_SPEED = 22;
+export const STRONGEST_STRIKE_SPEED = 32;
 export const WORST_SHOOTING_GRADE = 1;
 export const BEST_SHOOTING_GRADE = 20;
 export const WORST_SHOOTING_SPREAD = 0.08;

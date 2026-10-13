@@ -5,12 +5,18 @@ import {
   BEST_SHOOTING_GRADE,
   CROSSBAR_HEIGHT,
   GOAL_WIDTH,
-  MAX_SHOT_SPEED,
   PITCH_LENGTH,
   PITCH_WIDTH,
   WORST_SHOOTING_GRADE,
 } from "../../src/constants";
-import { acrossTheShot, neededShotSpeed, spreadRadius, type Point } from "../../src/shooting";
+import {
+  acrossTheShot,
+  neededStrikeSpeed,
+  releaseAngle,
+  spreadRadius,
+  strikeSpeed,
+  type Point,
+} from "../../src/shooting";
 import { isGoal } from "../../src/systems";
 import { addBall, addPlayer, createGame, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
@@ -23,10 +29,9 @@ const FIRST_AIM: [number, number] = [PITCH_WIDTH / 2 + 2, 1.2];
 const PLAYER_BEHIND_BALL = 0.3;
 const LONGEST_TRAIL = 600;
 const POINTS_ON_CIRCLE = 48;
-const FIRST_POWER = 50;
 
 type Sandbox = ReturnType<typeof runShootingSandbox>;
-type Settings = { grade: number; power: number };
+const DEGREES_PER_RADIAN = 180 / Math.PI;
 
 export function ShootingView() {
   const topDownRef = useRef<HTMLCanvasElement>(null);
@@ -34,7 +39,6 @@ export function ShootingView() {
   const readoutRef = useRef<HTMLParagraphElement>(null);
   const sandbox = useRef<Sandbox>(null);
   const [grade, setGrade] = useState(AVERAGE_SHOOTING_GRADE);
-  const [power, setPower] = useState(FIRST_POWER);
 
   useEffect(() => {
     const running = runShootingSandbox(topDownRef.current!, playerViewRef.current!, readoutRef.current!);
@@ -42,7 +46,7 @@ export function ShootingView() {
     return running.stop;
   }, []);
 
-  useEffect(() => sandbox.current?.change({ grade, power }), [grade, power]);
+  useEffect(() => sandbox.current?.changeGrade(grade), [grade]);
 
   return (
     <div className="shooting">
@@ -74,11 +78,6 @@ export function ShootingView() {
           />
           {grade}
         </label>
-        <label>
-          Power
-          <input type="range" min={0} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} />
-          {power === 0 ? "just enough" : power === 100 ? "full" : `${power}%`}
-        </label>
         <button type="submit">Shoot</button>
         <p ref={readoutRef} />
       </form>
@@ -108,7 +107,7 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
   const playerView = createPlayerView(playerCanvas);
   let spot = FIRST_SPOT;
   let aim = FIRST_AIM;
-  let settings: Settings = { grade: AVERAGE_SHOOTING_GRADE, power: FIRST_POWER };
+  let grade = AVERAGE_SHOOTING_GRADE;
   let trail: Point[] = [];
   let shotTaken = false;
 
@@ -116,11 +115,15 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
   const aimPoint = (): Point => [PITCH_LENGTH, aim[0], aim[1]];
 
   function plannedShot() {
-    const needed = neededShotSpeed(spotPoint(), aimPoint());
-    const least = Math.min(needed, MAX_SHOT_SPEED);
-    const speed = least + (settings.power / 100) * (MAX_SHOT_SPEED - least);
-    const radius = spreadRadius(settings.grade, spotPoint(), aimPoint(), speed);
-    return { needed, speed, radius };
+    const strike = strikeSpeed(grade);
+    const angle = releaseAngle(spotPoint(), aimPoint(), strike);
+    return {
+      strike,
+      angle,
+      ballSpeed: strike * Math.cos(angle),
+      needed: neededStrikeSpeed(spotPoint(), aimPoint()),
+      radius: spreadRadius(grade, spotPoint(), aimPoint()),
+    };
   }
 
   function circleAroundAim(radius: number): Point[] {
@@ -157,8 +160,8 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
 
   function shoot() {
     placeBallOnSpot();
-    Shooting[player] = settings.grade;
-    setShot(world, player, ...aimPoint(), plannedShot().speed);
+    Shooting[player] = grade;
+    setShot(world, player, ...aimPoint());
     shotTaken = true;
   }
 
@@ -173,9 +176,10 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
   }
 
   function describePlan(): string {
-    const { needed, speed, radius } = plannedShot();
-    if (needed > MAX_SHOT_SPEED) return `out of range: needs ${needed.toFixed(1)} m/s, the most is ${MAX_SHOT_SPEED} m/s`;
-    return `needs ${needed.toFixed(1)} m/s, striking at ${speed.toFixed(1)} m/s, circle radius ${radius.toFixed(2)} m`;
+    const { strike, angle, ballSpeed, needed, radius } = plannedShot();
+    const strikes = `strikes at ${strike.toFixed(1)} m/s`;
+    if (needed > strike) return `out of range: ${strikes}, needs ${needed.toFixed(1)} m/s`;
+    return `${strikes} (needs ${needed.toFixed(1)}), released at ${(angle * DEGREES_PER_RADIAN).toFixed(0)}°, ball ${ballSpeed.toFixed(1)} m/s, circle radius ${radius.toFixed(2)} m`;
   }
 
   function describeShot(): string {
@@ -223,8 +227,8 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
 
   return {
     shoot,
-    change(newSettings: Settings) {
-      settings = newSettings;
+    changeGrade(newGrade: number) {
+      grade = newGrade;
     },
     stop() {
       stopFrames();

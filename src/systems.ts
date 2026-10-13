@@ -11,7 +11,6 @@ import {
   DRIBBLE_STOP_DISTANCE,
   GOAL_WIDTH,
   GRAVITY,
-  MAX_SHOT_SPEED,
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   PITCH_LENGTH,
@@ -25,7 +24,7 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
-import { launchVelocity, missAim, spreadRadius, type Point } from "./shooting";
+import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setTarget, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
@@ -192,9 +191,9 @@ function strike(world: Game, ball: number, shooter: number): void {
   const { Position, Velocity, Shot, Shooting } = world.components;
   const from: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
   const aim: Point = [Shot.x[shooter]!, Shot.y[shooter]!, Shot.z[shooter]!];
-  const speed = Math.min(Shot.speed[shooter]!, MAX_SHOT_SPEED);
-  const radius = spreadRadius(Shooting[shooter]!, from, aim, speed);
-  const [vx, vy, vz] = launchVelocity(from, missAim(from, aim, radius, world.random), speed);
+  const grade = Shooting[shooter]!;
+  const radius = spreadRadius(grade, from, aim);
+  const [vx, vy, vz] = kick(from, missAim(from, aim, radius, world.random), strikeSpeed(grade));
   Velocity.x[ball] = vx;
   Velocity.y[ball] = vy;
   Velocity.z[ball] = vz;

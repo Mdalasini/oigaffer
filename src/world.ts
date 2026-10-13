@@ -20,7 +20,7 @@ export function createGame(seed = 1) {
         arrivalFacing: [] as number[],
       },
       Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
-      Shot: { x: [] as number[], y: [] as number[], z: [] as number[], speed: [] as number[] },
+      Shot: { x: [] as number[], y: [] as number[], z: [] as number[] },
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
       Ball: {},
     },
@@ -89,12 +89,11 @@ export function setDribble(world: Game, eid: number, x: number, y: number): void
   Dribble.nextTouchIn[eid] = 0;
 }
 
-export function setShot(world: Game, eid: number, x: number, y: number, z: number, speed: number): void {
+export function setShot(world: Game, eid: number, x: number, y: number, z: number): void {
   const { Shot, Dribble } = world.components;
   removeComponent(world, eid, Dribble);
   addComponent(world, eid, Shot);
   Shot.x[eid] = x;
   Shot.y[eid] = y;
   Shot.z[eid] = z;
-  Shot.speed[eid] = speed;
 }
