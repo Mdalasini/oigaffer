@@ -1,6 +1,7 @@
 import { stepBall, type Ball } from "./ball";
 import {
   BALL_FRONT_ANGLE,
+  BEHIND_BALL,
   CONTACT_HEIGHT,
   CONTROL_ERROR_BEST,
   CONTROL_ERROR_WORST,
@@ -220,19 +221,23 @@ export function think(w: World, p: Player): void {
     else dribble(w, p, towardsGoal);
   }
 
-  // Run to meet the ball, arriving as it does rather than early; carrying it is a little slower
+  // Run to meet the ball, arriving as it does rather than early, and get behind it
+  // on the line they want to take it so it stays in their stride. Carrying it is a
+  // little slower than running.
   const mine = last?.playerId === p.id;
   const cap = topSpeed(p) * (mine ? DRIBBLE_TOP_SPEED : 1);
   const meet = intercept(p, ball);
-  const toMeet = sub(meet.point, p.pos);
-  const gap = Math.max(0, length(toMeet) - REACH / 2);
+  const behind = sub(meet.point, fromAngle(angleOf(sub(GOAL_CENTRE, meet.point)), BEHIND_BALL));
+  const toSpot = sub(behind, p.pos);
+  const gap = length(toSpot);
   const speed = Math.min(cap, gap / Math.max(meet.time, PREDICT_STEP));
-  const move = gap === 0 ? { ...ball.vel } : fromAngle(angleOf(toMeet), speed);
+  const settled = gap < BEHIND_BALL / 2;
   const chance = shotOption(p, ball).chance;
   p.intent = {
     action: mine ? "carry" : "go to ball",
-    move,
-    target: meet.point,
+    // In position: keep pace with the ball, facing the way they're going to take it
+    move: settled ? { ...ball.vel } : fromAngle(angleOf(toSpot), speed),
+    target: settled ? { ...GOAL_CENTRE } : behind,
     note: `shot ${Math.round(100 * chance)}% on target`,
   };
 }

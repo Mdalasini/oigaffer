@@ -41,10 +41,11 @@ export const CONTROL_HEAVY_WORST = 0.3; // at firstTouch 1
 
 // Dribbling: the player pushes the ball ahead and runs onto it
 export const DRIBBLE_TOP_SPEED = 0.9; // share of top speed with the ball
-export const DRIBBLE_TOUCH_BASE = 1.8; // m/s: a touch from standing
-export const DRIBBLE_TOUCH_GAIN = 1.15; // ball speed per m/s of the player's speed: the ball runs ahead of them
-export const DRIBBLE_SPEED_UP = 2; // m/s: each touch is weighted for running this much faster, up to carrying speed
+export const DRIBBLE_TOUCH_BASE = 1.0; // m/s: a touch from standing
+export const DRIBBLE_TOUCH_GAIN = 1.1; // ball speed per m/s of the player's speed: the ball runs ahead of them
+export const DRIBBLE_SPEED_UP = 1.5; // m/s: each touch is weighted for running this much faster, up to carrying speed
 export const TOUCH_ROOM = 1.5; // m: a touch stops at least this far short of the lines
+export const BEHIND_BALL = 0.5; // m: a carrier gets this far behind the ball, on the line they want to take it
 export const MAX_TOUCH_TURN = 1.3; // rad (75°): sharpest a touch can turn from where they face
 export const TURN_TOUCH_SOFTEN = 0.6; // a turning touch loses this share of its speed at MAX_TOUCH_TURN
 export const DRIBBLE_ERROR_BEST = 0.04; // rad: direction error of a touch at dribbling 20, standing
