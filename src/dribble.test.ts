@@ -4,7 +4,7 @@ import { MAX_DRIBBLE_TOUCH_SPEED, DRIBBLE_STOP_DISTANCE, TIME_STEP, TOUCH_REACH,
 import { step } from "./systems";
 import { addBall, addPlayer, createGame, setDribble } from "./world";
 
-function dribbleFromTo(player: [number, number], ball: [number, number], to: [number, number]) {
+function dribbleFromTo(player: [number, number], ball: [number, number], to: [number, number], changeOfMind?: { after: number; to: [number, number] }) {
   const world = createGame();
   const { Position, Velocity, Dribble, Target, Facing } = world.components;
   const p = addPlayer(world, ...player);
@@ -15,6 +15,7 @@ function dribbleFromTo(player: [number, number], ball: [number, number], to: [nu
   const facingAtTouches: number[] = [];
   let time = 0;
   while ((hasComponent(world, p, Dribble) || hasComponent(world, p, Target)) && time < 30) {
+    if (changeOfMind && Math.abs(time - changeOfMind.after) < TIME_STEP / 2) setDribble(world, p, ...changeOfMind.to);
     step(world);
     time += TIME_STEP;
     gaps.push(Math.hypot(Position.x[b]! - Position.x[p]!, Position.y[b]! - Position.y[p]!));
@@ -22,7 +23,8 @@ function dribbleFromTo(player: [number, number], ball: [number, number], to: [nu
     if (ballSpeed > (ballSpeeds.at(-1) ?? 0)) facingAtTouches.push(Facing[p]!);
     ballSpeeds.push(ballSpeed);
   }
-  const ballTo = Math.hypot(Position.x[b]! - to[0], Position.y[b]! - to[1]);
+  const finalTo = changeOfMind?.to ?? to;
+  const ballTo = Math.hypot(Position.x[b]! - finalTo[0], Position.y[b]! - finalTo[1]);
   return { time, gaps, ballSpeeds, facingAtTouches, ballTo, ballStill: ballSpeeds.at(-1) === 0, finalGap: gaps.at(-1)! };
 }
 
@@ -72,6 +74,17 @@ describe("a player running with the ball", () => {
 
   test("goes and gets a ball that isn't at their feet first", () => {
     const run = dribbleFromTo([20, 34], [25, 30], [50, 34]);
+    expect(run.ballTo).toBeLessThan(DRIBBLE_STOP_DISTANCE);
+    expect(run.finalGap).toBeLessThanOrEqual(TOUCH_REACH);
+  });
+
+  test.each([
+    ["back the way they came", [20, 34]],
+    ["off to the side", [45, 60]],
+    ["back over their shoulder", [30, 60]],
+  ] as const)("keeps the ball close when they change their mind mid-run and go %s", (_, to) => {
+    const run = dribbleFromTo([20, 34], [20.3, 34], [90, 34], { after: 3, to: [...to] });
+    expect(Math.max(...run.gaps)).toBeLessThan(TOUCH_REACH + 0.2);
     expect(run.ballTo).toBeLessThan(DRIBBLE_STOP_DISTANCE);
     expect(run.finalGap).toBeLessThanOrEqual(TOUCH_REACH);
   });
