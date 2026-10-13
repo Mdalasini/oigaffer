@@ -6,7 +6,7 @@ import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
 import { anchor, keeperPosition, spotSlot } from "./formation";
 import { distToSegment, moveTowards, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
-import { applyTactics, createMatchState, isFullTime, simulateEventMatch, startEventMatch, stepEventMatch } from "./match";
+import { applyTactics, createMatchState, isFullTime, moveSpot, simulateEventMatch, startEventMatch, stepEventMatch, swapPlayers } from "./match";
 import { FORMATIONS, type Spot } from "../tactics";
 import { giveBall, toTeamFrame, type MatchState } from "./state";
 import { assessPass, baseXg, looseBallWinChance } from "./valuation";
@@ -57,6 +57,45 @@ test("4-3-3 lines its players up in their board positions", () => {
   // The holding midfielder sits behind the other two, the wingers behind the centre-forward
   expect(at("CDM").x).toBeLessThan(at("LCM").x);
   expect(at("LW").x).toBeLessThan(at("CF").x);
+});
+
+describe("moving players on the board", () => {
+  const start = () =>
+    createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+      home: fixedManager({ formation: "4-3-3", mentality: 0 }),
+    });
+  const at = (state: MatchState, spot: Spot) => state.players.find((p) => p.side === "home" && p.spot === spot)!;
+
+  test("a position moves with its player, who takes the new position's line", () => {
+    const state = start();
+    const lcm = at(state, "LCM");
+    const rcm = at(state, "RCM");
+    const cdm = at(state, "CDM");
+    expect(moveSpot(state, "home", "LCM", "LDM")).toBe(true);
+    expect(moveSpot(state, "home", "RCM", "RDM")).toBe(true);
+    expect(moveSpot(state, "home", "CDM", "CAM")).toBe(true);
+    expect([lcm.spot, rcm.spot, cdm.spot]).toEqual(["LDM", "RDM", "CAM"]);
+    expect(cdm.slot.x).toBeGreaterThan(lcm.slot.x);
+    expect(state.events.at(-1)).toMatchObject({ type: "tactics", formation: "4-2-3-1" });
+    // A winger dropping into midfield joins the midfield line
+    const lw = at(state, "LW");
+    moveSpot(state, "home", "LW", "LM");
+    expect(lw.position).toBe("MID");
+    // Occupied positions and the keeper can't be moved onto
+    expect(moveSpot(state, "home", "LM", "CF")).toBe(false);
+    expect(moveSpot(state, "home", "LM", "GK")).toBe(false);
+  });
+
+  test("two players trade positions and keep them when the tactics change", () => {
+    const state = start();
+    const lb = at(state, "LB");
+    const cf = at(state, "CF");
+    expect(swapPlayers(state, "home", lb.id, cf.id)).toBe(true);
+    expect([lb.spot, lb.position, cf.spot, cf.position]).toEqual(["CF", "FWD", "LB", "DEF"]);
+    applyTactics(state, "home", { ...state.teams.home.tactics, mentality: 1 });
+    expect([lb.spot, cf.spot]).toEqual(["CF", "LB"]);
+    expect(swapPlayers(state, "home", lb.id, at(state, "GK").id)).toBe(false);
+  });
 });
 
 describe("valuation", () => {

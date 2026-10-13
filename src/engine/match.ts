@@ -4,6 +4,7 @@ import type { Club, GameWorld } from "../model";
 import type { Rng } from "../random";
 import { pickEleven, squadPlayers } from "../squad";
 import { clubStrength } from "../strength";
+import { shapeOf } from "../tactics";
 import { HALF_TIME, HALF_TIME_RECOVERY, MANAGER_INTERVAL, MATCH_SECONDS, MIN_ADDED_MINUTES } from "./constants";
 import { chooseAction } from "./decide";
 import { refreshAttributes } from "./fatigue";
@@ -26,7 +27,7 @@ import {
   type Side,
 } from "./state";
 
-export { applyTactics, requestSub } from "./lineup";
+export { applyTactics, moveSpot, requestSub, swapPlayers } from "./lineup";
 
 export interface EventMatchResult extends MatchResult {
   events: MatchEvent[];
@@ -59,7 +60,7 @@ export function createMatchState(
   const players: MatchPlayer[] = [];
   const offPitch: MatchState["offPitch"] = [];
   for (const side of ["home", "away"] as const) {
-    const eleven = pickEleven(world, clubs[side], teams[side].tactics.formation);
+    const eleven = pickEleven(world, clubs[side], shapeOf(teams[side].tactics));
     eleven.forEach((p, i) => {
       players.push({
         id: p.id,

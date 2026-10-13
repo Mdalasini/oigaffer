@@ -56,13 +56,47 @@ export const FORMATIONS = {
 
 export type FormationName = keyof typeof FORMATIONS;
 
-// How many players a formation puts in a line
-export const lineCount = (formation: FormationName, line: Position): number =>
-  line === "GK" ? 1 : FORMATIONS[formation].filter((s) => SPOTS[s].line === line).length;
+// The ten outfield positions a side plays
+export type Shape = readonly Spot[];
+
+// How many players a shape puts in a line
+export const lineCount = (shape: Shape, line: Position): number =>
+  line === "GK" ? 1 : shape.filter((s) => SPOTS[s].line === line).length;
 
 export interface Tactics {
   formation: FormationName;
   mentality: Mentality;
+  // The manager's own rearrangement of the formation, if they've moved positions on the board
+  shape?: Shape;
+}
+
+export const shapeOf = (t: Tactics): Shape => t.shape ?? FORMATIONS[t.formation];
+
+const sameSpots = (a: Shape, b: Shape) => a.length === b.length && a.every((s) => b.includes(s));
+
+export const sameTactics = (a: Tactics, b: Tactics): boolean =>
+  a.formation === b.formation && a.mentality === b.mentality && sameSpots(shapeOf(a), shapeOf(b));
+
+// A preset's own name, or a custom shape counted row by row from the back the way managers name them
+// (4-2-3-1), with wing-backs counted in the defence
+export function shapeName(t: Tactics): string {
+  const shape = shapeOf(t);
+  const preset = (Object.keys(FORMATIONS) as FormationName[]).find((f) => sameSpots(FORMATIONS[f], shape));
+  if (preset) return preset;
+  const rows = [0, 0, 0, 0, 0];
+  for (const s of shape) {
+    const { row, line } = SPOTS[s];
+    rows[line === "DEF" ? 0 : row - 1]!++;
+  }
+  return rows.filter((n) => n > 0).join("-");
+}
+
+// Moves a position on the board, keeping the player who was there: LM up to LW, say.
+// The keeper stays in goal.
+export function moveSpot(t: Tactics, from: Spot, to: Spot): Tactics {
+  const shape = shapeOf(t);
+  if (from === "GK" || to === "GK" || !shape.includes(from) || shape.includes(to)) return t;
+  return { ...t, shape: shape.map((s) => (s === from ? to : s)) };
 }
 
 const LINE_ORDER: Position[] = ["DEF", "MID", "FWD"];
@@ -76,11 +110,11 @@ export interface LineupPlayer {
   attributes: Attributes;
 }
 
-// Fits the outfield players into a formation with as little reshuffling as possible:
+// Fits the outfield players into a shape with as little reshuffling as possible:
 // line them up from back to front (current line first, then attacking lean) and
 // cut that queue into the new line sizes. Going 4-4-2 → 3-4-3 moves the most
 // attacking defender into midfield and the most attacking midfielder up front.
-export function assignRoles(players: LineupPlayer[], formation: FormationName): Map<Id, Position> {
+export function assignRoles(players: LineupPlayer[], shape: Shape): Map<Id, Position> {
   const roles = new Map<Id, Position>();
   const keeper =
     players.find((p) => p.role === "GK") ??
@@ -97,7 +131,7 @@ export function assignRoles(players: LineupPlayer[], formation: FormationName): 
 
   let i = 0;
   for (const line of LINE_ORDER) {
-    const count = lineCount(formation, line);
+    const count = lineCount(shape, line);
     for (let n = 0; n < count && i < outfield.length; n++) roles.set(outfield[i++]!.id, line);
   }
   // Short or long squads: anyone left over joins the front line

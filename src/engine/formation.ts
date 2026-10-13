@@ -1,5 +1,5 @@
 import type { Position } from "../model";
-import { FORMATIONS, SPOTS, type FormationName, type Spot } from "../tactics";
+import { SPOTS, type Shape, type Spot } from "../tactics";
 import {
   ATTACK_PUSH,
   ATTACK_WIDTH,
@@ -66,21 +66,24 @@ const LINES: Position[] = ["GK", "DEF", "MID", "FWD"];
 // The position given to a lone player in a line the formation leaves empty
 const LINE_SPOT: Record<Position, Spot> = { GK: "GK", DEF: "CB", MID: "CM", FWD: "CF" };
 
-// Gives each player the slot of a position in the formation for their line.
-// Players keep their left-to-right order, so nobody crosses the pitch to a new slot.
+// Gives each player the slot of a position in the shape for their line.
+// Players keep a position the shape still has (the manager may have put them there), unless
+// the side is reshuffling into a new formation. Everyone else takes the free positions in
+// left-to-right order, so nobody crosses the pitch to a new slot.
 // A line that is short (after a red card) spreads out evenly at the line's depth instead.
-export function arrangeSide(state: MatchState, side: Side, formation: FormationName): void {
-  const spots: Spot[] = ["GK", ...FORMATIONS[formation]];
+export function arrangeSide(state: MatchState, side: Side, shape: Shape, reshuffle = false): void {
+  const spots: Spot[] = ["GK", ...shape];
   const team = state.players.filter((p) => p.side === side).sort((a, b) => a.slot.y - b.slot.y);
   for (const line of LINES) {
     const players = team.filter((p) => p.position === line);
     const lineSpots = spots.filter((s) => SPOTS[s].line === line).sort((a, b) => SPOTS[a].col - SPOTS[b].col);
     const slots = lineSpots.map((s) => spotSlot(s, spots));
     if (players.length === lineSpots.length) {
-      players.forEach((p, i) => {
-        p.spot = lineSpots[i]!;
-        p.slot = slots[i]!;
-      });
+      const taken = new Set<Spot>();
+      const staying = reshuffle ? [] : players.filter((p) => lineSpots.includes(p.spot) && !taken.has(p.spot) && taken.add(p.spot));
+      const free = lineSpots.filter((s) => !taken.has(s));
+      players.filter((p) => !staying.includes(p)).forEach((p, i) => (p.spot = free[i]!));
+      for (const p of players) p.slot = slots[lineSpots.indexOf(p.spot)]!;
       continue;
     }
     const x = slots.length > 0 ? slots.reduce((sum, s) => sum + s.x, 0) / slots.length : ROW_X[SPOTS[LINE_SPOT[line]].row]!;

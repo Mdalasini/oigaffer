@@ -1,6 +1,6 @@
 import type { Id, Position } from "../model";
 import { lineRating } from "../squad";
-import { assignRoles, type Tactics } from "../tactics";
+import { assignRoles, moveSpot as moveSpotOnBoard, sameTactics, shapeName, shapeOf, SPOTS, type Spot, type Tactics } from "../tactics";
 import { ADDED, MAX_SUBS } from "./constants";
 import { arrangeSide } from "./formation";
 import { CENTRE } from "./geometry";
@@ -8,30 +8,74 @@ import { emit, nearest, opponent, type MatchPlayer, type MatchState, type OffPit
 
 const onSide = (state: MatchState, side: Side) => state.players.filter((p) => p.side === side);
 
-// Fits whoever is on the pitch into the formation, logging who moved
-function fitRoles(state: MatchState, side: Side, tactics: Tactics) {
+type Moves = { playerId: Id; from: Position; to: Position }[];
+
+// Fits whoever is on the pitch into the shape, logging who moved.
+// Players keep their positions once the manager has arranged the board themselves;
+// otherwise each line is re-sorted left to right.
+function fitRoles(state: MatchState, side: Side, tactics: Tactics, reshuffle = !tactics.shape) {
   const team = onSide(state, side);
   const roles = assignRoles(
     team.map((p) => ({ id: p.id, role: p.position, attributes: p.base })),
-    tactics.formation,
+    shapeOf(tactics),
   );
-  const moved: { playerId: Id; from: Position; to: Position }[] = [];
+  const moved: Moves = [];
   for (const p of team) {
     const role = roles.get(p.id)!;
     if (role !== p.position) moved.push({ playerId: p.id, from: p.position, to: role });
     p.position = role;
   }
-  arrangeSide(state, side, tactics.formation);
+  arrangeSide(state, side, shapeOf(tactics), reshuffle);
   return moved;
+}
+
+function announce(state: MatchState, side: Side, moved: Moves): void {
+  const { tactics } = state.teams[side];
+  emit(state, { type: "tactics", side, formation: shapeName(tactics), mentality: tactics.mentality, moved });
 }
 
 // Switches a side to new tactics, moving players between lines if the formation changed
 export function applyTactics(state: MatchState, side: Side, tactics: Tactics, force = false): void {
   const current = state.teams[side].tactics;
-  if (!force && current.formation === tactics.formation && current.mentality === tactics.mentality) return;
-  const moved = fitRoles(state, side, tactics);
+  if (!force && sameTactics(current, tactics)) return;
+  const moved = fitRoles(state, side, tactics, force || !tactics.shape);
   state.teams[side].tactics = tactics;
-  emit(state, { type: "tactics", side, formation: tactics.formation, mentality: tactics.mentality, moved });
+  announce(state, side, moved);
+}
+
+// The manager moves a position on the board, and whoever played there goes with it
+export function moveSpot(state: MatchState, side: Side, from: Spot, to: Spot): boolean {
+  const tactics = moveSpotOnBoard(state.teams[side].tactics, from, to);
+  if (tactics === state.teams[side].tactics) return false;
+  const moved: Moves = [];
+  for (const p of onSide(state, side).filter((p) => p.spot === from)) {
+    const line = SPOTS[to].line;
+    if (line !== p.position) moved.push({ playerId: p.id, from: p.position, to: line });
+    p.spot = to;
+    p.position = line;
+  }
+  state.teams[side].tactics = tactics;
+  arrangeSide(state, side, shapeOf(tactics));
+  announce(state, side, moved);
+  return true;
+}
+
+// Two outfield players trade positions on the board
+export function swapPlayers(state: MatchState, side: Side, aId: Id, bId: Id): boolean {
+  const a = onSide(state, side).find((p) => p.id === aId);
+  const b = onSide(state, side).find((p) => p.id === bId);
+  if (!a || !b || a === b || a.position === "GK" || b.position === "GK") return false;
+  const moved: Moves = a.position === b.position ? [] : [
+    { playerId: a.id, from: a.position, to: b.position },
+    { playerId: b.id, from: b.position, to: a.position },
+  ];
+  [a.spot, b.spot] = [b.spot, a.spot];
+  [a.position, b.position] = [b.position, a.position];
+  const team = state.teams[side];
+  team.tactics = { ...team.tactics, shape: shapeOf(team.tactics) };
+  arrangeSide(state, side, team.tactics.shape!);
+  announce(state, side, moved);
+  return true;
 }
 
 function takeOff(state: MatchState, p: MatchPlayer, reason: OffPitch["reason"]): void {
@@ -145,7 +189,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
   if (on.natural === "GK" && standIn && standIn !== incoming) {
     standIn.position = incoming.position;
     incoming.position = "GK";
-    arrangeSide(state, side, state.teams[side].tactics.formation);
+    arrangeSide(state, side, shapeOf(state.teams[side].tactics));
   }
 
   state.teams[side].subsUsed++;

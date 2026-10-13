@@ -152,7 +152,6 @@ legend {
 }
 
 .board {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 5px;
@@ -174,12 +173,38 @@ legend {
   font-weight: 600;
   font-size: 14px;
   letter-spacing: 0.04em;
+  min-width: 0;
+}
+
+.spot .who {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--body);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.spot:disabled {
+  opacity: 1;
 }
 
 .spot.used {
   border-color: var(--us);
   background: var(--us);
   color: var(--grass-deep);
+}
+
+.spot[aria-pressed="true"] {
+  border-color: var(--chalk);
+  background: var(--chalk);
+  color: var(--grass-deep);
+}
+
+.positions .note {
+  margin-top: 6px;
 }
 
 .scale {

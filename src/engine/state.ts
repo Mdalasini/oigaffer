@@ -2,7 +2,7 @@ import type { Manager } from "../manager";
 import type { DebugHook } from "./debug";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
-import type { FormationName, Mentality, Spot, Tactics } from "../tactics";
+import type { Mentality, Spot, Tactics } from "../tactics";
 import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
 import { dist, distSq, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, type Vec } from "./geometry";
@@ -108,7 +108,7 @@ export type MatchEvent = { time: number; period: Period; clock: number; side: Si
   | { type: "clearance"; playerId: Id }
   | { type: "shot"; playerId: Id; xg: number; outcome: ShotOutcome; keeperId?: Id; kind: ShotKind }
   | { type: "recovery"; playerId: Id }
-  | { type: "tactics"; formation: FormationName; mentality: Mentality; moved: { playerId: Id; from: Position; to: Position }[] }
+  | { type: "tactics"; formation: string; mentality: Mentality; moved: { playerId: Id; from: Position; to: Position }[] }
   // side: the team that crossed
   | { type: "cross"; playerId: Id; targetId: Id; outcome: "blocked" | "overhit" | "claimed" | "cleared" | "won" }
   // side: the team that committed it
