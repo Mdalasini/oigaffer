@@ -47,6 +47,17 @@ describe("an attacker through on goal", () => {
     expect(crossesAt).toBeGreaterThan(GOAL_CENTRE + 1);
   });
 
+  test("shoots at once when the keeper is caught out of position", () => {
+    const start: [number, number] = [PITCH_LENGTH - 16, GOAL_CENTRE];
+    const { struckFrom } = oneOnOne(start, [PITCH_LENGTH - 1, GOAL_CENTRE - 6]);
+    expect(Math.hypot(struckFrom![0] - start[0], struckFrom![1] - start[1])).toBeLessThan(1);
+  });
+
+  test("gets the shot away before the keeper can come and smother it", () => {
+    const { struckFrom } = oneOnOne([PITCH_LENGTH - 25, GOAL_CENTRE], [PITCH_LENGTH, GOAL_CENTRE]);
+    expect(struckFrom).not.toBeNull();
+  });
+
   test("into an empty goal, shoots as soon as they can't miss", () => {
     const { struckFrom } = oneOnOne([PITCH_LENGTH - 30, GOAL_CENTRE], null);
     expect(PITCH_LENGTH - struckFrom![0]).toBeGreaterThan(20);

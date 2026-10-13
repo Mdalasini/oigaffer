@@ -42,13 +42,15 @@ function flightToGoal(from: Point, velocity: Point, dt: number): StraightFlight 
   return goalAt && isGoal(goalAt[1], goalAt[2]) ? flight : null;
 }
 
-let lastWorkedOut: { from: Point; grade: number; dt: number; options: ShotOption[] } | null = null;
+const REMEMBERED_SHOTS = 4;
+const recentlyWorkedOut: { from: Point; grade: number; dt: number; options: ShotOption[] }[] = [];
 
 const isSameShot = (a: { from: Point; grade: number; dt: number }, from: Point, grade: number, dt: number) =>
   a.from.every((value, i) => value === from[i]) && a.grade === grade && a.dt === dt;
 
 export function shotOptions(from: Point, grade: number, dt = TIME_STEP): ShotOption[] {
-  if (lastWorkedOut && isSameShot(lastWorkedOut, from, grade, dt)) return lastWorkedOut.options;
+  const remembered = recentlyWorkedOut.find((shot) => isSameShot(shot, from, grade, dt));
+  if (remembered) return remembered.options;
   const strike = strikeSpeed(grade);
   const options = goalAims()
     .map((aim) => {
@@ -57,7 +59,8 @@ export function shotOptions(from: Point, grade: number, dt = TIME_STEP): ShotOpt
       return { aim, misses, scoring };
     })
     .sort((a, b) => b.scoring.length - a.scoring.length);
-  lastWorkedOut = { from: [...from], grade, dt, options };
+  recentlyWorkedOut.unshift({ from: [...from], grade, dt, options });
+  recentlyWorkedOut.length = Math.min(recentlyWorkedOut.length, REMEMBERED_SHOTS);
   return options;
 }
 

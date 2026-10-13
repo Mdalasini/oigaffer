@@ -31,6 +31,8 @@ const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from
 
 const facesAnyWay = (facing: number) => Number.isNaN(facing);
 
+const pointOf = (part: { x: number[]; y: number[]; z: number[] }, eid: number): Point => [part.x[eid]!, part.y[eid]!, part.z[eid]!];
+
 const stoppingSpeed = (distance: number, braking: number) => Math.sqrt(2 * braking * Math.max(0, distance));
 
 function turnTowards(facing: number, heading: number, maxTurn: number): number {
@@ -127,13 +129,15 @@ function touchAwayFromPlayer(world: Game, eid: number, ball: number, wantX: numb
   Velocity.y[ball] = Velocity.y[eid]! + awayY * share;
 }
 
-function directionFromBall(world: Game, ball: number, toX: number, toY: number) {
-  const { Position } = world.components;
-  const dx = toX - Position.x[ball]!;
-  const dy = toY - Position.y[ball]!;
+function directionTo(from: Point, toX: number, toY: number) {
+  const dx = toX - from[0];
+  const dy = toY - from[1];
   const distance = Math.hypot(dx, dy);
   return { distance, onwardX: distance > 0 ? dx / distance : 0, onwardY: distance > 0 ? dy / distance : 0 };
 }
+
+const directionFromBall = (world: Game, ball: number, toX: number, toY: number) =>
+  directionTo(pointOf(world.components.Position, ball), toX, toY);
 
 function whereBallIs(world: Game, eid: number, ball: number, onwardX: number, onwardY: number) {
   const { Position, Facing } = world.components;
@@ -212,16 +216,33 @@ export function shoot(world: Game): void {
   }
 }
 
-const pointOf = (part: { x: number[]; y: number[]; z: number[] }, eid: number): Point => [part.x[eid]!, part.y[eid]!, part.z[eid]!];
-
 function keeperPosition(world: Game): Keeper | null {
   const { Position, Goalkeeper } = world.components;
   const keeper = query(world, [Position, Goalkeeper])[0];
   return keeper === undefined ? null : [Position.x[keeper]!, Position.y[keeper]!];
 }
 
+function isOnTheBall(world: Game, eid: number, ball: number, dt: number): boolean {
+  const { Position, Dribble } = world.components;
+  const ready = !hasComponent(world, eid, Dribble) || Dribble.nextTouchIn[eid]! <= dt;
+  return ready && Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!) <= TOUCH_REACH;
+}
+
+function bestChanceFurtherOn(from: Point, grade: number, keeper: Keeper | null, dt: number): number {
+  const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
+  const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
+  let best = 0;
+  for (let carried = touch; carried < distance; carried += touch) {
+    const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
+    const options = shotOptions(next, grade, dt);
+    const setKeeper = keeper && (whereToStand(next, options, keeper, dt) ?? keeper);
+    best = Math.max(best, bestShot(options, setKeeper, dt).chance);
+  }
+  return best;
+}
+
 export function attack(world: Game, dt: number): void {
-  const { Position, Shooting, Attacking, Struck, Held, Shot, Ball } = world.components;
+  const { Position, Shooting, Attacking, Struck, Held, Shot, Dribble, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Shooting, Attacking])) {
@@ -229,14 +250,15 @@ export function attack(world: Game, dt: number): void {
       removeComponent(world, eid, Attacking);
       continue;
     }
-    if (hasComponent(world, eid, Shot)) continue;
-    const { aim, chance } = bestShot(shotOptions(pointOf(Position, ball), Shooting[eid]!, dt), keeperPosition(world), dt);
-    if (chance === 1 || chance < Attacking.bestChance[eid]!) {
-      setShot(world, eid, ...aim);
-      continue;
-    }
-    Attacking.bestChance[eid] = chance;
-    if (!hasComponent(world, eid, world.components.Dribble)) setDribble(world, eid, PITCH_LENGTH, GOAL_CENTRE);
+    if (hasComponent(world, eid, Shot) || !isOnTheBall(world, eid, ball, dt)) continue;
+    const from = pointOf(Position, ball);
+    const keeper = keeperPosition(world);
+    const now = bestShot(shotOptions(from, Shooting[eid]!, dt), keeper, dt);
+    const later = bestChanceFurtherOn(from, Shooting[eid]!, keeper, dt);
+    Attacking.chance[eid] = now.chance;
+    Attacking.bestChanceFurtherOn[eid] = later;
+    if (now.chance === 1 || (now.chance > 0 && now.chance >= later)) setShot(world, eid, ...now.aim);
+    else if (!hasComponent(world, eid, Dribble)) setDribble(world, eid, PITCH_LENGTH, GOAL_CENTRE);
   }
 }
 
