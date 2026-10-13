@@ -8,7 +8,7 @@ Conventions for anyone changing this repo, people and agents alike.
 bun install          # install dev dependencies
 bun test             # run the tests
 bun run typecheck    # tsc --noEmit (strict, noUncheckedIndexedAccess)
-bun run sandbox      # click-to-run viewer at http://localhost:3000
+bun run sandbox      # click-to-dribble viewer at http://localhost:3000
 ```
 
 Run `bun test` and `bun run typecheck` before every commit.
