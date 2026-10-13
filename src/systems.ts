@@ -8,13 +8,13 @@ import {
   DRIBBLE_DISTANCE_BEHIND_BALL,
   DRIBBLE_STOP_DISTANCE,
   MAX_DRIBBLE_TOUCH_SPEED,
+  MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   SIDEWAYS_SPEED,
   STANDING_SPEED,
   TIME_STEP,
   TOP_SPEED,
   TOUCH_INTERVAL,
   TOUCH_REACH,
-  TOUCH_SPEED_ABOVE_RUNNING,
   TURN_RATE,
 } from "./constants";
 import { setTarget, type Game } from "./world";
@@ -101,13 +101,22 @@ export function runToTarget(world: Game, dt: number): void {
   }
 }
 
-function dribbleTouchSpeed(runningSpeed: number, distanceLeft: number): number {
+function dribbleTouchSpeed(distanceLeft: number): number {
   return Math.min(
-    Math.max(0, runningSpeed) + TOUCH_SPEED_ABOVE_RUNNING,
     MAX_DRIBBLE_TOUCH_SPEED,
     stoppingSpeed(distanceLeft, DRIBBLE_BRAKING),
     distanceLeft / TOUCH_INTERVAL,
   );
+}
+
+function touchAwayFromPlayer(world: Game, eid: number, ball: number, wantX: number, wantY: number): void {
+  const { Velocity } = world.components;
+  const awayX = wantX - Velocity.x[eid]!;
+  const awayY = wantY - Velocity.y[eid]!;
+  const away = Math.hypot(awayX, awayY);
+  const share = away > MAX_TOUCH_SPEED_AWAY_FROM_PLAYER ? MAX_TOUCH_SPEED_AWAY_FROM_PLAYER / away : 1;
+  Velocity.x[ball] = Velocity.x[eid]! + awayX * share;
+  Velocity.y[ball] = Velocity.y[eid]! + awayY * share;
 }
 
 export function dribble(world: Game, dt: number): void {
@@ -134,11 +143,14 @@ export function dribble(world: Game, dt: number): void {
 
     if (withinReach && ready && ballInFront && (ballOnTheWay || arrived)) {
       Dribble.nextTouchIn[eid] = TOUCH_INTERVAL;
-      const runningSpeed = Velocity.x[eid]! * onwardX + Velocity.y[eid]! * onwardY;
-      const touchSpeed = arrived ? 0 : dribbleTouchSpeed(runningSpeed, distanceLeft);
-      Velocity.x[ball] = onwardX * touchSpeed;
-      Velocity.y[ball] = onwardY * touchSpeed;
-      if (arrived) removeComponent(world, eid, Dribble);
+      if (arrived) {
+        Velocity.x[ball] = 0;
+        Velocity.y[ball] = 0;
+        removeComponent(world, eid, Dribble);
+      } else {
+        const touchSpeed = dribbleTouchSpeed(distanceLeft);
+        touchAwayFromPlayer(world, eid, ball, onwardX * touchSpeed, onwardY * touchSpeed);
+      }
     }
 
     setTarget(

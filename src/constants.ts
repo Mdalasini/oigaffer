@@ -15,7 +15,7 @@ export const BALL_ROLLING_DECELERATION = 1;
 
 export const TOUCH_REACH = 0.6;
 export const TOUCH_INTERVAL = 0.3;
-export const TOUCH_SPEED_ABOVE_RUNNING = 1;
+export const MAX_TOUCH_SPEED_AWAY_FROM_PLAYER = 1;
 export const MAX_DRIBBLE_TOUCH_SPEED = 7;
 export const DRIBBLE_BRAKING = 3;
 export const DRIBBLE_DISTANCE_BEHIND_BALL = 0.3;
