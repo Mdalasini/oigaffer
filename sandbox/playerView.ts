@@ -1,4 +1,5 @@
 import { CROSSBAR_HEIGHT, GOAL_WIDTH, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
+import type { Point } from "../src/shooting";
 import { COLOURS } from "./topDown";
 
 const EYE_HEIGHT = 1.7;
@@ -13,7 +14,6 @@ const GOAL_AREA = { depth: 5.5, width: 18.32 };
 
 const SKY = "#0c2234";
 
-type Point = [x: number, y: number, z: number];
 
 export function createPlayerView(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext("2d")!;
@@ -116,8 +116,14 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     line([PITCH_LENGTH, near, CROSSBAR_HEIGHT], [PITCH_LENGTH, far, CROSSBAR_HEIGHT]);
   }
 
-  function drawAim(y: number, z: number) {
-    const [x, screenY, depth] = project([PITCH_LENGTH, y, z]);
+  function drawCircle(points: Point[]) {
+    ctx.strokeStyle = COLOURS.aim;
+    ctx.lineWidth = devicePixelRatio;
+    points.forEach((point, i) => line(point, points[(i + 1) % points.length]!));
+  }
+
+  function drawAim([aimX, y, z]: Point) {
+    const [x, screenY, depth] = project([aimX, y, z]);
     if (depth < NEAREST_VISIBLE) return;
     const half = 6 * devicePixelRatio;
     ctx.strokeStyle = COLOURS.aim;
@@ -155,11 +161,12 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ctx.fill();
   }
 
-  function draw(ball: Point, trail: Point[], aim: [number, number]) {
+  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[]) {
     drawGround();
     drawGoal();
     drawTrail(trail);
-    drawAim(...aim);
+    drawCircle(circle);
+    drawAim(aim);
     drawBall(ball);
   }
 

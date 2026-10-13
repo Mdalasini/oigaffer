@@ -1,8 +1,18 @@
 import { hasComponent, removeComponent } from "bitecs";
 import { useEffect, useRef, useState } from "react";
-import { CROSSBAR_HEIGHT, GOAL_WIDTH, PITCH_LENGTH, PITCH_WIDTH } from "../../src/constants";
+import {
+  AVERAGE_SHOOTING_GRADE,
+  BEST_SHOOTING_GRADE,
+  CROSSBAR_HEIGHT,
+  GOAL_WIDTH,
+  MAX_SHOT_SPEED,
+  PITCH_LENGTH,
+  PITCH_WIDTH,
+  WORST_SHOOTING_GRADE,
+} from "../../src/constants";
+import { acrossTheShot, neededShotSpeed, spreadRadius, type Point } from "../../src/shooting";
 import { isGoal } from "../../src/systems";
-import { addBall, addPlayer, createGame, setShot, ShotType } from "../../src/world";
+import { addBall, addPlayer, createGame, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
 import { COLOURS, createTopDown } from "../topDown";
@@ -12,27 +22,27 @@ const FIRST_SPOT: [number, number] = [88, PITCH_WIDTH / 2 - 4];
 const FIRST_AIM: [number, number] = [PITCH_WIDTH / 2 + 2, 1.2];
 const PLAYER_BEHIND_BALL = 0.3;
 const LONGEST_TRAIL = 600;
-const SHOT_TYPES = [
-  ["Ground", ShotType.Ground],
-  ["Driven", ShotType.Driven],
-  ["Chipped", ShotType.Chipped],
-] as const;
+const POINTS_ON_CIRCLE = 48;
+const FIRST_POWER = 50;
 
 type Sandbox = ReturnType<typeof runShootingSandbox>;
+type Settings = { grade: number; power: number };
 
 export function ShootingView() {
   const topDownRef = useRef<HTMLCanvasElement>(null);
   const playerViewRef = useRef<HTMLCanvasElement>(null);
   const readoutRef = useRef<HTMLParagraphElement>(null);
   const sandbox = useRef<Sandbox>(null);
-  const [type, setType] = useState<ShotType>(ShotType.Driven);
-  const [speed, setSpeed] = useState(25);
+  const [grade, setGrade] = useState(AVERAGE_SHOOTING_GRADE);
+  const [power, setPower] = useState(FIRST_POWER);
 
   useEffect(() => {
     const running = runShootingSandbox(topDownRef.current!, playerViewRef.current!, readoutRef.current!);
     sandbox.current = running;
     return running.stop;
   }, []);
+
+  useEffect(() => sandbox.current?.change({ grade, power }), [grade, power]);
 
   return (
     <div className="shooting">
@@ -50,19 +60,24 @@ export function ShootingView() {
         className="controls"
         onSubmit={(e) => {
           e.preventDefault();
-          sandbox.current?.shoot(type, speed);
+          sandbox.current?.shoot();
         }}
       >
-        {SHOT_TYPES.map(([label, value]) => (
-          <label key={value}>
-            <input type="radio" name="type" checked={type === value} onChange={() => setType(value)} />
-            {label}
-          </label>
-        ))}
+        <label>
+          Shooting grade
+          <input
+            type="range"
+            min={WORST_SHOOTING_GRADE}
+            max={BEST_SHOOTING_GRADE}
+            value={grade}
+            onChange={(e) => setGrade(Number(e.target.value))}
+          />
+          {grade}
+        </label>
         <label>
           Power
-          <input type="range" min={5} max={35} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
-          {speed} m/s
+          <input type="range" min={0} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} />
+          {power === 0 ? "just enough" : power === 100 ? "full" : `${power}%`}
         </label>
         <button type="submit">Shoot</button>
         <p ref={readoutRef} />
@@ -86,15 +101,37 @@ function describeCrossing(y: number, z: number): string {
 
 function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvasElement, readout: HTMLElement) {
   const world = createGame();
-  const { Position, Velocity, Facing, Shot, Target, GoalLineCrossing } = world.components;
+  const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing } = world.components;
   const player = addPlayer(world, 0, 0);
   const ball = addBall(world, 0, 0);
   const topDown = createTopDown(topDownCanvas, ATTACKING_END);
   const playerView = createPlayerView(playerCanvas);
   let spot = FIRST_SPOT;
   let aim = FIRST_AIM;
-  let trail: [number, number, number][] = [];
+  let settings: Settings = { grade: AVERAGE_SHOOTING_GRADE, power: FIRST_POWER };
+  let trail: Point[] = [];
   let shotTaken = false;
+
+  const spotPoint = (): Point => [spot[0], spot[1], 0];
+  const aimPoint = (): Point => [PITCH_LENGTH, aim[0], aim[1]];
+
+  function plannedShot() {
+    const needed = neededShotSpeed(spotPoint(), aimPoint());
+    const least = Math.min(needed, MAX_SHOT_SPEED);
+    const speed = least + (settings.power / 100) * (MAX_SHOT_SPEED - least);
+    const radius = spreadRadius(settings.grade, spotPoint(), aimPoint(), speed);
+    return { needed, speed, radius };
+  }
+
+  function circleAroundAim(radius: number): Point[] {
+    const [acrossX, acrossY] = acrossTheShot(spotPoint(), aimPoint());
+    const [x, y, z] = aimPoint();
+    return Array.from({ length: POINTS_ON_CIRCLE }, (_, i) => {
+      const angle = (i / POINTS_ON_CIRCLE) * 2 * Math.PI;
+      const across = radius * Math.cos(angle);
+      return [x + acrossX * across, y + acrossY * across, z + radius * Math.sin(angle)];
+    });
+  }
 
   function placeBallOnSpot() {
     const [x, y] = spot;
@@ -118,9 +155,10 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     playerView.standBehind(x, y);
   }
 
-  function shoot(type: ShotType, speed: number) {
+  function shoot() {
     placeBallOnSpot();
-    setShot(world, player, PITCH_LENGTH, aim[0], aim[1], speed, type);
+    Shooting[player] = settings.grade;
+    setShot(world, player, ...aimPoint(), plannedShot().speed);
     shotTaken = true;
   }
 
@@ -134,12 +172,18 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     if (!shotTaken) placeBallOnSpot();
   }
 
-  function describe(): string {
+  function describePlan(): string {
+    const { needed, speed, radius } = plannedShot();
+    if (needed > MAX_SHOT_SPEED) return `out of range: needs ${needed.toFixed(1)} m/s, the most is ${MAX_SHOT_SPEED} m/s`;
+    return `needs ${needed.toFixed(1)} m/s, striking at ${speed.toFixed(1)} m/s, circle radius ${radius.toFixed(2)} m`;
+  }
+
+  function describeShot(): string {
     if (hasComponent(world, ball, GoalLineCrossing)) return describeCrossing(GoalLineCrossing.y[ball]!, GoalLineCrossing.z[ball]!);
     if (hasComponent(world, player, Shot)) return "Running up…";
     const speed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!, Velocity.z[ball]!);
     if (shotTaken && speed === 0) return "Fell short";
-    if (shotTaken) return `ball ${speed.toFixed(1)} m/s, ${Position.z[ball]!.toFixed(1)} m up`;
+    if (shotTaken) return `Ball ${speed.toFixed(1)} m/s, ${Position.z[ball]!.toFixed(1)} m up`;
     return `Aiming ${describePoint(...aim)}`;
   }
 
@@ -155,14 +199,14 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
 
   function draw() {
     holdBallWhereItCrossed();
-    const ballAt: [number, number, number] = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
+    const ballAt: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
     if (shotTaken && !hasComponent(world, player, Shot) && trail.length < LONGEST_TRAIL) trail.push(ballAt);
     topDown.drawPitch();
     topDown.drawLine(spot[0], spot[1], PITCH_LENGTH, aim[0], COLOURS.aim);
     topDown.drawPlayer(Position.x[player]!, Position.y[player]!, Facing[player]!);
     topDown.drawBall(...ballAt);
-    playerView.draw(ballAt, trail, aim);
-    readout.textContent = describe();
+    playerView.draw(ballAt, trail, aimPoint(), circleAroundAim(plannedShot().radius));
+    readout.textContent = `${describeShot()} — ${describePlan()}`;
   }
 
   function fit() {
@@ -179,6 +223,9 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
 
   return {
     shoot,
+    change(newSettings: Settings) {
+      settings = newSettings;
+    },
     stop() {
       stopFrames();
       removeEventListener("resize", fit);

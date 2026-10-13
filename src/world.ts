@@ -1,16 +1,17 @@
 import { addComponent, addEntity, createWorld, removeComponent } from "bitecs";
+import { AVERAGE_SHOOTING_GRADE } from "./constants";
+import { seededRandom } from "./random";
 
 export const ANY_FACING = NaN;
 
-export const ShotType = { Ground: 0, Driven: 1, Chipped: 2 } as const;
-export type ShotType = (typeof ShotType)[keyof typeof ShotType];
-
-export function createGame() {
+export function createGame(seed = 1) {
   return createWorld({
+    random: seededRandom(seed),
     components: {
       Position: { x: [] as number[], y: [] as number[], z: [] as number[] },
       Velocity: { x: [] as number[], y: [] as number[], z: [] as number[] },
       Facing: [] as number[],
+      Shooting: [] as number[],
       Target: {
         x: [] as number[],
         y: [] as number[],
@@ -19,7 +20,7 @@ export function createGame() {
         arrivalFacing: [] as number[],
       },
       Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
-      Shot: { x: [] as number[], y: [] as number[], z: [] as number[], speed: [] as number[], type: [] as ShotType[] },
+      Shot: { x: [] as number[], y: [] as number[], z: [] as number[], speed: [] as number[] },
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
       Ball: {},
     },
@@ -28,12 +29,14 @@ export function createGame() {
 
 export type Game = ReturnType<typeof createGame>;
 
-export function addPlayer(world: Game, x: number, y: number, facing = 0): number {
-  const { Position, Velocity, Facing } = world.components;
+export function addPlayer(world: Game, x: number, y: number, facing = 0, shooting = AVERAGE_SHOOTING_GRADE): number {
+  const { Position, Velocity, Facing, Shooting } = world.components;
   const eid = addEntity(world);
   addComponent(world, eid, Position);
   addComponent(world, eid, Velocity);
   addComponent(world, eid, Facing);
+  addComponent(world, eid, Shooting);
+  Shooting[eid] = shooting;
   Position.x[eid] = x;
   Position.y[eid] = y;
   Position.z[eid] = 0;
@@ -86,7 +89,7 @@ export function setDribble(world: Game, eid: number, x: number, y: number): void
   Dribble.nextTouchIn[eid] = 0;
 }
 
-export function setShot(world: Game, eid: number, x: number, y: number, z: number, speed: number, type: ShotType): void {
+export function setShot(world: Game, eid: number, x: number, y: number, z: number, speed: number): void {
   const { Shot, Dribble } = world.components;
   removeComponent(world, eid, Dribble);
   addComponent(world, eid, Shot);
@@ -94,5 +97,4 @@ export function setShot(world: Game, eid: number, x: number, y: number, z: numbe
   Shot.y[eid] = y;
   Shot.z[eid] = z;
   Shot.speed[eid] = speed;
-  Shot.type[eid] = type;
 }

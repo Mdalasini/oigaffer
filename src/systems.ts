@@ -11,6 +11,7 @@ import {
   DRIBBLE_STOP_DISTANCE,
   GOAL_WIDTH,
   GRAVITY,
+  MAX_SHOT_SPEED,
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   PITCH_LENGTH,
@@ -24,7 +25,8 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
-import { setTarget, ShotType, type Game } from "./world";
+import { launchVelocity, missAim, spreadRadius, type Point } from "./shooting";
+import { setTarget, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
@@ -186,30 +188,23 @@ export function dribble(world: Game, dt: number): void {
   }
 }
 
-function liftAngle(distance: number, rise: number, speed: number, type: ShotType): number {
-  const speedSquared = speed * speed;
-  const reach = speedSquared * speedSquared - GRAVITY * (GRAVITY * distance * distance + 2 * rise * speedSquared);
-  const spread = Math.sqrt(Math.max(0, reach));
-  const lowOrHigh = type === ShotType.Chipped ? spread : -spread;
-  return Math.atan2(speedSquared + lowOrHigh, GRAVITY * distance);
-}
-
 function strike(world: Game, ball: number, shooter: number): void {
-  const { Position, Velocity, Shot } = world.components;
-  const speed = Shot.speed[shooter]!;
-  const type = Shot.type[shooter]!;
-  const { distance, onwardX, onwardY } = directionFromBall(world, ball, Shot.x[shooter]!, Shot.y[shooter]!);
-  const lift = type === ShotType.Ground ? 0 : liftAngle(distance, Shot.z[shooter]! - Position.z[ball]!, speed, type);
-  Velocity.x[ball] = onwardX * speed * Math.cos(lift);
-  Velocity.y[ball] = onwardY * speed * Math.cos(lift);
-  Velocity.z[ball] = speed * Math.sin(lift);
+  const { Position, Velocity, Shot, Shooting } = world.components;
+  const from: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
+  const aim: Point = [Shot.x[shooter]!, Shot.y[shooter]!, Shot.z[shooter]!];
+  const speed = Math.min(Shot.speed[shooter]!, MAX_SHOT_SPEED);
+  const radius = spreadRadius(Shooting[shooter]!, from, aim, speed);
+  const [vx, vy, vz] = launchVelocity(from, missAim(from, aim, radius, world.random), speed);
+  Velocity.x[ball] = vx;
+  Velocity.y[ball] = vy;
+  Velocity.z[ball] = vz;
 }
 
 export function shoot(world: Game): void {
-  const { Position, Velocity, Facing, Shot, Ball } = world.components;
+  const { Position, Velocity, Facing, Shooting, Shot, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
-  for (const eid of query(world, [Position, Velocity, Facing, Shot])) {
+  for (const eid of query(world, [Position, Velocity, Facing, Shooting, Shot])) {
     const { onwardX, onwardY } = directionFromBall(world, ball, Shot.x[eid]!, Shot.y[eid]!);
     const ballIs = whereBallIs(world, eid, ball, onwardX, onwardY);
     if (ballIs.withinReach && ballIs.inFront && ballIs.onTheWay) {

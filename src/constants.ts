@@ -27,3 +27,10 @@ export const SETTLING_SPEED = 1;
 
 export const GOAL_WIDTH = 7.32;
 export const CROSSBAR_HEIGHT = 2.44;
+
+export const MAX_SHOT_SPEED = 30;
+export const WORST_SHOOTING_GRADE = 1;
+export const BEST_SHOOTING_GRADE = 20;
+export const WORST_SHOOTING_SPREAD = 0.08;
+export const BEST_SHOOTING_SPREAD = 0.01;
+export const AVERAGE_SHOOTING_GRADE = 10;

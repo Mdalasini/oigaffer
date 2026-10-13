@@ -1,37 +1,54 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
-import { CROSSBAR_HEIGHT, GOAL_WIDTH, GRAVITY, PITCH_LENGTH, PITCH_WIDTH, TIME_STEP, TOUCH_REACH } from "./constants";
+import {
+  BEST_SHOOTING_GRADE,
+  CROSSBAR_HEIGHT,
+  GOAL_WIDTH,
+  GRAVITY,
+  MAX_SHOT_SPEED,
+  PITCH_LENGTH,
+  PITCH_WIDTH,
+  TIME_STEP,
+  TOUCH_REACH,
+  WORST_SHOOTING_GRADE,
+} from "./constants";
+import { launchVelocity, neededShotSpeed, spreadRadius, type Point } from "./shooting";
 import { isGoal, step } from "./systems";
-import { addBall, addPlayer, createGame, setShot, ShotType } from "./world";
+import { addBall, addPlayer, createGame, setShot } from "./world";
 
 const GOAL_CENTRE = PITCH_WIDTH / 2;
+const SPOT: Point = [85, GOAL_CENTRE, 0];
 
-function shootAt(aim: [number, number], speed: number, type: ShotType, ball: [number, number] = [85, GOAL_CENTRE]) {
+function shootAt(aim: [y: number, z: number], speed: number, grade: number, seed = 1) {
+  const world = createGame(seed);
+  const { GoalLineCrossing } = world.components;
+  const p = addPlayer(world, SPOT[0] - 0.3, SPOT[1], 0, grade);
+  const b = addBall(world, SPOT[0], SPOT[1]);
+  setShot(world, p, PITCH_LENGTH, aim[0], aim[1], speed);
+  for (let time = 0; !hasComponent(world, b, GoalLineCrossing) && time < 10; time += TIME_STEP) step(world);
+  return { y: GoalLineCrossing.y[b]!, z: GoalLineCrossing.z[b]! };
+}
+
+function missesOver(shots: number, aim: [y: number, z: number], speed: number, grade: number) {
+  return Array.from({ length: shots }, (_, seed) => {
+    const { y, z } = shootAt(aim, speed, grade, seed + 1);
+    return Math.hypot(y - aim[0], z - aim[1]);
+  });
+}
+
+const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+
+function flyFrom(from: Point, velocity: Point) {
   const world = createGame();
   const { Position, Velocity, GoalLineCrossing } = world.components;
-  const p = addPlayer(world, ball[0] - 0.3, ball[1]);
-  const b = addBall(world, ...ball);
-  setShot(world, p, PITCH_LENGTH, aim[0], aim[1], speed, type);
-  let time = 0;
-  let struckAt = NaN;
-  let highest = 0;
+  const b = addBall(world, from[0], from[1]);
+  [Velocity.x[b], Velocity.y[b], Velocity.z[b]] = velocity;
   let firstLanding = NaN;
-  while (!hasComponent(world, b, GoalLineCrossing) && time < 10) {
+  for (let time = 0; !hasComponent(world, b, GoalLineCrossing) && time < 10; time += TIME_STEP) {
     step(world);
-    time += TIME_STEP;
-    if (Number.isNaN(struckAt) && Math.hypot(Velocity.x[b]!, Velocity.y[b]!) > 0) struckAt = time;
-    highest = Math.max(highest, Position.z[b]!);
-    if (Number.isNaN(firstLanding) && highest > 0 && Position.z[b] === 0) firstLanding = Position.x[b]!;
+    if (Number.isNaN(firstLanding) && Position.z[b] === 0) firstLanding = Position.x[b]!;
   }
-  const crossed = hasComponent(world, b, GoalLineCrossing);
-  return {
-    crossed,
-    y: GoalLineCrossing.y[b]!,
-    z: GoalLineCrossing.z[b]!,
-    flightTime: time - struckAt,
-    highest,
-    firstLanding,
-  };
+  return { crossed: hasComponent(world, b, GoalLineCrossing), y: GoalLineCrossing.y[b]!, z: GoalLineCrossing.z[b]!, firstLanding };
 }
 
 describe("a ball in the air", () => {
@@ -57,47 +74,61 @@ describe("a ball in the air", () => {
   });
 });
 
+describe("the power a shot needs", () => {
+  const aim: Point = [PITCH_LENGTH, GOAL_CENTRE + 2, 1.5];
+
+  test("struck perfectly with just that power, the ball reaches the spot", () => {
+    const flight = flyFrom(SPOT, launchVelocity(SPOT, aim, neededShotSpeed(SPOT, aim)));
+    expect(flight.y).toBeCloseTo(aim[1], 1);
+    expect(flight.z).toBeCloseTo(aim[2], 1);
+  });
+
+  test("struck perfectly with more power, the ball still reaches the spot, on a flatter path", () => {
+    const flight = flyFrom(SPOT, launchVelocity(SPOT, aim, 28));
+    expect(flight.y).toBeCloseTo(aim[1], 1);
+    expect(flight.z).toBeCloseTo(aim[2], 1);
+  });
+
+  test("with less, it drops short", () => {
+    const flight = flyFrom(SPOT, launchVelocity(SPOT, aim, neededShotSpeed(SPOT, aim) - 2));
+    expect(flight.firstLanding).toBeLessThan(PITCH_LENGTH);
+  });
+
+  test("from the far end of the pitch, more than anyone can strike a ball", () => {
+    expect(neededShotSpeed([0, GOAL_CENTRE, 0], aim)).toBeGreaterThan(MAX_SHOT_SPEED);
+  });
+});
+
 describe("a player shooting at an empty goal", () => {
-  test("a driven shot goes where it is aimed", () => {
-    const shot = shootAt([GOAL_CENTRE - 2, 1.5], 25, ShotType.Driven);
-    expect(shot.y).toBeCloseTo(GOAL_CENTRE - 2, 1);
-    expect(shot.z).toBeCloseTo(1.5, 1);
-    expect(isGoal(shot.y, shot.z)).toBe(true);
+  const aim: [number, number] = [GOAL_CENTRE + 2, 1.2];
+
+  test("every shot lands inside the shooter's circle around the spot they picked", () => {
+    const radius = spreadRadius(WORST_SHOOTING_GRADE, SPOT, [PITCH_LENGTH, ...aim], 20);
+    const misses = missesOver(50, aim, 20, WORST_SHOOTING_GRADE);
+    for (const miss of misses) expect(miss).toBeLessThanOrEqual(radius * 1.05);
+    expect(Math.max(...misses)).toBeGreaterThan(radius * 0.5);
   });
 
-  test("a chip reaches the same spot on a higher, slower arc", () => {
-    const driven = shootAt([GOAL_CENTRE + 2, 1.5], 25, ShotType.Driven);
-    const chip = shootAt([GOAL_CENTRE + 2, 1.5], 25, ShotType.Chipped);
-    expect(chip.y).toBeCloseTo(GOAL_CENTRE + 2, 1);
-    expect(chip.z).toBeCloseTo(1.5, 1);
-    expect(chip.highest).toBeGreaterThan(driven.highest + 5);
-    expect(chip.flightTime).toBeGreaterThan(driven.flightTime * 2);
+  test("better shooters have a smaller circle", () => {
+    const worst = average(missesOver(30, aim, 20, WORST_SHOOTING_GRADE));
+    const best = average(missesOver(30, aim, 20, BEST_SHOOTING_GRADE));
+    expect(best).toBeLessThan(worst / 4);
   });
 
-  test("a ground shot rolls along the grass to where it is aimed", () => {
-    const shot = shootAt([GOAL_CENTRE + 3, 2], 20, ShotType.Ground);
-    expect(shot.highest).toBe(0);
-    expect(shot.y).toBeCloseTo(GOAL_CENTRE + 3, 1);
-    expect(isGoal(shot.y, shot.z)).toBe(true);
+  test("hitting it harder makes the circle bigger", () => {
+    const soft = average(missesOver(30, aim, 15, WORST_SHOOTING_GRADE));
+    const hard = average(missesOver(30, aim, 30, WORST_SHOOTING_GRADE));
+    expect(hard).toBeGreaterThan(soft * 1.5);
   });
 
-  test("a harder shot gets there sooner", () => {
-    const soft = shootAt([GOAL_CENTRE, 1], 15, ShotType.Driven);
-    const hard = shootAt([GOAL_CENTRE, 1], 30, ShotType.Driven);
-    expect(hard.flightTime).toBeLessThan(soft.flightTime * 0.6);
-  });
-
-  test("aimed above the bar it goes over; aimed outside the post it goes wide", () => {
-    const over = shootAt([GOAL_CENTRE, CROSSBAR_HEIGHT + 0.5], 25, ShotType.Driven);
-    const wide = shootAt([GOAL_CENTRE + GOAL_WIDTH / 2 + 0.5, 1], 25, ShotType.Driven);
-    expect(isGoal(over.y, over.z)).toBe(false);
-    expect(over.z).toBeGreaterThan(CROSSBAR_HEIGHT);
-    expect(isGoal(wide.y, wide.z)).toBe(false);
-  });
-
-  test("a shot without the power to get there drops short of the goal", () => {
-    const shot = shootAt([GOAL_CENTRE, 1], 10, ShotType.Chipped);
-    expect(shot.firstLanding).toBeLessThan(PITCH_LENGTH);
+  test("no one can hit it harder than the most a ball can be struck", () => {
+    const world = createGame();
+    const { Velocity } = world.components;
+    const p = addPlayer(world, SPOT[0] - 0.3, SPOT[1]);
+    const b = addBall(world, SPOT[0], SPOT[1]);
+    setShot(world, p, PITCH_LENGTH, ...aim, 60);
+    while (Math.hypot(Velocity.x[b]!, Velocity.y[b]!) === 0) step(world);
+    expect(Math.hypot(Velocity.x[b]!, Velocity.y[b]!, Velocity.z[b]!)).toBeCloseTo(MAX_SHOT_SPEED, 0);
   });
 
   test("runs onto a ball that isn't at their feet before striking it", () => {
@@ -105,12 +136,23 @@ describe("a player shooting at an empty goal", () => {
     const { Position, Velocity } = world.components;
     const p = addPlayer(world, 80, GOAL_CENTRE + 3);
     const b = addBall(world, 85, GOAL_CENTRE);
-    setShot(world, p, PITCH_LENGTH, GOAL_CENTRE, 1, 25, ShotType.Driven);
+    setShot(world, p, PITCH_LENGTH, GOAL_CENTRE, 1, 25);
     let gapWhenStruck = Infinity;
     while (Math.hypot(Velocity.x[b]!, Velocity.y[b]!) === 0) {
       gapWhenStruck = Math.hypot(Position.x[b]! - Position.x[p]!, Position.y[b]! - Position.y[p]!);
       step(world);
     }
     expect(gapWhenStruck).toBeLessThanOrEqual(TOUCH_REACH);
+  });
+});
+
+describe("where the ball crosses the goal line", () => {
+  test("between the posts and under the bar is a goal", () => {
+    expect(isGoal(GOAL_CENTRE + GOAL_WIDTH / 2 - 0.1, CROSSBAR_HEIGHT - 0.1)).toBe(true);
+  });
+
+  test("above the bar or outside a post is not", () => {
+    expect(isGoal(GOAL_CENTRE, CROSSBAR_HEIGHT + 0.1)).toBe(false);
+    expect(isGoal(GOAL_CENTRE - GOAL_WIDTH / 2 - 0.1, 1)).toBe(false);
   });
 });
