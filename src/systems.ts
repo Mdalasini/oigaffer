@@ -21,9 +21,11 @@ import {
   TURN_RATE,
 } from "./constants";
 import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling } from "./flight";
+import { bestShot, shotOptions } from "./chance";
+import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Keeper } from "./keeper";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
-import { setTarget, strikeBall, type Game } from "./world";
+import { setDribble, setShot, setTarget, strikeBall, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
@@ -218,6 +220,26 @@ function keeperPosition(world: Game): Keeper | null {
   return keeper === undefined ? null : [Position.x[keeper]!, Position.y[keeper]!];
 }
 
+export function attack(world: Game, dt: number): void {
+  const { Position, Shooting, Attacking, Struck, Held, Shot, Ball } = world.components;
+  const ball = query(world, [Ball])[0];
+  if (ball === undefined) return;
+  for (const eid of query(world, [Position, Shooting, Attacking])) {
+    if (hasComponent(world, ball, Struck) || hasComponent(world, ball, Held)) {
+      removeComponent(world, eid, Attacking);
+      continue;
+    }
+    if (hasComponent(world, eid, Shot)) continue;
+    const { aim, chance } = bestShot(shotOptions(pointOf(Position, ball), Shooting[eid]!, dt), keeperPosition(world), dt);
+    if (chance === 1 || chance < Attacking.bestChance[eid]!) {
+      setShot(world, eid, ...aim);
+      continue;
+    }
+    Attacking.bestChance[eid] = chance;
+    if (!hasComponent(world, eid, world.components.Dribble)) setDribble(world, eid, PITCH_LENGTH, GOAL_CENTRE);
+  }
+}
+
 const onTheGround = (world: Game, eid: number) =>
   isOnTheGround(world.components.Position.z[eid]!, world.components.Velocity.z[eid]!);
 
@@ -303,6 +325,7 @@ export function save(world: Game, dt: number): void {
 }
 
 export function step(world: Game, dt = TIME_STEP): void {
+  attack(world, dt);
   dribble(world, dt);
   shoot(world);
   goalkeep(world, dt);
