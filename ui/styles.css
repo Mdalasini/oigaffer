@@ -151,6 +151,37 @@ legend {
   fill: var(--us);
 }
 
+.board {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid var(--chalk-faint);
+  border-radius: 8px;
+  background: var(--grass-deep);
+}
+
+.spot {
+  display: grid;
+  place-items: center;
+  padding: 7px 0;
+  border: 1px solid var(--chalk-faint);
+  border-radius: 6px;
+  color: var(--chalk-dim);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.spot.used {
+  border-color: var(--us);
+  background: var(--us);
+  color: var(--grass-deep);
+}
+
 .scale {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

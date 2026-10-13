@@ -66,6 +66,7 @@ export function createMatchState(
         side,
         position: p.position, // natural position until the manager's formation is applied
         natural: p.position,
+        spot: "GK", // placeholder; arrangeSide sets the real position
         base: p.attributes,
         attributes: { ...p.attributes },
         energy: 1,

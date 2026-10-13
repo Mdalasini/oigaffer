@@ -2,9 +2,7 @@ import { useState } from "react";
 import type { Names } from "../src/commentary";
 import { bench, subsLeft } from "../src/engine/lineup";
 import type { MatchState, Side } from "../src/engine/state";
-import type { Position } from "../src/model";
-
-const ROLE_ORDER: Position[] = ["GK", "DEF", "MID", "FWD"];
+import { SPOTS } from "../src/tactics";
 
 // Who's on, how tired they are, and who's on the bench. Pick a player, then their replacement.
 export function SquadPanel({
@@ -25,7 +23,7 @@ export function SquadPanel({
   const left = subsLeft(state, side) - pending.length;
   const onPitch = state.players
     .filter((p) => p.side === side)
-    .sort((a, b) => ROLE_ORDER.indexOf(a.position) - ROLE_ORDER.indexOf(b.position) || a.slot.y - b.slot.y);
+    .sort((a, b) => SPOTS[a.spot].row - SPOTS[b.spot].row || a.slot.y - b.slot.y);
   const goingOff = new Set(pending.map((s) => s.offId));
   const comingOn = new Set(pending.map((s) => s.onId));
   const sentOff = state.offPitch.filter((o) => o.side === side && o.reason === "sent_off");
@@ -52,7 +50,7 @@ export function SquadPanel({
               disabled={disabled || left === 0 || goingOff.has(p.id)}
               onClick={() => setSelected(selected === p.id ? null : p.id)}
             >
-              <span className="role">{p.position}</span>
+              <span className="role">{p.spot}</span>
               <span className="who">
                 {names.player(p.id)}
                 {p.yellow && <span className="booking" aria-label="booked" />}

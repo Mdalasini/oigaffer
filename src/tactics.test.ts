@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Position } from "./model";
-import { assignRoles, FORMATIONS, type FormationName, type LineupPlayer } from "./tactics";
+import { assignRoles, FORMATIONS, lineCount, type FormationName, type LineupPlayer } from "./tactics";
 import { FOUR_FOUR_TWO, player } from "./test-helpers";
 
 // A 4-4-2 where each player's attacking lean rises with their index inside a line
@@ -17,15 +17,24 @@ const counts = (roles: Map<string, Position>) => {
   return c;
 };
 
-test("every formation has ten outfield players", () => {
-  for (const f of Object.values(FORMATIONS)) expect(f.DEF + f.MID + f.FWD).toBe(10);
+test("every formation has ten different outfield positions", () => {
+  for (const f of Object.values(FORMATIONS)) {
+    expect(new Set(f).size).toBe(10);
+    expect(f).not.toContain("GK");
+  }
+});
+
+test("formation names count the defenders, midfielders and forwards", () => {
+  for (const name of Object.keys(FORMATIONS) as FormationName[]) {
+    expect([lineCount(name, "DEF"), lineCount(name, "MID"), lineCount(name, "FWD")].join("-")).toBe(name);
+  }
 });
 
 for (const name of Object.keys(FORMATIONS) as FormationName[]) {
   test(`${name} fills each line to size and keeps the keeper`, () => {
     const roles = assignRoles(fourFourTwo(), name);
     expect(roles.get("p0")).toBe("GK");
-    expect(counts(roles)).toMatchObject({ GK: 1, ...FORMATIONS[name] });
+    expect(counts(roles)).toMatchObject({ GK: 1, DEF: lineCount(name, "DEF"), MID: lineCount(name, "MID"), FWD: lineCount(name, "FWD") });
   });
 }
 
