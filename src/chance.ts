@@ -9,7 +9,8 @@ import {
 import { blocks, type Defender } from "./defender";
 import { straightFlight, type StraightFlight } from "./flight";
 import { GOAL_CENTRE, isGoal } from "./goal";
-import { bestInterception, firstDivingStep, type Keeper } from "./keeper";
+import { bestInterception, firstMovingStep } from "./interception";
+import { KEEPER, type Keeper } from "./keeper";
 import { acrossTheShot, kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 
 const AIMS_ACROSS = 9;
@@ -66,8 +67,8 @@ export function shotOptions(from: Point, grade: number, dt = TIME_STEP): ShotOpt
 }
 
 function keeperReaches(flight: StraightFlight, keeper: Keeper, dt: number): boolean {
-  const divingFrom = firstDivingStep(dt);
-  const interception = bestInterception(keeper, flight, (step) => step + 1 - divingFrom, dt);
+  const divingFrom = firstMovingStep(KEEPER, dt);
+  const interception = bestInterception(KEEPER, keeper, flight, (step) => step + 1 - divingFrom, dt);
   return interception !== null && interception.shortfall <= 0;
 }
 
@@ -135,4 +136,27 @@ export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper,
     }
   }
   return best.spot;
+}
+
+const SPOT_GRID = 0.5;
+const REMEMBERED_CHANCES = 4096;
+const chancesOnceKeeperIsSet = new Map<string, number>();
+
+const toGrid = (value: number) => Math.round(value / SPOT_GRID) * SPOT_GRID;
+
+export const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
+
+const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
+
+export function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
+  const near = onTheGrid(spot);
+  const key = `${near.join()}|${withKeeper}|${grade}|${dt}`;
+  const remembered = chancesOnceKeeperIsSet.get(key);
+  if (remembered !== undefined) return remembered;
+  const options = shotOptions(near, grade, dt);
+  const setKeeper = withKeeper ? (whereToStand(near, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
+  const chance = bestShot(options, setKeeper, dt).chance;
+  if (chancesOnceKeeperIsSet.size >= REMEMBERED_CHANCES) chancesOnceKeeperIsSet.delete(chancesOnceKeeperIsSet.keys().next().value!);
+  chancesOnceKeeperIsSet.set(key, chance);
+  return chance;
 }

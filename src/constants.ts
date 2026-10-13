@@ -58,3 +58,10 @@ export const BLOCKING_REACH = 0.5;
 export const HIGHEST_BLOCK = 1.8;
 export const PASSING_GAP = 1.5;
 export const SHARPEST_TAKE_ON = Math.PI / 6;
+
+export const PASS_ARRIVAL_SPEED = 8;
+export const HARDEST_PASS = 20;
+export const DEFENDER_REACTION_TIME = 0.25;
+export const INTERCEPTING_SPEED = 6;
+export const SUPPORT_WIDTH = 8;
+export const SUPPORT_AHEAD = 2;
