@@ -9,7 +9,8 @@ import {
 import { blocks, type Defender } from "./defender";
 import { straightFlight, type StraightFlight } from "./flight";
 import { GOAL_CENTRE, isGoal } from "./goal";
-import { bestInterception, firstDivingStep, type Keeper } from "./keeper";
+import { bestInterception, firstMovingStep } from "./interception";
+import { KEEPER, type Keeper } from "./keeper";
 import { acrossTheShot, kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 
 const AIMS_ACROSS = 9;
@@ -66,8 +67,8 @@ export function shotOptions(from: Point, grade: number, dt = TIME_STEP): ShotOpt
 }
 
 function keeperReaches(flight: StraightFlight, keeper: Keeper, dt: number): boolean {
-  const divingFrom = firstDivingStep(dt);
-  const interception = bestInterception(keeper, flight, (step) => step + 1 - divingFrom, dt);
+  const divingFrom = firstMovingStep(KEEPER, dt);
+  const interception = bestInterception(KEEPER, keeper, flight, (step) => step + 1 - divingFrom, dt);
   return interception !== null && interception.shortfall <= 0;
 }
 
