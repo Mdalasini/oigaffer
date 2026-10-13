@@ -257,6 +257,8 @@ export function attack(world: Game, dt: number): void {
     const later = bestChanceFurtherOn(from, Shooting[eid]!, keeper, dt);
     Attacking.chance[eid] = now.chance;
     Attacking.bestChanceFurtherOn[eid] = later;
+    Attacking.aimY[eid] = now.aim[1];
+    Attacking.aimZ[eid] = now.aim[2];
     if (now.chance === 1 || (now.chance > 0 && now.chance >= later)) setShot(world, eid, ...now.aim);
     else if (!hasComponent(world, eid, Dribble)) setDribble(world, eid, PITCH_LENGTH, GOAL_CENTRE);
   }

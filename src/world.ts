@@ -22,7 +22,12 @@ export function createGame(seed = 1) {
       },
       Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
       Shot: { x: [] as number[], y: [] as number[], z: [] as number[] },
-      Attacking: { chance: [] as number[], bestChanceFurtherOn: [] as number[] },
+      Attacking: {
+        chance: [] as number[],
+        bestChanceFurtherOn: [] as number[],
+        aimY: [] as number[],
+        aimZ: [] as number[],
+      },
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
       Goalkeeper: { watchingShotFor: [] as number[] },
       Held: {},
@@ -134,4 +139,6 @@ export function setAttacking(world: Game, eid: number): void {
   addComponent(world, eid, Attacking);
   Attacking.chance[eid] = 0;
   Attacking.bestChanceFurtherOn[eid] = 0;
+  Attacking.aimY[eid] = NaN;
+  Attacking.aimZ[eid] = NaN;
 }
