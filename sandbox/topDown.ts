@@ -11,6 +11,7 @@ export const COLOURS = {
   grass: "#173b26",
   lines: "rgba(238, 241, 230, 0.6)",
   player: "#f2b33d",
+  keeper: "#5bb0ef",
   facing: "#102c1c",
   ball: "#eef1e6",
   shadow: "rgba(0, 0, 0, 0.35)",
@@ -78,9 +79,9 @@ export function createTopDown(canvas: HTMLCanvasElement, area: PitchArea = WHOLE
     ctx.setLineDash([]);
   }
 
-  function drawPlayer(x: number, y: number, facing: number) {
+  function drawPlayer(x: number, y: number, facing: number, colour = COLOURS.player) {
     const radius = PLAYER_RADIUS * pixelsPerMetre;
-    ctx.fillStyle = COLOURS.player;
+    ctx.fillStyle = colour;
     ctx.beginPath();
     ctx.arc(screenX(x), screenY(y), radius, 0, Math.PI * 2);
     ctx.fill();

@@ -1,4 +1,4 @@
-import { CROSSBAR_HEIGHT, GOAL_WIDTH, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
+import { CROSSBAR_HEIGHT, GOAL_WIDTH, KEEPER_HIGHEST_REACH, KEEPER_REACH, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
 import type { Point } from "../src/shooting";
 import { COLOURS } from "./topDown";
 
@@ -11,6 +11,8 @@ const BALL_RADIUS = 0.11;
 const GOAL_DEPTH = 2;
 const PENALTY_AREA = { depth: 16.5, width: 40.32 };
 const GOAL_AREA = { depth: 5.5, width: 18.32 };
+const KEEPER_HALF_WIDTH = 0.25;
+const KEEPER_HEIGHT = 1.9;
 
 const SKY = "#0c2234";
 
@@ -116,6 +118,34 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     line([PITCH_LENGTH, near, CROSSBAR_HEIGHT], [PITCH_LENGTH, far, CROSSBAR_HEIGHT]);
   }
 
+  function drawKeeper(y: number) {
+    const corners: Point[] = [
+      [PITCH_LENGTH, y - KEEPER_HALF_WIDTH, 0],
+      [PITCH_LENGTH, y + KEEPER_HALF_WIDTH, 0],
+      [PITCH_LENGTH, y + KEEPER_HALF_WIDTH, KEEPER_HEIGHT],
+      [PITCH_LENGTH, y - KEEPER_HALF_WIDTH, KEEPER_HEIGHT],
+    ];
+    if (corners.some((corner) => depthOf(corner) < NEAREST_VISIBLE)) return;
+    ctx.fillStyle = COLOURS.keeper;
+    ctx.beginPath();
+    for (const corner of corners) {
+      const [x, screenY] = project(corner);
+      ctx.lineTo(x, screenY);
+    }
+    ctx.fill();
+    ctx.strokeStyle = COLOURS.keeper;
+    ctx.lineWidth = devicePixelRatio;
+    ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
+    const reach: Point[] = [
+      [PITCH_LENGTH, y - KEEPER_REACH, 0],
+      [PITCH_LENGTH, y - KEEPER_REACH, KEEPER_HIGHEST_REACH],
+      [PITCH_LENGTH, y + KEEPER_REACH, KEEPER_HIGHEST_REACH],
+      [PITCH_LENGTH, y + KEEPER_REACH, 0],
+    ];
+    reach.slice(1).forEach((corner, i) => line(reach[i]!, corner));
+    ctx.setLineDash([]);
+  }
+
   function drawCircle(points: Point[]) {
     ctx.strokeStyle = COLOURS.aim;
     ctx.lineWidth = devicePixelRatio;
@@ -161,9 +191,10 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ctx.fill();
   }
 
-  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[]) {
+  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeperY: number | null) {
     drawGround();
     drawGoal();
+    if (keeperY !== null) drawKeeper(keeperY);
     drawTrail(trail);
     drawCircle(circle);
     drawAim(aim);
