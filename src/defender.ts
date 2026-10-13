@@ -32,8 +32,9 @@ export function blocks([defenderX, defenderY]: Defender, flight: StraightFlight)
   return false;
 }
 
-export function timeToRun(distance: number, topSpeed: number): number {
-  const speedingUp = (topSpeed * topSpeed) / (2 * ACCELERATION);
-  if (distance <= speedingUp) return Math.sqrt((2 * distance) / ACCELERATION);
-  return topSpeed / ACCELERATION + (distance - speedingUp) / topSpeed;
+export function timeToRun(distance: number, topSpeed: number, startSpeed = 0): number {
+  const start = Math.max(0, Math.min(topSpeed, startSpeed));
+  const speedingUp = (topSpeed * topSpeed - start * start) / (2 * ACCELERATION);
+  if (distance <= speedingUp) return (Math.sqrt(start * start + 2 * ACCELERATION * distance) - start) / ACCELERATION;
+  return (topSpeed - start) / ACCELERATION + (distance - speedingUp) / topSpeed;
 }

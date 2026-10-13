@@ -480,34 +480,45 @@ function isOnTheBall(world: Game, eid: number, ball: number, dt: number): boolea
   return ready && Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!) <= TOUCH_REACH;
 }
 
-type Opponent = { at: Defender; tackling: number; recoversIn: number };
+type Opponent = { at: Defender; moving: [vx: number, vy: number]; tackling: number; recoversIn: number };
 
 function opponents(world: Game): Opponent[] {
-  const { Position, Tackling, Grounded } = world.components;
+  const { Position, Velocity, Tackling, Grounded } = world.components;
   return Array.from(query(world, [Position, Tackling]), (eid): Opponent => ({
     at: [Position.x[eid]!, Position.y[eid]!],
+    moving: [Velocity.x[eid]!, Velocity.y[eid]!],
     tackling: Tackling[eid]!,
     recoversIn: hasComponent(world, eid, Grounded) ? Grounded.recoversIn[eid]! : 0,
   }));
 }
 
-function chanceOfGettingThere(spot: Point, carried: number, dribbling: number, defenders: Opponent[]): number {
-  const timeThere = timeToRun(carried, MAX_DRIBBLE_TOUCH_SPEED);
-  return defenders
-    .filter(({ at, recoversIn }) => recoversIn + timeToRun(Math.max(0, Math.hypot(spot[0] - at[0], spot[1] - at[1]) - TACKLE_REACH), TOP_SPEED) <= timeThere)
-    .reduce((chance, { tackling }) => chance * (1 - tackleWinChance(tackling, dribbling)), 1);
+const speedTowards = ([vx, vy]: [number, number], from: [number, number], to: Point) => {
+  const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  return distance > 0 ? (vx * (to[0] - from[0]) + vy * (to[1] - from[1])) / distance : 0;
+};
+
+function canGetThere({ at, moving, recoversIn }: Opponent, spot: Point, timeThere: number): boolean {
+  const toReach = Math.max(0, Math.hypot(spot[0] - at[0], spot[1] - at[1]) - TACKLE_REACH);
+  return recoversIn + timeToRun(toReach, TOP_SPEED, recoversIn > 0 ? 0 : speedTowards(moving, at, spot)) <= timeThere;
 }
 
-type Runner = { shooting: number; dribbling: number };
+const chanceOfBeating = (defenders: Opponent[], runner: Runner) =>
+  defenders.reduce((chance, { tackling }) => chance * (1 - tackleWinChance(tackling, runner.dribbling)), 1);
+
+type Runner = { shooting: number; dribbling: number; speed: number };
 
 function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, takingThemOn = true): number {
   const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
   const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
+  const inTheWay = new Set<Opponent>();
   let best = 0;
   for (let carried = touch; carried < distance; carried += touch) {
     const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
-    const gettingThere = chanceOfGettingThere(next, carried, runner.dribbling, defenders);
-    if (gettingThere <= best || (!takingThemOn && gettingThere < 1)) continue;
+    const timeThere = timeToRun(carried, MAX_DRIBBLE_TOUCH_SPEED, runner.speed);
+    for (const defender of defenders) if (canGetThere(defender, next, timeThere)) inTheWay.add(defender);
+    if (!takingThemOn && inTheWay.size > 0) break;
+    const gettingThere = chanceOfBeating([...inTheWay], runner);
+    if (gettingThere <= best) continue;
     best = Math.max(best, gettingThere * chanceOnceKeeperIsSet(next, runner.shooting, keeper !== null, dt));
   }
   return best;
@@ -537,10 +548,10 @@ function carryOn(world: Game, eid: number, way: [x: number, y: number]): void {
 }
 
 function whereTheyGetTo({ at, recoversIn, tackling }: Opponent, attempt: { point: Point; shortfall: number } | null): Opponent {
-  if (!attempt) return { at, recoversIn, tackling };
+  if (!attempt) return { at, moving: [0, 0], recoversIn, tackling };
   const { distance, onwardX, onwardY } = directionTo([...at, 0], attempt.point[0], attempt.point[1]);
   const moved = Math.max(0, distance - INTERCEPTOR.reach - attempt.shortfall);
-  return { at: [at[0] + onwardX * moved, at[1] + onwardY * moved], recoversIn: 0, tackling };
+  return { at: [at[0] + onwardX * moved, at[1] + onwardY * moved], moving: [0, 0], recoversIn: 0, tackling };
 }
 
 function passWorth(world: Game, from: Point, receiver: number, keeper: Keeper | null, defenders: Opponent[], dt: number): number {
@@ -555,7 +566,7 @@ function passWorth(world: Game, from: Point, receiver: number, keeper: Keeper | 
   const options = shotOptions(receivedAt, Shooting[receiver]!, dt);
   const setKeeper = keeper && (whereToStand(receivedAt, options, keeper, dt) ?? keeper);
   const shootingFirstTime = bestShot(options, setKeeper, dt, defendersThen.map(({ at }) => at)).chance;
-  const runner = { shooting: Shooting[receiver]!, dribbling: Dribbling[receiver]! };
+  const runner = { shooting: Shooting[receiver]!, dribbling: Dribbling[receiver]!, speed: 0 };
   return Math.max(shootingFirstTime, bestChanceFurtherOn(pass.to, runner, keeper, defendersThen, dt, false));
 }
 
@@ -572,7 +583,7 @@ function bestPass(world: Game, passer: number, ball: number, keeper: Keeper | nu
 }
 
 export function attack(world: Game, dt: number): void {
-  const { Position, Shooting, Dribbling, Attacking, Struck, Held, Shot, Passing, Ball } = world.components;
+  const { Position, Velocity, Shooting, Dribbling, Attacking, Struck, Held, Shot, Passing, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Shooting, Dribbling, Attacking])) {
@@ -585,7 +596,9 @@ export function attack(world: Game, dt: number): void {
     const keeper = keeperPosition(world);
     const defenders = opponents(world);
     const now = bestShot(shotOptions(from, Shooting[eid]!, dt), keeper, dt, defenders.map(({ at }) => at));
-    const runner = { shooting: Shooting[eid]!, dribbling: Dribbling[eid]! };
+    const towardsGoal = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
+    const runningAt = Velocity.x[eid]! * towardsGoal.onwardX + Velocity.y[eid]! * towardsGoal.onwardY;
+    const runner = { shooting: Shooting[eid]!, dribbling: Dribbling[eid]!, speed: runningAt };
     const later = bestChanceFurtherOn(from, runner, keeper, defenders, dt);
     const pass = bestPass(world, eid, ball, keeper, defenders, dt);
     const passing = pass?.worth ?? 0;
