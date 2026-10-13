@@ -1,6 +1,18 @@
+import { useState } from "react";
 import { spotSlot } from "../src/engine/formation";
 import { PITCH_WIDTH } from "../src/engine/geometry";
-import { FORMATIONS, MENTALITY_NAMES, SPOTS, type FormationName, type Mentality, type Spot, type Tactics } from "../src/tactics";
+import {
+  FORMATIONS,
+  MENTALITY_NAMES,
+  shapeName,
+  shapeOf,
+  SPOTS,
+  type FormationName,
+  type Mentality,
+  type Spot,
+  moveSpot,
+  type Tactics,
+} from "../src/tactics";
 
 const FORMATION_NAMES = Object.keys(FORMATIONS) as FormationName[];
 const MENTALITIES: Mentality[] = [-2, -1, 0, 1, 2];
@@ -32,33 +44,68 @@ function Shape({ formation }: { formation: FormationName }) {
   );
 }
 
-// Every position on the tactics board, with the ones this formation uses lit up
-function Board({ formation }: { formation: FormationName }) {
-  const used = new Set(withKeeper(formation));
+// Every position on the tactics board, with the ones the shape uses lit up.
+// Pick a position, then an empty one to move it there, or (with players named) another to swap them.
+function Board({
+  shape,
+  names,
+  onMove,
+}: {
+  shape: readonly Spot[];
+  names?: Partial<Record<Spot, string>>;
+  onMove: (from: Spot, to: Spot) => void;
+}) {
+  const [picked, setPicked] = useState<Spot | null>(null);
+  const used = new Set<Spot>(["GK", ...shape]);
+  const click = (spot: Spot) => {
+    if (picked === null) {
+      if (used.has(spot)) setPicked(spot);
+      return;
+    }
+    if (spot !== picked) onMove(picked, spot);
+    setPicked(null);
+  };
   return (
-    <div className="board" role="img" aria-label={`${formation}: ${[...used].join(", ")}`}>
-      {ALL_SPOTS.map((spot) => (
-        <span
-          key={spot}
-          className={used.has(spot) ? "spot used" : "spot"}
-          style={{ gridRow: 6 - SPOTS[spot].row, gridColumn: SPOTS[spot].col + 1 }}
-        >
-          {spot}
-        </span>
-      ))}
-    </div>
+    <>
+      <div className="board">
+        {ALL_SPOTS.map((spot) => (
+          <button
+            key={spot}
+            className={used.has(spot) ? "spot used" : "spot"}
+            aria-pressed={picked === spot}
+            disabled={spot === "GK" || (picked === null && !used.has(spot))}
+            style={{ gridRow: 6 - SPOTS[spot].row, gridColumn: SPOTS[spot].col + 1 }}
+            onClick={() => click(spot)}
+          >
+            {spot}
+            {used.has(spot) && names?.[spot] && <span className="who">{names[spot]}</span>}
+          </button>
+        ))}
+      </div>
+      <p className="note">
+        {picked
+          ? `Now pick an empty position for ${names?.[picked] ?? picked}${names ? ", or a teammate to swap with" : ""}.`
+          : `Pick a position to move it${names ? " or swap players" : ""}.`}
+      </p>
+    </>
   );
 }
 
 export function TacticsPicker({
   tactics,
   onChange,
+  onMove = (from, to) => onChange(moveSpot(tactics, from, to)),
+  names,
   disabled = false,
 }: {
   tactics: Tactics;
   onChange: (t: Tactics) => void;
+  // Moves a position on the board, or swaps the players in two positions
+  onMove?: (from: Spot, to: Spot) => void;
+  names?: Partial<Record<Spot, string>>;
   disabled?: boolean;
 }) {
+  const current = shapeName(tactics);
   return (
     <div className="tactics">
       <fieldset className="formations" disabled={disabled}>
@@ -66,14 +113,17 @@ export function TacticsPicker({
         {FORMATION_NAMES.map((f) => (
           <button
             key={f}
-            aria-pressed={f === tactics.formation}
-            onClick={() => onChange({ ...tactics, formation: f })}
+            aria-pressed={f === current}
+            onClick={() => onChange({ formation: f, mentality: tactics.mentality })}
           >
             <Shape formation={f} />
             <span>{f}</span>
           </button>
         ))}
-        <Board formation={tactics.formation} />
+      </fieldset>
+      <fieldset className="positions" disabled={disabled}>
+        <legend>Positions: {current}</legend>
+        <Board shape={shapeOf(tactics)} names={names} onMove={onMove} />
       </fieldset>
       <fieldset className="mentality" disabled={disabled}>
         <legend>Mentality</legend>

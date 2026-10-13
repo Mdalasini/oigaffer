@@ -1,7 +1,7 @@
 import { commentary, minuteLabel, type CommentaryLine, type Names } from "../src/commentary";
 import { opponent, type Side } from "../src/engine/state";
 import { teamStats, type TeamStats } from "../src/stats";
-import { MENTALITY_NAMES } from "../src/tactics";
+import { MENTALITY_NAMES, shapeName, type Spot } from "../src/tactics";
 import { SquadPanel } from "./SquadPanel";
 import { TacticsPicker } from "./TacticsPicker";
 import { SPEEDS, useMatch, type MatchSetup, type Speed } from "./useMatch";
@@ -26,7 +26,7 @@ const STAT_ROWS: [string, (s: TeamStats) => number, (n: number) => string][] = [
 ];
 
 export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
-  const { state, running, setRunning, speed, setSpeed, changeTactics, substitute, finished } = useMatch(setup);
+  const { state, running, setRunning, speed, setSpeed, changeTactics, movePosition, substitute, finished } = useMatch(setup);
   const { world, home, away, side: mySide } = setup;
 
   const names: Names = {
@@ -36,6 +36,10 @@ export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () =
   const feed = commentary(state.events, names).reverse();
   const stats = { home: teamStats(state.events, "home"), away: teamStats(state.events, "away") };
   const theirs = state.teams[opponent(mySide)].tactics;
+  const surname = (id: string) => names.player(id).split(" ").at(-1)!;
+  const atSpot: Partial<Record<Spot, string>> = Object.fromEntries(
+    state.players.filter((p) => p.side === mySide).map((p) => [p.spot, surname(p.id)]),
+  );
   const whose = (side: Side) => (side === mySide ? "us" : "them");
 
   const clock = finished ? "FT" : state.phase === "half_time" ? "HT" : minuteLabel(state.period, state.clock);
@@ -99,9 +103,15 @@ export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () =
 
         <section>
           <h2>Your tactics</h2>
-          <TacticsPicker tactics={state.teams[mySide].tactics} onChange={changeTactics} disabled={finished} />
+          <TacticsPicker
+            tactics={state.teams[mySide].tactics}
+            onChange={changeTactics}
+            onMove={movePosition}
+            names={atSpot}
+            disabled={finished}
+          />
           <p className="note">
-            {names.club(opponent(mySide))} are playing {theirs.formation}, {MENTALITY_NAMES[theirs.mentality]}.
+            {names.club(opponent(mySide))} are playing {shapeName(theirs)}, {MENTALITY_NAMES[theirs.mentality]}.
           </p>
         </section>
 

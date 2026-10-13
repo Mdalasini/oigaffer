@@ -1,10 +1,10 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { applyTactics, isFullTime, requestSub, startEventMatch, stepEventMatch } from "../src/engine/match";
+import { applyTactics, isFullTime, moveSpot, requestSub, startEventMatch, stepEventMatch, swapPlayers } from "../src/engine/match";
 import type { MatchState, Side } from "../src/engine/state";
 import { humanManager } from "../src/manager";
 import type { Club, GameWorld } from "../src/model";
 import { seededRng } from "../src/random";
-import type { Tactics } from "../src/tactics";
+import type { Spot, Tactics } from "../src/tactics";
 
 // Match seconds played per real second
 export const SPEEDS = { Slow: 20, Normal: 60, Fast: 180 } as const;
@@ -59,6 +59,16 @@ export function useMatch(setup: MatchSetup) {
     redraw();
   };
 
+  // Moving onto a teammate's position swaps the two players; onto an empty one moves the position
+  const movePosition = (from: Spot, to: Spot) => {
+    const mine = state.players.filter((p) => p.side === setup.side);
+    const a = mine.find((p) => p.spot === from);
+    const b = mine.find((p) => p.spot === to);
+    if (a && b) swapPlayers(state, setup.side, a.id, b.id);
+    else moveSpot(state, setup.side, from, to);
+    redraw();
+  };
+
   // Substitutions are made at the next stoppage
   const substitute = (offId: string, onId: string) => {
     const ok = requestSub(state, setup.side, offId, onId);
@@ -66,5 +76,5 @@ export function useMatch(setup: MatchSetup) {
     return ok;
   };
 
-  return { state, running, setRunning, speed, setSpeed, changeTactics, substitute, finished: isFullTime(state) };
+  return { state, running, setRunning, speed, setSpeed, changeTactics, movePosition, substitute, finished: isFullTime(state) };
 }

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { GameWorld } from "./model";
 import { pickEleven } from "./squad";
+import { FORMATIONS } from "./tactics";
 import { player, squad } from "./test-helpers";
 
 function worldOf(players: ReturnType<typeof player>[]): GameWorld {
@@ -23,7 +24,7 @@ test("the best natural players start and the rest are on the bench", () => {
 test("the formation decides how many of each line start", () => {
   const extra = [player("f1", "FWD", 12, 5), player("f2", "FWD", 12, 5)];
   const world = worldOf([...squad("a", 10, 10), ...extra]);
-  const eleven = pickEleven(world, world.clubs.c!, "4-3-3");
+  const eleven = pickEleven(world, world.clubs.c!, FORMATIONS["4-3-3"]);
   expect(eleven.filter((p) => p.position === "FWD")).toHaveLength(3);
   expect(eleven.filter((p) => p.position === "MID")).toHaveLength(3);
 });
