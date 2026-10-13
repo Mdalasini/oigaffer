@@ -127,3 +127,4 @@ export function strikeBall(world: Game, ball: number, [vx, vy, vz]: Point): void
   Velocity.z[ball] = vz;
   addComponent(world, ball, Struck);
 }
+

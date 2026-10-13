@@ -31,6 +31,7 @@ function shotAtKeeper(from: Point, velocity: Point, keeperAt: [x: number, y: num
   return {
     world,
     ball,
+    keeper,
     keeperPath,
     keeperSteps,
     saved: hasComponent(world, ball, Held),
@@ -45,12 +46,11 @@ const struckAt = (from: Point, aim: [y: number, z: number]) => struckFrom(from, 
 describe("a goalkeeper on the line", () => {
   test("catches a shot within reach and holds it where they caught it", () => {
     const aim: [number, number] = [GOAL_CENTRE + 0.6, 1.2];
-    const { world, ball, saved } = struckAt(PENALTY_SPOT, aim);
+    const { world, ball, keeper, saved } = struckAt(PENALTY_SPOT, aim);
     const { Position } = world.components;
     expect(saved).toBe(true);
     const held: Point = [Position.x[ball]!, Position.y[ball]!, Position.z[ball]!];
-    expect(held[1]).toBeCloseTo(aim[0], 1);
-    expect(held[2]).toBeCloseTo(aim[1], 1);
+    expect(Math.hypot(held[0] - Position.x[keeper]!, held[1] - Position.y[keeper]!)).toBeLessThanOrEqual(KEEPER_REACH);
     for (let i = 0; i < 60; i++) step(world);
     expect([Position.x[ball], Position.y[ball], Position.z[ball]]).toEqual(held);
   });
@@ -94,22 +94,22 @@ describe("a goalkeeper on the line", () => {
 describe("a goalkeeper off their line", () => {
   const keeperAt: [number, number] = [PITCH_LENGTH - 6, GOAL_CENTRE];
 
-  test("dives across the shot's path, not along the goal line", () => {
+  test("dives to meet the shot's path rather than along the goal line", () => {
     const from: Point = [PITCH_LENGTH - 20, GOAL_CENTRE - 12, 0];
-    const { keeperSteps } = struckFrom(from, [GOAL_CENTRE + 3, 0.5], keeperAt);
-    const shotX = PITCH_LENGTH - from[0];
-    const shotY = GOAL_CENTRE + 3 - from[1];
-    const [startX, startY] = keeperSteps[0]!;
-    const [endX, endY] = keeperSteps.at(-1)!;
-    const along = ((endX - startX) * shotX + (endY - startY) * shotY) / Math.hypot(shotX, shotY);
-    expect(Math.hypot(endX - startX, endY - startY)).toBeGreaterThan(0.3);
-    expect(Math.abs(along)).toBeLessThan(1e-6);
+    const aim: Point = [PITCH_LENGTH, GOAL_CENTRE + 3, 0.5];
+    const { keeperSteps } = struckFrom(from, [aim[1], aim[2]], keeperAt);
+    const fromThePath = ([x, y]: [number, number]) =>
+      Math.abs((x - from[0]) * (aim[1] - from[1]) - (y - from[1]) * (aim[0] - from[0])) / Math.hypot(aim[0] - from[0], aim[1] - from[1]);
+    const [startX] = keeperSteps[0]!;
+    const [endX] = keeperSteps.at(-1)!;
+    expect(fromThePath(keeperSteps.at(-1)!)).toBeLessThan(fromThePath(keeperSteps[0]!) - 0.3);
+    expect(endX).toBeLessThan(startX);
   });
 
-  test("catches a shot where it passes them, before it reaches the goal line", () => {
+  test("catches a shot in front of them, well before it reaches the goal line", () => {
     const { world, ball, saved } = struckFrom([PITCH_LENGTH - 25, GOAL_CENTRE, 0], [GOAL_CENTRE - 1.5, 0.8], keeperAt);
     expect(saved).toBe(true);
-    expect(Math.abs(world.components.Position.x[ball]! - keeperAt[0])).toBeLessThanOrEqual(KEEPER_REACH);
+    expect(world.components.Position.x[ball]!).toBeLessThan(keeperAt[0]);
   });
 });
 
