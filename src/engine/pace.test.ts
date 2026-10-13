@@ -88,9 +88,12 @@ describe("pace in matches", () => {
     }
     let fastGoals = 0, slowGoals = 0;
     for (let seed = 1; seed <= 40; seed++) {
-      const r = simulateEventMatch(world, world.clubs.strong!, world.clubs.weak!, seededRng(seed));
-      fastGoals += r.homeGoals;
-      slowGoals += r.awayGoals;
+      // Alternate home and away so home advantage can't explain the result
+      const fastHome = seed % 2 === 0;
+      const [home, away] = fastHome ? [world.clubs.strong!, world.clubs.weak!] : [world.clubs.weak!, world.clubs.strong!];
+      const r = simulateEventMatch(world, home, away, seededRng(seed));
+      fastGoals += fastHome ? r.homeGoals : r.awayGoals;
+      slowGoals += fastHome ? r.awayGoals : r.homeGoals;
     }
     expect(fastGoals).toBeGreaterThan(slowGoals);
   }, SLOW_TEST);
