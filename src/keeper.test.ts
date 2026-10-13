@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
-import { KEEPER_DIVE_SPEED, KEEPER_REACH, KEEPER_REACTION_TIME, PITCH_LENGTH, PITCH_WIDTH, STRONGEST_STRIKE_SPEED, TIME_STEP } from "./constants";
+import { AVERAGE_SHOOTING_GRADE, KEEPER_DIVE_SPEED, KEEPER_REACH, KEEPER_REACTION_TIME, PITCH_LENGTH, PITCH_WIDTH, STRONGEST_STRIKE_SPEED, TIME_STEP } from "./constants";
+import { bestShot, shotOptions } from "./chance";
 import { GOAL_LINE, whereBallCrosses } from "./flight";
 import { kick, type Point } from "./shooting";
 import { isGoal } from "./goal";
 import { step } from "./systems";
-import { addBall, addGoalkeeper, createGame, strikeBall } from "./world";
+import { addBall, addGoalkeeper, addPlayer, createGame, strikeBall } from "./world";
 
 const GOAL_CENTRE = PITCH_WIDTH / 2;
 const PENALTY_SPOT: Point = [PITCH_LENGTH - 11, GOAL_CENTRE, 0];
@@ -134,5 +135,40 @@ describe("reading the shot", () => {
 
   test("knows a ball that stops short will never reach the line", () => {
     expect(whereBallCrosses(GOAL_LINE, [90, GOAL_CENTRE, 0], [3, 0, 0], TIME_STEP)).toBeNull();
+  });
+});
+
+describe("a goalkeeper taking up position", () => {
+  function settleAgainst(ballAt: [x: number, y: number]) {
+    const world = createGame();
+    const { Position } = world.components;
+    addPlayer(world, ballAt[0] - 0.3, ballAt[1]);
+    addBall(world, ...ballAt);
+    const keeper = addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+    for (let time = 0; time < 4; time += TIME_STEP) step(world);
+    return [Position.x[keeper]!, Position.y[keeper]!] as [number, number];
+  }
+
+  const chanceAgainst = (from: Point, keeper: [number, number]) => bestShot(shotOptions(from, AVERAGE_SHOOTING_GRADE), keeper).chance;
+
+  test("stays on the line, shuffled towards the ball's side, while the shooter is far out", () => {
+    const [x, y] = settleAgainst([PITCH_LENGTH - 35, GOAL_CENTRE + 15]);
+    expect(x).toBeGreaterThan(PITCH_LENGTH - 0.5);
+    expect(y).toBeGreaterThan(GOAL_CENTRE);
+  });
+
+  test("doesn't run out through ground where the shooter would have a better chance", () => {
+    const ballAt: Point = [PITCH_LENGTH - 14, GOAL_CENTRE + 3, 0];
+    const settled = settleAgainst([ballAt[0], ballAt[1]]);
+    expect(settled[0]).toBeGreaterThan(PITCH_LENGTH - 1);
+    expect(chanceAgainst(ballAt, settled)).toBeLessThanOrEqual(chanceAgainst(ballAt, [PITCH_LENGTH, GOAL_CENTRE]));
+  });
+
+  test("rushes out at a shooter close enough to beat them from the line", () => {
+    const ballAt: Point = [PITCH_LENGTH - 9, GOAL_CENTRE, 0];
+    expect(chanceAgainst(ballAt, [PITCH_LENGTH, GOAL_CENTRE])).toBe(1);
+    const settled = settleAgainst([ballAt[0], ballAt[1]]);
+    expect(Math.hypot(settled[0] - ballAt[0], settled[1] - ballAt[1])).toBeLessThan(3);
+    expect(chanceAgainst(ballAt, settled)).toBeLessThan(0.5);
   });
 });

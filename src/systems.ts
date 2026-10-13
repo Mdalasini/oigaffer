@@ -20,8 +20,8 @@ import {
   TOUCH_REACH,
   TURN_RATE,
 } from "./constants";
-import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling } from "./flight";
-import { bestShot, shotOptions } from "./chance";
+import { closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight } from "./flight";
+import { bestShot, shotOptions, whereToStand } from "./chance";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Keeper } from "./keeper";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
@@ -281,8 +281,8 @@ export function watchGoalLine(world: Game): void {
 function diveForBall(world: Game, keeper: number, ball: number, dt: number): void {
   const { Position, Velocity } = world.components;
   const keeperAt: Keeper = [Position.x[keeper]!, Position.y[keeper]!];
-  const flight = ballFlight(pointOf(Position, ball), pointOf(Velocity, ball), dt);
-  const interception = bestInterception(keeperAt, flight, (step) => step + 1, dt);
+  const flight = straightFlight(pointOf(Position, ball), pointOf(Velocity, ball), dt);
+  const interception = flight && bestInterception(keeperAt, flight, (step) => step + 1, dt);
   const gapX = interception ? interception.point[0] - keeperAt[0] : 0;
   const gapY = interception ? interception.point[1] - keeperAt[1] : 0;
   const gap = Math.hypot(gapX, gapY);
@@ -291,19 +291,49 @@ function diveForBall(world: Game, keeper: number, ball: number, dt: number): voi
   Velocity.y[keeper] = gapY * speed;
 }
 
+function nearestShooter(world: Game, ball: number): number | undefined {
+  const { Position, Shooting } = world.components;
+  let nearest: number | undefined;
+  let nearestDistance = Infinity;
+  for (const eid of query(world, [Position, Shooting])) {
+    const distance = Math.hypot(Position.x[eid]! - Position.x[ball]!, Position.y[eid]! - Position.y[ball]!);
+    if (distance < nearestDistance) [nearest, nearestDistance] = [eid, distance];
+  }
+  return nearest;
+}
+
+function takeUpPosition(world: Game, keeper: number, ball: number, dt: number): void {
+  const { Position, Shooting } = world.components;
+  const shooter = nearestShooter(world, ball);
+  if (shooter === undefined) return;
+  const from = pointOf(Position, ball);
+  const keeperAt: Keeper = [Position.x[keeper]!, Position.y[keeper]!];
+  const spot = whereToStand(from, shotOptions(from, Shooting[shooter]!, dt), keeperAt, dt);
+  if (!spot) return;
+  setTarget(world, keeper, spot[0], spot[1], 0, 0, Math.atan2(from[1] - spot[1], from[0] - spot[0]));
+}
+
+function standStill(world: Game, keeper: number): void {
+  const { Velocity, Target } = world.components;
+  removeComponent(world, keeper, Target);
+  Velocity.x[keeper] = 0;
+  Velocity.y[keeper] = 0;
+}
+
 export function goalkeep(world: Game, dt: number): void {
-  const { Position, Velocity, Goalkeeper, Struck, Ball } = world.components;
+  const { Position, Velocity, Goalkeeper, Struck, Held, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Velocity, Goalkeeper])) {
-    Velocity.x[eid] = 0;
-    Velocity.y[eid] = 0;
-    if (!hasComponent(world, ball, Struck)) {
-      Goalkeeper.watchingShotFor[eid] = 0;
+    if (hasComponent(world, ball, Struck)) {
+      standStill(world, eid);
+      if (hasReacted(Goalkeeper.watchingShotFor[eid]!, dt)) diveForBall(world, eid, ball, dt);
+      Goalkeeper.watchingShotFor[eid] = Goalkeeper.watchingShotFor[eid]! + dt;
       continue;
     }
-    if (hasReacted(Goalkeeper.watchingShotFor[eid]!, dt)) diveForBall(world, eid, ball, dt);
-    Goalkeeper.watchingShotFor[eid] = Goalkeeper.watchingShotFor[eid]! + dt;
+    Goalkeeper.watchingShotFor[eid] = 0;
+    if (hasComponent(world, ball, Held)) standStill(world, eid);
+    else takeUpPosition(world, eid, ball, dt);
   }
 }
 

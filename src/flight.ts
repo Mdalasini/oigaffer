@@ -71,3 +71,43 @@ export function closestPassThisStep(x: number, y: number, position: Point, veloc
   const share = length > 0 ? Math.max(0, Math.min(1, ((x - fromX) * moveX + (y - fromY) * moveY) / length)) : 1;
   return [fromX + moveX * share, fromY + moveY * share, Math.max(0, fromZ + moveZ * share)];
 }
+
+export type StraightFlight = {
+  fromX: number;
+  fromY: number;
+  directionX: number;
+  directionY: number;
+  along: number[];
+  stepLength: number[];
+  height: number[];
+  climb: number[];
+  crossesGoalLineAt: Point | null;
+};
+
+export function straightFlight(from: Point, velocity: Point, dt: number): StraightFlight | null {
+  const speed = Math.hypot(velocity[0], velocity[1]);
+  if (speed === 0) return null;
+  const flight: StraightFlight = {
+    fromX: from[0],
+    fromY: from[1],
+    directionX: velocity[0] / speed,
+    directionY: velocity[1] / speed,
+    along: [],
+    stepLength: [],
+    height: [],
+    climb: [],
+    crossesGoalLineAt: null,
+  };
+  if (hasCrossed(GOAL_LINE, from)) return flight;
+  for (const [now, moving] of ballFlight(from, velocity, dt)) {
+    flight.along.push((now[0] - from[0]) * flight.directionX + (now[1] - from[1]) * flight.directionY);
+    flight.stepLength.push(Math.hypot(moving[0], moving[1]) * dt);
+    flight.height.push(now[2]);
+    flight.climb.push(moving[2] * dt);
+    if (hasCrossed(GOAL_LINE, now)) {
+      flight.crossesGoalLineAt = crossing(GOAL_LINE, now, moving);
+      break;
+    }
+  }
+  return flight;
+}
