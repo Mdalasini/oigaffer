@@ -12,6 +12,10 @@ export const player = (id: string, position: Position, attacking: number, defend
     tackling: defending,
     goalkeeping: defending,
     stamina: 12,
+    pace: 10,
+    acceleration: 10,
+    jumping: 10,
+    strength: 10,
   },
 });
 

@@ -10,6 +10,10 @@ export interface Attributes {
   tackling: number;
   goalkeeping: number;
   stamina: number; // how slowly they tire over a match
+  pace: number; // top running speed
+  acceleration: number; // how quickly they reach top speed
+  jumping: number; // reach in the air
+  strength: number; // holding off and winning physical challenges
 }
 
 export interface Player {
