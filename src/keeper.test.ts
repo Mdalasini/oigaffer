@@ -3,7 +3,8 @@ import { hasComponent } from "bitecs";
 import { KEEPER_DIVE_SPEED, KEEPER_REACH, KEEPER_REACTION_TIME, PITCH_LENGTH, PITCH_WIDTH, STRONGEST_STRIKE_SPEED, TIME_STEP } from "./constants";
 import { GOAL_LINE, whereBallCrosses } from "./flight";
 import { kick, type Point } from "./shooting";
-import { isGoal, step } from "./systems";
+import { isGoal } from "./goal";
+import { step } from "./systems";
 import { addBall, addGoalkeeper, createGame, strikeBall } from "./world";
 
 const GOAL_CENTRE = PITCH_WIDTH / 2;

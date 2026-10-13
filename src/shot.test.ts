@@ -15,7 +15,8 @@ import {
   WORST_SHOOTING_GRADE,
 } from "./constants";
 import { kick, neededStrikeSpeed, releaseAngle, spreadAngle, spreadRadius, strikeSpeed, type Point } from "./shooting";
-import { isGoal, step } from "./systems";
+import { isGoal } from "./goal";
+import { step } from "./systems";
 import { addBall, addPlayer, createGame, setShot } from "./world";
 
 const GOAL_CENTRE = PITCH_WIDTH / 2;

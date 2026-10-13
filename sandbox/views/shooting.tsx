@@ -17,7 +17,7 @@ import {
   strikeSpeed,
   type Point,
 } from "../../src/shooting";
-import { isGoal } from "../../src/systems";
+import { isGoal } from "../../src/goal";
 import { addBall, addGoalkeeper, addPlayer, createGame, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";

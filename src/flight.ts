@@ -41,16 +41,25 @@ export function crossing(plane: Plane, position: Point, velocity: Point): Point 
 
 export const hasCrossed = (plane: Plane, position: Point) => beyond(plane, position[0], position[1]) >= 0;
 
-export function whereBallCrosses(plane: Plane, position: Point, velocity: Point, dt: number): Point | null {
+export function* ballFlight(position: Point, velocity: Point, dt: number): Generator<[position: Point, velocity: Point]> {
   let [x, y, z] = position;
   let [vx, vy, vz] = velocity;
-  if (hasCrossed(plane, position)) return null;
-  while (closingSpeed(plane, [vx, vy, vz]) > 0) {
+  while (vx !== 0 || vy !== 0) {
     if (isOnTheGround(z, vz)) [vx, vy] = rolling(vx, vy, dt);
     else [z, vz] = flying(z, vz, dt);
     x += vx * dt;
     y += vy * dt;
-    if (hasCrossed(plane, [x, y, z])) return crossing(plane, [x, y, z], [vx, vy, vz]);
+    yield [
+      [x, y, z],
+      [vx, vy, vz],
+    ];
+  }
+}
+
+export function whereBallCrosses(plane: Plane, position: Point, velocity: Point, dt: number): Point | null {
+  if (hasCrossed(plane, position) || closingSpeed(plane, velocity) <= 0) return null;
+  for (const [now, moving] of ballFlight(position, velocity, dt)) {
+    if (hasCrossed(plane, now)) return crossing(plane, now, moving);
   }
   return null;
 }

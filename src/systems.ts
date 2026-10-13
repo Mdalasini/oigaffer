@@ -3,11 +3,9 @@ import {
   ACCELERATION,
   ARRIVAL_DISTANCE,
   BRAKING,
-  CROSSBAR_HEIGHT,
   DISTANCE_BEHIND_BALL,
   DRIBBLE_BRAKING,
   DRIBBLE_STOP_DISTANCE,
-  GOAL_WIDTH,
   KEEPER_DIVE_SPEED,
   KEEPER_HIGHEST_REACH,
   KEEPER_REACH,
@@ -15,7 +13,6 @@ import {
   MAX_DRIBBLE_TOUCH_SPEED,
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   PITCH_LENGTH,
-  PITCH_WIDTH,
   SIDEWAYS_SPEED,
   STANDING_SPEED,
   TIME_STEP,
@@ -238,10 +235,6 @@ export function move(world: Game, dt: number): void {
     Position.x[eid] = Position.x[eid]! + Velocity.x[eid]! * dt;
     Position.y[eid] = Position.y[eid]! + Velocity.y[eid]! * dt;
   }
-}
-
-export function isGoal(y: number, z: number): boolean {
-  return Math.abs(y - PITCH_WIDTH / 2) < GOAL_WIDTH / 2 && z < CROSSBAR_HEIGHT;
 }
 
 const pointOf = (part: { x: number[]; y: number[]; z: number[] }, eid: number): Point => [part.x[eid]!, part.y[eid]!, part.z[eid]!];
