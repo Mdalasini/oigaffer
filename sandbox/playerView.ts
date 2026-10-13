@@ -221,11 +221,27 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ctx.fill();
   }
 
-  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeper: [x: number, y: number] | null, defenders: Defender[] = []) {
+  function drawTeammate([x, y]: [number, number]) {
+    drawBody(upright(x, y, PLAYER_HALF_WIDTH, PLAYER_HEIGHT), COLOURS.player);
+  }
+
+  function draw(
+    ball: Point,
+    trail: Point[],
+    aim: Point,
+    circle: Point[],
+    keeper: [x: number, y: number] | null,
+    defenders: Defender[] = [],
+    teammates: [x: number, y: number][] = [],
+  ) {
     drawGround();
     drawGoal();
     if (keeper !== null) drawKeeper(keeper);
-    [...defenders].sort((a, b) => depthOf([...b.at, 0]) - depthOf([...a.at, 0])).forEach(drawDefender);
+    const figures = [
+      ...defenders.map((defender) => ({ at: defender.at, draw: () => drawDefender(defender) })),
+      ...teammates.map((at) => ({ at, draw: () => drawTeammate(at) })),
+    ];
+    figures.sort((a, b) => depthOf([...b.at, 0]) - depthOf([...a.at, 0])).forEach((figure) => figure.draw());
     drawTrail(trail);
     drawCircle(circle);
     drawAim(aim);
