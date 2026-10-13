@@ -1,135 +1,158 @@
 import { query, removeComponent } from "bitecs";
 import {
-  ACCEL,
-  ARRIVED,
-  BEHIND_BALL,
-  BRAKE,
-  DRIBBLE_BRAKE,
-  DRIBBLE_SPEED,
-  DRIBBLED,
-  DT,
-  MOVING,
-  REACH,
-  ROLL_DECEL,
+  ACCELERATION,
+  ARRIVAL_DISTANCE,
+  BALL_ROLLING_DECELERATION,
+  BRAKING,
+  DRIBBLE_BRAKING,
+  DRIBBLE_DISTANCE_BEHIND_BALL,
+  DRIBBLE_STOP_DISTANCE,
+  MAX_DRIBBLE_TOUCH_SPEED,
   SIDEWAYS_SPEED,
+  STANDING_SPEED,
+  TIME_STEP,
   TOP_SPEED,
-  TOUCH_AHEAD,
   TOUCH_INTERVAL,
+  TOUCH_REACH,
+  TOUCH_SPEED_ABOVE_RUNNING,
   TURN_RATE,
 } from "./constants";
 import { setTarget, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
+const facesAnyWay = (facing: number) => Number.isNaN(facing);
+
+const stoppingSpeed = (distance: number, braking: number) => Math.sqrt(2 * braking * Math.max(0, distance));
+
 function turnTowards(facing: number, heading: number, maxTurn: number): number {
   const turn = angleBetween(facing, heading);
   return Math.abs(turn) <= maxTurn ? heading : facing + Math.sign(turn) * maxTurn;
 }
 
-function speedFacing(facing: number, heading: number): number {
+function topSpeedFacing(facing: number, heading: number): number {
   const ahead = Math.max(0, Math.cos(angleBetween(facing, heading)));
   return SIDEWAYS_SPEED + (TOP_SPEED - SIDEWAYS_SPEED) * ahead;
 }
 
-// Run to the target as fast as possible and stop on it. A moving target is
-// matched for speed and the gap closed, braking in time not to overshoot.
+function arrive(world: Game, eid: number, dt: number): void {
+  const { Position, Velocity, Target, Facing } = world.components;
+  Position.x[eid] = Target.x[eid]!;
+  Position.y[eid] = Target.y[eid]!;
+  Velocity.x[eid] = Target.vx[eid]!;
+  Velocity.y[eid] = Target.vy[eid]!;
+  const arrivalFacing = Target.arrivalFacing[eid]!;
+  if (facesAnyWay(arrivalFacing)) {
+    removeComponent(world, eid, Target);
+    return;
+  }
+  Facing[eid] = turnTowards(Facing[eid]!, arrivalFacing, TURN_RATE * dt);
+  if (Facing[eid] === arrivalFacing) removeComponent(world, eid, Target);
+}
+
+function accelerateTowards(world: Game, eid: number, wantX: number, wantY: number, dt: number): void {
+  const { Velocity } = world.components;
+  const vx = Velocity.x[eid]!;
+  const vy = Velocity.y[eid]!;
+  const changeX = wantX - vx;
+  const changeY = wantY - vy;
+  const change = Math.hypot(changeX, changeY);
+  const speedingUp = Math.hypot(wantX, wantY) > Math.hypot(vx, vy);
+  const limit = (speedingUp ? ACCELERATION : BRAKING) * dt;
+  const share = change > limit ? limit / change : 1;
+  Velocity.x[eid] = vx + changeX * share;
+  Velocity.y[eid] = vy + changeY * share;
+}
+
 export function runToTarget(world: Game, dt: number): void {
   const { Position, Velocity, Target, Facing } = world.components;
   for (const eid of query(world, [Position, Velocity, Target, Facing])) {
-    const tvx = Target.vx[eid]!;
-    const tvy = Target.vy[eid]!;
-    const vx = Velocity.x[eid]!;
-    const vy = Velocity.y[eid]!;
+    const targetVx = Target.vx[eid]!;
+    const targetVy = Target.vy[eid]!;
     const dx = Target.x[eid]! - Position.x[eid]!;
     const dy = Target.y[eid]! - Position.y[eid]!;
     const distance = Math.hypot(dx, dy);
-    const closing = Math.hypot(vx - tvx, vy - tvy);
+    const closingSpeed = Math.hypot(Velocity.x[eid]! - targetVx, Velocity.y[eid]! - targetVy);
 
-    if (distance < ARRIVED && closing < BRAKE * dt) {
-      Position.x[eid] = Target.x[eid]!;
-      Position.y[eid] = Target.y[eid]!;
-      Velocity.x[eid] = tvx;
-      Velocity.y[eid] = tvy;
-      const face = Target.face[eid]!;
-      if (!Number.isNaN(face)) Facing[eid] = turnTowards(Facing[eid]!, face, TURN_RATE * dt);
-      if (Number.isNaN(face) || Facing[eid] === face) removeComponent(world, eid, Target);
+    if (distance < ARRIVAL_DISTANCE && closingSpeed < BRAKING * dt) {
+      arrive(world, eid, dt);
       continue;
     }
 
-    // The fastest closing speed from which braking still stops on the target, measured
-    // from where they'll be after this step so they don't arrive still moving
-    const approach = Math.min(TOP_SPEED, Math.sqrt(2 * BRAKE * Math.max(0, distance - closing * dt)));
-    const ux = distance > 0 ? dx / distance : 0;
-    const uy = distance > 0 ? dy / distance : 0;
-    let wantX = tvx + ux * approach;
-    let wantY = tvy + uy * approach;
-    let wanted = Math.hypot(wantX, wantY);
-    const face = Target.face[eid]!;
+    const distanceAfterStep = distance - closingSpeed * dt;
+    const approachSpeed = Math.min(TOP_SPEED, stoppingSpeed(distanceAfterStep, BRAKING));
+    const towardsX = distance > 0 ? dx / distance : 0;
+    const towardsY = distance > 0 ? dy / distance : 0;
+    let wantX = targetVx + towardsX * approachSpeed;
+    let wantY = targetVy + towardsY * approachSpeed;
+    const wantedSpeed = Math.hypot(wantX, wantY);
     const heading = Math.atan2(wantY, wantX);
-    if (wanted > MOVING || !Number.isNaN(face)) {
-      Facing[eid] = turnTowards(Facing[eid]!, wanted > MOVING || Number.isNaN(face) ? heading : face, TURN_RATE * dt);
-    }
-    if (wanted > 0) {
-      const allowed = speedFacing(Facing[eid]!, heading);
-      if (wanted > allowed) {
-        wantX *= allowed / wanted;
-        wantY *= allowed / wanted;
-        wanted = allowed;
-      }
-    }
 
-    const changeX = wantX - vx;
-    const changeY = wantY - vy;
-    const change = Math.hypot(changeX, changeY);
-    const limit = (wanted > Math.hypot(vx, vy) ? ACCEL : BRAKE) * dt;
-    const k = change > limit ? limit / change : 1;
-    Velocity.x[eid] = vx + changeX * k;
-    Velocity.y[eid] = vy + changeY * k;
+    const arrivalFacing = Target.arrivalFacing[eid]!;
+    if (wantedSpeed > STANDING_SPEED) Facing[eid] = turnTowards(Facing[eid]!, heading, TURN_RATE * dt);
+    else if (!facesAnyWay(arrivalFacing)) Facing[eid] = turnTowards(Facing[eid]!, arrivalFacing, TURN_RATE * dt);
+
+    const allowedSpeed = topSpeedFacing(Facing[eid]!, heading);
+    if (wantedSpeed > allowedSpeed) {
+      wantX *= allowedSpeed / wantedSpeed;
+      wantY *= allowedSpeed / wantedSpeed;
+    }
+    accelerateTowards(world, eid, wantX, wantY, dt);
   }
 }
 
-// A dribbler runs to the ball and keeps touching it on towards where they're
-// taking it, about every other stride: a little faster than they're running, but
-// never faster than they could stop from in time, and never so hard that it passes
-// the spot before the next touch. Close enough, they stop it dead.
+function dribbleTouchSpeed(runningSpeed: number, distanceLeft: number): number {
+  return Math.min(
+    Math.max(0, runningSpeed) + TOUCH_SPEED_ABOVE_RUNNING,
+    MAX_DRIBBLE_TOUCH_SPEED,
+    stoppingSpeed(distanceLeft, DRIBBLE_BRAKING),
+    distanceLeft / TOUCH_INTERVAL,
+  );
+}
+
 export function dribble(world: Game, dt: number): void {
   const { Position, Velocity, Facing, Dribble, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
   for (const eid of query(world, [Position, Velocity, Facing, Dribble])) {
-    const bx = Position.x[ball]!;
-    const by = Position.y[ball]!;
-    const toBallX = bx - Position.x[eid]!;
-    const toBallY = by - Position.y[eid]!;
-    const gap = Math.hypot(toBallX, toBallY);
-    const dx = Dribble.x[eid]! - bx;
-    const dy = Dribble.y[eid]! - by;
-    const left = Math.hypot(dx, dy);
-    const ux = left > 0 ? dx / left : 0;
-    const uy = left > 0 ? dy / left : 0;
-    Dribble.ready[eid] = Math.max(0, Dribble.ready[eid]! - dt);
+    const ballX = Position.x[ball]!;
+    const ballY = Position.y[ball]!;
+    const toBallX = ballX - Position.x[eid]!;
+    const toBallY = ballY - Position.y[eid]!;
+    const dx = Dribble.x[eid]! - ballX;
+    const dy = Dribble.y[eid]! - ballY;
+    const distanceLeft = Math.hypot(dx, dy);
+    const onwardX = distanceLeft > 0 ? dx / distanceLeft : 0;
+    const onwardY = distanceLeft > 0 ? dy / distanceLeft : 0;
+    Dribble.nextTouchIn[eid] = Math.max(0, Dribble.nextTouchIn[eid]! - dt);
 
-    const inFront = Math.abs(angleBetween(Facing[eid]!, Math.atan2(toBallY, toBallX))) <= Math.PI / 2;
-    const ballOnTheWay = toBallX * ux + toBallY * uy >= 0;
-    if (gap <= REACH && Dribble.ready[eid] === 0 && inFront && (ballOnTheWay || left < DRIBBLED)) {
-      Dribble.ready[eid] = TOUCH_INTERVAL;
-      if (left < DRIBBLED) {
-        Velocity.x[ball] = 0;
-        Velocity.y[ball] = 0;
-        removeComponent(world, eid, Dribble);
-      } else {
-        const running = Math.max(0, Velocity.x[eid]! * ux + Velocity.y[eid]! * uy);
-        const speed = Math.min(running + TOUCH_AHEAD, DRIBBLE_SPEED, Math.sqrt(2 * DRIBBLE_BRAKE * left), left / TOUCH_INTERVAL);
-        Velocity.x[ball] = ux * speed;
-        Velocity.y[ball] = uy * speed;
-      }
+    const arrived = distanceLeft < DRIBBLE_STOP_DISTANCE;
+    const withinReach = Math.hypot(toBallX, toBallY) <= TOUCH_REACH;
+    const ready = Dribble.nextTouchIn[eid] === 0;
+    const ballInFront = Math.abs(angleBetween(Facing[eid]!, Math.atan2(toBallY, toBallX))) <= Math.PI / 2;
+    const ballOnTheWay = toBallX * onwardX + toBallY * onwardY >= 0;
+
+    if (withinReach && ready && ballInFront && (ballOnTheWay || arrived)) {
+      Dribble.nextTouchIn[eid] = TOUCH_INTERVAL;
+      const runningSpeed = Velocity.x[eid]! * onwardX + Velocity.y[eid]! * onwardY;
+      const touchSpeed = arrived ? 0 : dribbleTouchSpeed(runningSpeed, distanceLeft);
+      Velocity.x[ball] = onwardX * touchSpeed;
+      Velocity.y[ball] = onwardY * touchSpeed;
+      if (arrived) removeComponent(world, eid, Dribble);
     }
 
-    setTarget(world, eid, bx - ux * BEHIND_BALL, by - uy * BEHIND_BALL, Velocity.x[ball]!, Velocity.y[ball]!, Math.atan2(uy, ux));
+    setTarget(
+      world,
+      eid,
+      ballX - onwardX * DRIBBLE_DISTANCE_BEHIND_BALL,
+      ballY - onwardY * DRIBBLE_DISTANCE_BEHIND_BALL,
+      Velocity.x[ball]!,
+      Velocity.y[ball]!,
+      Math.atan2(onwardY, onwardX),
+    );
   }
 }
 
-// A rolling ball slows down and stops
 export function roll(world: Game, dt: number): void {
   const { Velocity, Ball } = world.components;
   for (const eid of query(world, [Ball, Velocity])) {
@@ -137,9 +160,9 @@ export function roll(world: Game, dt: number): void {
     const vy = Velocity.y[eid]!;
     const speed = Math.hypot(vx, vy);
     if (speed === 0) continue;
-    const k = Math.max(0, speed - ROLL_DECEL * dt) / speed;
-    Velocity.x[eid] = vx * k;
-    Velocity.y[eid] = vy * k;
+    const share = Math.max(0, speed - BALL_ROLLING_DECELERATION * dt) / speed;
+    Velocity.x[eid] = vx * share;
+    Velocity.y[eid] = vy * share;
   }
 }
 
@@ -151,7 +174,7 @@ export function move(world: Game, dt: number): void {
   }
 }
 
-export function step(world: Game, dt = DT): void {
+export function step(world: Game, dt = TIME_STEP): void {
   dribble(world, dt);
   runToTarget(world, dt);
   roll(world, dt);

@@ -1,14 +1,22 @@
 import { addComponent, addEntity, createWorld } from "bitecs";
 
+export const ANY_FACING = NaN;
+
 export function createGame() {
   return createWorld({
     components: {
       Position: { x: [] as number[], y: [] as number[] },
       Velocity: { x: [] as number[], y: [] as number[] },
       Facing: [] as number[],
-      Target: { x: [] as number[], y: [] as number[], vx: [] as number[], vy: [] as number[], face: [] as number[] }, // a point to run to, which may be moving, and which way to face there (NaN: any)
-      Dribble: { x: [] as number[], y: [] as number[], ready: [] as number[] }, // where a player is taking the ball, and s until their next touch
-      Ball: {}, // tag
+      Target: {
+        x: [] as number[],
+        y: [] as number[],
+        vx: [] as number[],
+        vy: [] as number[],
+        arrivalFacing: [] as number[],
+      },
+      Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
+      Ball: {},
     },
   });
 }
@@ -21,30 +29,12 @@ export function addPlayer(world: Game, x: number, y: number, facing = 0): number
   addComponent(world, eid, Position);
   addComponent(world, eid, Velocity);
   addComponent(world, eid, Facing);
-  Facing[eid] = facing;
   Position.x[eid] = x;
   Position.y[eid] = y;
   Velocity.x[eid] = 0;
   Velocity.y[eid] = 0;
+  Facing[eid] = facing;
   return eid;
-}
-
-export function setTarget(world: Game, eid: number, x: number, y: number, vx = 0, vy = 0, face = NaN): void {
-  const { Target } = world.components;
-  addComponent(world, eid, Target);
-  Target.x[eid] = x;
-  Target.y[eid] = y;
-  Target.vx[eid] = vx;
-  Target.vy[eid] = vy;
-  Target.face[eid] = face;
-}
-
-export function setDribble(world: Game, eid: number, x: number, y: number): void {
-  const { Dribble } = world.components;
-  addComponent(world, eid, Dribble);
-  Dribble.x[eid] = x;
-  Dribble.y[eid] = y;
-  Dribble.ready[eid] = 0;
 }
 
 export function addBall(world: Game, x: number, y: number): number {
@@ -58,4 +48,30 @@ export function addBall(world: Game, x: number, y: number): number {
   Velocity.x[eid] = 0;
   Velocity.y[eid] = 0;
   return eid;
+}
+
+export function setTarget(
+  world: Game,
+  eid: number,
+  x: number,
+  y: number,
+  vx = 0,
+  vy = 0,
+  arrivalFacing = ANY_FACING,
+): void {
+  const { Target } = world.components;
+  addComponent(world, eid, Target);
+  Target.x[eid] = x;
+  Target.y[eid] = y;
+  Target.vx[eid] = vx;
+  Target.vy[eid] = vy;
+  Target.arrivalFacing[eid] = arrivalFacing;
+}
+
+export function setDribble(world: Game, eid: number, x: number, y: number): void {
+  const { Dribble } = world.components;
+  addComponent(world, eid, Dribble);
+  Dribble.x[eid] = x;
+  Dribble.y[eid] = y;
+  Dribble.nextTouchIn[eid] = 0;
 }

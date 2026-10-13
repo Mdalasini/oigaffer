@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
-import { DRIBBLE_SPEED, DRIBBLED, DT, REACH, ROLL_DECEL } from "./constants";
+import { MAX_DRIBBLE_TOUCH_SPEED, DRIBBLE_STOP_DISTANCE, TIME_STEP, TOUCH_REACH, BALL_ROLLING_DECELERATION } from "./constants";
 import { step } from "./systems";
 import { addBall, addPlayer, createGame, setDribble } from "./world";
 
-// A player takes the ball from one point to another; records the gap between them
-function dribble(player: [number, number], ball: [number, number], to: [number, number]) {
+function dribbleFromTo(player: [number, number], ball: [number, number], to: [number, number]) {
   const world = createGame();
   const { Position, Velocity, Dribble, Target, Facing } = world.components;
   const p = addPlayer(world, ...player);
@@ -17,7 +16,7 @@ function dribble(player: [number, number], ball: [number, number], to: [number, 
   let time = 0;
   while ((hasComponent(world, p, Dribble) || hasComponent(world, p, Target)) && time < 30) {
     step(world);
-    time += DT;
+    time += TIME_STEP;
     gaps.push(Math.hypot(Position.x[b]! - Position.x[p]!, Position.y[b]! - Position.y[p]!));
     const ballSpeed = Math.hypot(Velocity.x[b]!, Velocity.y[b]!);
     if (ballSpeed > (ballSpeeds.at(-1) ?? 0)) facingAtTouches.push(Facing[p]!);
@@ -36,45 +35,44 @@ describe("a ball rolling on its own", () => {
     let time = 0;
     while (Velocity.x[b]! > 0) {
       step(world);
-      time += DT;
+      time += TIME_STEP;
     }
-    expect(time).toBeCloseTo(4 / ROLL_DECEL, 1);
-    expect(Position.x[b]!).toBeCloseTo((4 * 4) / (2 * ROLL_DECEL), 0);
+    expect(time).toBeCloseTo(4 / BALL_ROLLING_DECELERATION, 1);
+    expect(Position.x[b]!).toBeCloseTo((4 * 4) / (2 * BALL_ROLLING_DECELERATION), 0);
   });
 });
 
 describe("a player running with the ball", () => {
   test("takes it to the spot and stops it there, with the ball at their feet", () => {
-    const run = dribble([20, 34], [20.3, 34], [50, 34]);
-    expect(run.ballTo).toBeLessThan(DRIBBLED);
+    const run = dribbleFromTo([20, 34], [20.3, 34], [50, 34]);
+    expect(run.ballTo).toBeLessThan(DRIBBLE_STOP_DISTANCE);
     expect(run.ballStill).toBe(true);
-    expect(run.finalGap).toBeLessThanOrEqual(REACH);
+    expect(run.finalGap).toBeLessThanOrEqual(TOUCH_REACH);
   });
 
   test("keeps the ball close all the way", () => {
-    const run = dribble([20, 34], [20.3, 34], [80, 34]);
-    expect(Math.max(...run.gaps)).toBeLessThan(REACH + 0.2);
+    const run = dribbleFromTo([20, 34], [20.3, 34], [80, 34]);
+    expect(Math.max(...run.gaps)).toBeLessThan(TOUCH_REACH + 0.2);
   });
 
-  test("is slower with the ball than without it, but not by much", () => {
-    // 30 m without the ball takes 5.45 s
-    const { time, ballSpeeds } = dribble([20, 34], [20.3, 34], [50, 34]);
+  test("takes 30 m a little slower than the 5.45 s it takes without the ball", () => {
+    const { time, ballSpeeds } = dribbleFromTo([20, 34], [20.3, 34], [50, 34]);
     expect(time).toBeGreaterThan(5.5);
     expect(time).toBeLessThan(7.5);
-    expect(Math.max(...ballSpeeds)).toBeLessThanOrEqual(DRIBBLE_SPEED + 1e-9);
+    expect(Math.max(...ballSpeeds)).toBeLessThanOrEqual(MAX_DRIBBLE_TOUCH_SPEED + 1e-9);
   });
 
   test("turns round with the ball to take it back the way they came", () => {
-    const run = dribble([50, 34], [50.3, 34], [30, 34]);
-    expect(run.ballTo).toBeLessThan(DRIBBLED);
-    expect(run.finalGap).toBeLessThanOrEqual(REACH);
+    const run = dribbleFromTo([50, 34], [50.3, 34], [30, 34]);
+    expect(run.ballTo).toBeLessThan(DRIBBLE_STOP_DISTANCE);
+    expect(run.finalGap).toBeLessThanOrEqual(TOUCH_REACH);
     expect(run.facingAtTouches.length).toBeGreaterThan(3);
     for (const facing of run.facingAtTouches) expect(Math.cos(facing - Math.PI)).toBeGreaterThan(0);
   });
 
   test("goes and gets a ball that isn't at their feet first", () => {
-    const run = dribble([20, 34], [25, 30], [50, 34]);
-    expect(run.ballTo).toBeLessThan(DRIBBLED);
-    expect(run.finalGap).toBeLessThanOrEqual(REACH);
+    const run = dribbleFromTo([20, 34], [25, 30], [50, 34]);
+    expect(run.ballTo).toBeLessThan(DRIBBLE_STOP_DISTANCE);
+    expect(run.finalGap).toBeLessThanOrEqual(TOUCH_REACH);
   });
 });

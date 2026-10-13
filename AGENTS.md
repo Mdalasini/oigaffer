@@ -13,6 +13,13 @@ bun run sandbox      # click-to-dribble viewer at http://localhost:3000
 
 Run `bun test` and `bun run typecheck` before every commit.
 
+## Code
+
+- No comments. If code seems to need one, it isn't clear enough yet: rename things, pull out a well-named function or constant, or split it up until it reads on its own. Test names say what behaviour they check.
+- Quantities are in SI units: metres, seconds, radians, m/s and m/s². Names say what a value is (`BRAKING`, `TOUCH_REACH`), not its unit.
+- Tuning numbers live in `src/constants.ts`.
+- Game state lives in bitECS components, and behaviour in systems that query them.
+
 ## Branches and pull requests
 
 - Never commit to `main`. Start every change on a new branch from an up-to-date `main`.
