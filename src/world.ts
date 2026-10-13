@@ -18,6 +18,12 @@ export function createGame(seed = 1) {
       Grounded: { recoversIn: [] as number[] },
       Tackled: {},
       Blocked: {},
+      Passing: { to: [] as number[] },
+      Passed: { x: [] as number[], y: [] as number[] },
+      Receiving: {},
+      Supporting: {},
+      Intercepted: {},
+      WatchingPassFor: [] as number[],
       Target: {
         x: [] as number[],
         y: [] as number[],
@@ -30,6 +36,7 @@ export function createGame(seed = 1) {
       Attacking: {
         chance: [] as number[],
         bestChanceFurtherOn: [] as number[],
+        bestPass: [] as number[],
         aimY: [] as number[],
         aimZ: [] as number[],
       },
@@ -78,10 +85,12 @@ export function addPlayer(
 }
 
 export function addDefender(world: Game, x: number, y: number, facing = Math.PI, tackling = AVERAGE_GRADE): number {
-  const { Tackling } = world.components;
+  const { Tackling, WatchingPassFor } = world.components;
   const eid = addBody(world, x, y, facing);
   addComponent(world, eid, Tackling);
+  addComponent(world, eid, WatchingPassFor);
   Tackling[eid] = tackling;
+  WatchingPassFor[eid] = 0;
   return eid;
 }
 
@@ -127,8 +136,9 @@ export function setTarget(
 }
 
 export function setDribble(world: Game, eid: number, x: number, y: number): void {
-  const { Dribble, Shot } = world.components;
+  const { Dribble, Shot, Passing } = world.components;
   removeComponent(world, eid, Shot);
+  removeComponent(world, eid, Passing);
   addComponent(world, eid, Dribble);
   Dribble.x[eid] = x;
   Dribble.y[eid] = y;
@@ -136,8 +146,9 @@ export function setDribble(world: Game, eid: number, x: number, y: number): void
 }
 
 export function setShot(world: Game, eid: number, x: number, y: number, z: number): void {
-  const { Shot, Dribble } = world.components;
+  const { Shot, Dribble, Passing } = world.components;
   removeComponent(world, eid, Dribble);
+  removeComponent(world, eid, Passing);
   addComponent(world, eid, Shot);
   Shot.x[eid] = x;
   Shot.y[eid] = y;
@@ -157,6 +168,19 @@ export function setAttacking(world: Game, eid: number): void {
   addComponent(world, eid, Attacking);
   Attacking.chance[eid] = 0;
   Attacking.bestChanceFurtherOn[eid] = 0;
+  Attacking.bestPass[eid] = 0;
   Attacking.aimY[eid] = NaN;
   Attacking.aimZ[eid] = NaN;
+}
+
+export function setPassing(world: Game, eid: number, to: number): void {
+  const { Passing, Dribble, Shot } = world.components;
+  removeComponent(world, eid, Dribble);
+  removeComponent(world, eid, Shot);
+  addComponent(world, eid, Passing);
+  Passing.to[eid] = to;
+}
+
+export function setSupporting(world: Game, eid: number): void {
+  addComponent(world, eid, world.components.Supporting);
 }
