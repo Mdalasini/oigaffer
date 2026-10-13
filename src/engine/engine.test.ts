@@ -98,6 +98,48 @@ describe("moving players on the board", () => {
   });
 });
 
+describe("out-of-possession shape", () => {
+  const fourThreeThree = (): MatchState => {
+    const state = createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+      home: fixedManager({ formation: "4-3-3", mentality: 0 }),
+    });
+    // Wingers drop into a midfield five without the ball
+    moveSpot(state, "home", "LW", "LM", "out");
+    moveSpot(state, "home", "RW", "RM", "out");
+    return state;
+  };
+  const at = (state: MatchState, spot: Spot) => state.players.find((p) => p.side === "home" && p.spot === spot)!;
+
+  test("each player drops to their paired position, line and slot", () => {
+    const state = fourThreeThree();
+    const lw = at(state, "LW");
+    expect([lw.outSpot, lw.outPosition, lw.position]).toEqual(["LM", "MID", "FWD"]);
+    expect(lw.outSlot.x).toBeLessThan(lw.slot.x);
+    // Everyone else keeps their position
+    const cf = at(state, "CF");
+    expect([cf.outSpot, cf.outSlot]).toEqual([cf.spot, cf.slot]);
+    expect(state.events.at(-1)).toMatchObject({ type: "tactics", formation: "4-3-3", outOfPossession: "4-1-4-1" });
+    // The anchor without the ball is built on the deeper slot
+    giveBall(state, state.players.find((p) => p.side === "away" && p.position === "MID")!);
+    expect(toTeamFrame("home", anchor(state, lw, false)).x).toBeLessThan(toTeamFrame("home", anchor(state, lw, true)).x);
+  });
+
+  test("players swapped on the board take their new positions' out-of-possession places", () => {
+    const state = fourThreeThree();
+    const lw = at(state, "LW");
+    const lcm = at(state, "LCM");
+    swapPlayers(state, "home", lw.id, lcm.id);
+    expect([lcm.spot, lcm.outSpot, lw.spot, lw.outSpot]).toEqual(["LW", "LM", "LCM", "LCM"]);
+  });
+
+  test("moving an in-possession position leaves the paired out-of-possession one alone", () => {
+    const state = fourThreeThree();
+    const lw = at(state, "LW");
+    moveSpot(state, "home", "LW", "LAM");
+    expect([lw.spot, lw.outSpot]).toEqual(["LAM", "LM"]);
+  });
+});
+
 describe("valuation", () => {
   test("chances get worse further out and at tighter angles", () => {
     const goalY = PITCH_WIDTH / 2;

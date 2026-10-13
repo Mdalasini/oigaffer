@@ -16,6 +16,10 @@ export interface MatchPlayer {
   side: Side;
   position: Position; // the line they're playing in for the current formation
   spot: Spot; // their position on the tactics board, such as LB or CDM
+  // Where they play when the other side has the ball: board position, line and slot
+  outSpot: Spot;
+  outPosition: Position;
+  outSlot: Vec;
   natural: Position; // where they normally play
   base: Attributes; // fresh attributes
   attributes: Attributes; // current attributes, lowered by fatigue
@@ -108,7 +112,7 @@ export type MatchEvent = { time: number; period: Period; clock: number; side: Si
   | { type: "clearance"; playerId: Id }
   | { type: "shot"; playerId: Id; xg: number; outcome: ShotOutcome; keeperId?: Id; kind: ShotKind }
   | { type: "recovery"; playerId: Id }
-  | { type: "tactics"; formation: string; mentality: Mentality; moved: { playerId: Id; from: Position; to: Position }[] }
+  | { type: "tactics"; formation: string; outOfPossession?: string; mentality: Mentality; moved: { playerId: Id; from: Position; to: Position }[] }
   // side: the team that crossed
   | { type: "cross"; playerId: Id; targetId: Id; outcome: "blocked" | "overhit" | "claimed" | "cleared" | "won" }
   // side: the team that committed it

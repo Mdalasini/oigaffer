@@ -99,7 +99,8 @@ export function describe(e: MatchEvent, names: Names): CommentaryLine | null {
     case "whistle":
       return line(e.phase === "abandoned" ? "The match is abandoned." : e.phase === "half_time" ? "Half time." : "Full time.", "info", null);
     case "tactics": {
-      const setup = `${e.formation}, ${MENTALITY_NAMES[e.mentality]}`;
+      const shape = e.outOfPossession ? `${e.formation} (${e.outOfPossession} without the ball)` : e.formation;
+      const setup = `${shape}, ${MENTALITY_NAMES[e.mentality]}`;
       if (e.time === 0) return line(`${club} line up ${setup}.`, "tactics");
       const moves = e.moved.map((m) => `${p(m.playerId)} ${m.from}→${m.to}`).join(", ");
       return line(`${club} switch to ${setup}${moves ? ` (${moves})` : ""}.`, "tactics");

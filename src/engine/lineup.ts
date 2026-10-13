@@ -1,6 +1,6 @@
 import type { Id, Position } from "../model";
 import { lineRating } from "../squad";
-import { assignRoles, moveSpot as moveSpotOnBoard, sameTactics, shapeName, shapeOf, SPOTS, type Spot, type Tactics } from "../tactics";
+import { assignRoles, moveSpot as moveSpotOnBoard, sameTactics, shapeName, shapeOf, SPOTS, type Possession, type Spot, type Tactics } from "../tactics";
 import { ADDED, MAX_SUBS } from "./constants";
 import { arrangeSide } from "./formation";
 import { CENTRE } from "./geometry";
@@ -25,13 +25,14 @@ function fitRoles(state: MatchState, side: Side, tactics: Tactics, reshuffle = !
     if (role !== p.position) moved.push({ playerId: p.id, from: p.position, to: role });
     p.position = role;
   }
-  arrangeSide(state, side, shapeOf(tactics), reshuffle);
+  arrangeSide(state, side, tactics, reshuffle);
   return moved;
 }
 
 function announce(state: MatchState, side: Side, moved: Moves): void {
   const { tactics } = state.teams[side];
-  emit(state, { type: "tactics", side, formation: shapeName(tactics), mentality: tactics.mentality, moved });
+  const outOfPossession = tactics.outOfPossession ? { outOfPossession: shapeName(tactics, "out") } : {};
+  emit(state, { type: "tactics", side, formation: shapeName(tactics), ...outOfPossession, mentality: tactics.mentality, moved });
 }
 
 // Switches a side to new tactics, moving players between lines if the formation changed
@@ -43,19 +44,20 @@ export function applyTactics(state: MatchState, side: Side, tactics: Tactics, fo
   announce(state, side, moved);
 }
 
-// The manager moves a position on the board, and whoever played there goes with it
-export function moveSpot(state: MatchState, side: Side, from: Spot, to: Spot): boolean {
-  const tactics = moveSpotOnBoard(state.teams[side].tactics, from, to);
+// The manager moves a position on one of the boards, and whoever played there goes with it.
+// Out of possession only the shape changes: players' positions without the ball follow from it.
+export function moveSpot(state: MatchState, side: Side, from: Spot, to: Spot, possession: Possession = "in"): boolean {
+  const tactics = moveSpotOnBoard(state.teams[side].tactics, from, to, possession);
   if (tactics === state.teams[side].tactics) return false;
   const moved: Moves = [];
-  for (const p of onSide(state, side).filter((p) => p.spot === from)) {
+  for (const p of onSide(state, side).filter((p) => possession === "in" && p.spot === from)) {
     const line = SPOTS[to].line;
     if (line !== p.position) moved.push({ playerId: p.id, from: p.position, to: line });
     p.spot = to;
     p.position = line;
   }
   state.teams[side].tactics = tactics;
-  arrangeSide(state, side, shapeOf(tactics));
+  arrangeSide(state, side, tactics);
   announce(state, side, moved);
   return true;
 }
@@ -73,7 +75,7 @@ export function swapPlayers(state: MatchState, side: Side, aId: Id, bId: Id): bo
   [a.position, b.position] = [b.position, a.position];
   const team = state.teams[side];
   team.tactics = { ...team.tactics, shape: shapeOf(team.tactics) };
-  arrangeSide(state, side, team.tactics.shape!);
+  arrangeSide(state, side, team.tactics);
   announce(state, side, moved);
   return true;
 }
@@ -167,6 +169,9 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     side,
     position: off.position,
     spot: off.spot,
+    outSpot: off.outSpot,
+    outPosition: off.outPosition,
+    outSlot: off.outSlot,
     natural: on.natural,
     base: on.attributes,
     attributes: { ...on.attributes },
@@ -189,7 +194,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
   if (on.natural === "GK" && standIn && standIn !== incoming) {
     standIn.position = incoming.position;
     incoming.position = "GK";
-    arrangeSide(state, side, shapeOf(state.teams[side].tactics));
+    arrangeSide(state, side, state.teams[side].tactics);
   }
 
   state.teams[side].subsUsed++;

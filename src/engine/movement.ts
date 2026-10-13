@@ -84,7 +84,7 @@ function chasers(state: MatchState): Set<MatchPlayer> {
     // Forwards stay up as an outlet rather than pressing; they still chase loose balls
     const candidates: MatchPlayer[] = [];
     for (const p of state.players) {
-      if (p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome) && (p.position !== "FWD" || !carrier)) {
+      if (p.side === side && p.cooldown === 0 && (p.position !== "GK" || keeperCanCome) && (p.outPosition !== "FWD" || !carrier)) {
         candidates.push(p);
       }
     }
@@ -250,7 +250,7 @@ export function moveOffBall(state: MatchState): void {
       target = anchor(state, p, p.side === possessionSide);
       // Frame conversions are written out as scalars (same operations as toTeamFrame) to avoid allocating per player
       const flip = p.side !== "home";
-      if (p.side !== possessionSide && p.position === "DEF") {
+      if (p.side !== possessionSide && p.outPosition === "DEF") {
         // A spare defender covers the space behind the line
         const tx = flip ? PITCH_LENGTH - target.x : target.x;
         const ty = flip ? PITCH_WIDTH - target.y : target.y;
@@ -283,7 +283,7 @@ export function moveOffBall(state: MatchState): void {
     buffer.orders[i * 5 + 2] = speed;
     buffer.orders[i * 5 + 3] = standOff;
     // Retreating defenders and midfield cover must not lag behind their shape.
-    const defendingLine = (p.position === "DEF" || p.position === "MID") && p.side !== possessionSide;
+    const defendingLine = (p.outPosition === "DEF" || p.outPosition === "MID") && p.side !== possessionSide;
     buffer.orders[i * 5 + 4] = isChasing || isMarking ? STEER_CLOSE_ACCEL :
       defendingLine ? STEER_DEFEND_ACCEL : STEER_ACCEL;
   }

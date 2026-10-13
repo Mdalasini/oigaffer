@@ -207,6 +207,24 @@ legend {
   margin-top: 6px;
 }
 
+.possession {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.possession button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.possession .shape-name {
+  font-family: var(--display);
+  font-weight: 600;
+}
+
 .scale {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

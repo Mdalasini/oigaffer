@@ -68,10 +68,13 @@ export function createMatchState(
         position: p.position, // natural position until the manager's formation is applied
         natural: p.position,
         spot: "GK", // placeholder; arrangeSide sets the real position
+        outSpot: "GK",
+        outPosition: p.position,
         base: p.attributes,
         attributes: { ...p.attributes },
         energy: 1,
         slot: { x: 0, y: i }, // placeholder ordering; arrangeSide sets the real slot
+        outSlot: { x: 0, y: i },
         pos: { x: 0, y: 0 },
         vel: { x: 0, y: 0 },
         facing: side === "home" ? 0 : Math.PI,

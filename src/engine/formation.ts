@@ -1,5 +1,5 @@
 import type { Position } from "../model";
-import { SPOTS, type Shape, type Spot } from "../tactics";
+import { shapeOf, SPOTS, type Tactics, type Spot } from "../tactics";
 import {
   ATTACK_PUSH,
   ATTACK_WIDTH,
@@ -71,8 +71,8 @@ const LINE_SPOT: Record<Position, Spot> = { GK: "GK", DEF: "CB", MID: "CM", FWD:
 // the side is reshuffling into a new formation. Everyone else takes the free positions in
 // left-to-right order, so nobody crosses the pitch to a new slot.
 // A line that is short (after a red card) spreads out evenly at the line's depth instead.
-export function arrangeSide(state: MatchState, side: Side, shape: Shape, reshuffle = false): void {
-  const spots: Spot[] = ["GK", ...shape];
+export function arrangeSide(state: MatchState, side: Side, tactics: Tactics, reshuffle = false): void {
+  const spots: Spot[] = ["GK", ...shapeOf(tactics)];
   const team = state.players.filter((p) => p.side === side).sort((a, b) => a.slot.y - b.slot.y);
   for (const line of LINES) {
     const players = team.filter((p) => p.position === line);
@@ -96,24 +96,56 @@ export function arrangeSide(state: MatchState, side: Side, shape: Shape, reshuff
       p.spot = lineSpots[best] ?? LINE_SPOT[line];
     });
   }
+  arrangeOutOfPossession(team, tactics);
+}
+
+// Without the ball each player drops to the position paired with theirs in the out-of-possession shape.
+// A line with two players on one position (a side down to ten) spreads out evenly instead.
+function arrangeOutOfPossession(team: MatchPlayer[], tactics: Tactics): void {
+  if (!tactics.outOfPossession) {
+    for (const p of team) {
+      p.outSpot = p.spot;
+      p.outPosition = p.position;
+      p.outSlot = p.slot;
+    }
+    return;
+  }
+  const shape = shapeOf(tactics);
+  const out: Spot[] = ["GK", ...tactics.outOfPossession];
+  for (const p of team) {
+    const i = shape.indexOf(p.spot);
+    p.outSpot = p.position === "GK" ? "GK" : i < 0 ? p.spot : out[i + 1]!;
+    p.outPosition = p.position === "GK" ? "GK" : i < 0 ? p.position : SPOTS[p.outSpot].line;
+  }
+  for (const line of LINES) {
+    const players = team.filter((p) => p.outPosition === line);
+    const slots = players.map((p) => spotSlot(p.outSpot, out));
+    if (new Set(players.map((p) => p.outSpot)).size === players.length) {
+      players.forEach((p, i) => (p.outSlot = slots[i]!));
+      continue;
+    }
+    const x = slots.reduce((sum, s) => sum + s.x, 0) / slots.length;
+    players.forEach((p, i) => (p.outSlot = { x, y: (PITCH_WIDTH * (i + 1)) / (players.length + 1) }));
+  }
 }
 
 // Where an off-ball player wants to be: their slot, slid towards the ball,
 // pushed up and spread wide when their team has the ball, dropped back and narrow when it doesn't.
 // Mentality sets how many bodies commit forward when the team has the ball.
 export function anchor(state: MatchState, p: MatchPlayer, inPossession: boolean): Vec {
+  const slot = inPossession ? p.slot : p.outSlot;
   const mentality = state.teams[p.side].tactics.mentality;
   // Scalar frame conversions (same arithmetic as toTeamFrame/fromTeamFrame) avoid allocating per call
   const away = p.side !== "home";
   const ballX = away ? PITCH_LENGTH - state.ball.pos.x : state.ball.pos.x;
   const ballY = away ? PITCH_WIDTH - state.ball.pos.y : state.ball.pos.y;
   const x =
-    p.slot.x +
+    slot.x +
     (ballX - CENTRE.x) * SHIFT_X +
     (inPossession ? ATTACK_PUSH + mentality * MENTALITY_PUSH : -DEFEND_DROP);
   const width = inPossession ? 1 + (ATTACK_WIDTH - 1) * (1 + MENTALITY_WIDTH * mentality) : DEFEND_WIDTH;
-  const y = CENTRE.y + (p.slot.y - CENTRE.y) * width + (ballY - CENTRE.y) * SHIFT_Y;
-  const range = LINE_RANGE[p.position];
+  const y = CENTRE.y + (slot.y - CENTRE.y) * width + (ballY - CENTRE.y) * SHIFT_Y;
+  const range = LINE_RANGE[inPossession ? p.position : p.outPosition];
   const minX = range[0], maxX = range[1];
   const clampedX = Math.min(PITCH_LENGTH, Math.max(0, Math.min(maxX, Math.max(minX, x))));
   const clampedY = Math.min(PITCH_WIDTH, Math.max(0, y));

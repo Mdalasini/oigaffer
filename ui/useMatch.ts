@@ -4,7 +4,7 @@ import type { MatchState, Side } from "../src/engine/state";
 import { humanManager } from "../src/manager";
 import type { Club, GameWorld } from "../src/model";
 import { seededRng } from "../src/random";
-import type { Spot, Tactics } from "../src/tactics";
+import type { Possession, Spot, Tactics } from "../src/tactics";
 
 // Match seconds played per real second
 export const SPEEDS = { Slow: 20, Normal: 60, Fast: 180 } as const;
@@ -60,12 +60,13 @@ export function useMatch(setup: MatchSetup) {
   };
 
   // Moving onto a teammate's position swaps the two players; onto an empty one moves the position
-  const movePosition = (from: Spot, to: Spot) => {
+  const movePosition = (from: Spot, to: Spot, possession: Possession) => {
     const mine = state.players.filter((p) => p.side === setup.side);
-    const a = mine.find((p) => p.spot === from);
-    const b = mine.find((p) => p.spot === to);
+    const at = (spot: Spot) => mine.find((p) => (possession === "in" ? p.spot : p.outSpot) === spot);
+    const a = at(from);
+    const b = at(to);
     if (a && b) swapPlayers(state, setup.side, a.id, b.id);
-    else moveSpot(state, setup.side, from, to);
+    else moveSpot(state, setup.side, from, to, possession);
     redraw();
   };
 
