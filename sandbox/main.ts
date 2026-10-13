@@ -1,8 +1,8 @@
-// Click to send the player somewhere and watch them run there.
+// Click to send the player somewhere with the ball and watch them dribble there.
 import { hasComponent } from "bitecs";
 import { DT, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
 import { step } from "../src/systems";
-import { addPlayer, createGame, setTarget } from "../src/world";
+import { addBall, addPlayer, createGame, setDribble } from "../src/world";
 
 const MARGIN = 3; // m of grass drawn around the pitch
 
@@ -11,8 +11,9 @@ const readout = document.getElementById("readout")!;
 const ctx = canvas.getContext("2d")!;
 
 const world = createGame();
-const { Position, Velocity, Target } = world.components;
+const { Position, Velocity, Facing, Dribble } = world.components;
 const player = addPlayer(world, PITCH_LENGTH / 2, PITCH_WIDTH / 2);
+const ball = addBall(world, PITCH_LENGTH / 2 + 0.3, PITCH_WIDTH / 2);
 
 // Metres to pixels, fitting the pitch to the window
 let scale = 1;
@@ -28,7 +29,7 @@ fit();
 canvas.addEventListener("click", (e) => {
   const x = (e.offsetX * devicePixelRatio) / scale - MARGIN;
   const y = (e.offsetY * devicePixelRatio) / scale - MARGIN;
-  setTarget(world, player, Math.max(0, Math.min(PITCH_LENGTH, x)), Math.max(0, Math.min(PITCH_WIDTH, y)));
+  setDribble(world, player, Math.max(0, Math.min(PITCH_LENGTH, x)), Math.max(0, Math.min(PITCH_WIDTH, y)));
 });
 
 function draw() {
@@ -42,10 +43,10 @@ function draw() {
   ctx.lineTo(toScreen(PITCH_LENGTH / 2), toScreen(PITCH_WIDTH));
   ctx.stroke();
 
-  // where they're heading, until they get there
-  if (hasComponent(world, player, Target)) {
-    const x = toScreen(Target.x[player]!);
-    const y = toScreen(Target.y[player]!);
+  // where they're taking the ball, until it's there
+  if (hasComponent(world, player, Dribble)) {
+    const x = toScreen(Dribble.x[player]!);
+    const y = toScreen(Dribble.y[player]!);
     const r = 0.6 * scale;
     ctx.beginPath();
     ctx.moveTo(x - r, y - r);
@@ -57,11 +58,26 @@ function draw() {
 
   ctx.fillStyle = "#f2b33d";
   ctx.beginPath();
-  ctx.arc(toScreen(Position.x[player]!), toScreen(Position.y[player]!), 0.8 * scale, 0, Math.PI * 2);
+  ctx.arc(toScreen(Position.x[player]!), toScreen(Position.y[player]!), 0.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  const px = toScreen(Position.x[player]!);
+  const py = toScreen(Position.y[player]!);
+  ctx.strokeStyle = "#102c1c";
+  ctx.lineWidth = Math.max(2, 0.15 * scale);
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + Math.cos(Facing[player]!) * 0.5 * scale, py + Math.sin(Facing[player]!) * 0.5 * scale);
+  ctx.stroke();
+
+  ctx.fillStyle = "#eef1e6";
+  ctx.beginPath();
+  ctx.arc(toScreen(Position.x[ball]!), toScreen(Position.y[ball]!), 0.35 * scale, 0, Math.PI * 2);
   ctx.fill();
 
   const speed = Math.hypot(Velocity.x[player]!, Velocity.y[player]!);
-  readout.textContent = `${speed.toFixed(1)} m/s — click anywhere on the pitch to send the player there.`;
+  const ballSpeed = Math.hypot(Velocity.x[ball]!, Velocity.y[ball]!);
+  readout.textContent = `player ${speed.toFixed(1)} m/s, ball ${ballSpeed.toFixed(1)} m/s — click anywhere on the pitch to take the ball there.`;
 }
 
 // Fixed simulation steps, however often the screen refreshes
