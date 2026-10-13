@@ -84,6 +84,17 @@ export type StraightFlight = {
   crossesGoalLineAt: Point | null;
 };
 
+export function firstStepAlongFrom(along: number[], distance: number): number {
+  let low = 0;
+  let high = along.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (along[middle]! < distance) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 export function straightFlight(from: Point, velocity: Point, dt: number): StraightFlight | null {
   const speed = Math.hypot(velocity[0], velocity[1]);
   if (speed === 0) return null;

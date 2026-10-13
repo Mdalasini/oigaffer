@@ -1,5 +1,5 @@
 import { addComponent, addEntity, createWorld, removeComponent } from "bitecs";
-import { AVERAGE_SHOOTING_GRADE } from "./constants";
+import { AVERAGE_GRADE, AVERAGE_SHOOTING_GRADE } from "./constants";
 import { seededRandom } from "./random";
 import type { Point } from "./shooting";
 
@@ -13,6 +13,11 @@ export function createGame(seed = 1) {
       Velocity: { x: [] as number[], y: [] as number[], z: [] as number[] },
       Facing: [] as number[],
       Shooting: [] as number[],
+      Dribbling: [] as number[],
+      Tackling: [] as number[],
+      Grounded: { recoversIn: [] as number[] },
+      Tackled: {},
+      Blocked: {},
       Target: {
         x: [] as number[],
         y: [] as number[],
@@ -39,14 +44,12 @@ export function createGame(seed = 1) {
 
 export type Game = ReturnType<typeof createGame>;
 
-export function addPlayer(world: Game, x: number, y: number, facing = 0, shooting = AVERAGE_SHOOTING_GRADE): number {
-  const { Position, Velocity, Facing, Shooting } = world.components;
+function addBody(world: Game, x: number, y: number, facing: number): number {
+  const { Position, Velocity, Facing } = world.components;
   const eid = addEntity(world);
   addComponent(world, eid, Position);
   addComponent(world, eid, Velocity);
   addComponent(world, eid, Facing);
-  addComponent(world, eid, Shooting);
-  Shooting[eid] = shooting;
   Position.x[eid] = x;
   Position.y[eid] = y;
   Position.z[eid] = 0;
@@ -57,20 +60,35 @@ export function addPlayer(world: Game, x: number, y: number, facing = 0, shootin
   return eid;
 }
 
+export function addPlayer(
+  world: Game,
+  x: number,
+  y: number,
+  facing = 0,
+  shooting = AVERAGE_SHOOTING_GRADE,
+  dribbling = AVERAGE_GRADE,
+): number {
+  const { Shooting, Dribbling } = world.components;
+  const eid = addBody(world, x, y, facing);
+  addComponent(world, eid, Shooting);
+  addComponent(world, eid, Dribbling);
+  Shooting[eid] = shooting;
+  Dribbling[eid] = dribbling;
+  return eid;
+}
+
+export function addDefender(world: Game, x: number, y: number, facing = Math.PI, tackling = AVERAGE_GRADE): number {
+  const { Tackling } = world.components;
+  const eid = addBody(world, x, y, facing);
+  addComponent(world, eid, Tackling);
+  Tackling[eid] = tackling;
+  return eid;
+}
+
 export function addGoalkeeper(world: Game, x: number, y: number, facing = Math.PI): number {
-  const { Position, Velocity, Facing, Goalkeeper } = world.components;
-  const eid = addEntity(world);
-  addComponent(world, eid, Position);
-  addComponent(world, eid, Velocity);
-  addComponent(world, eid, Facing);
+  const { Goalkeeper } = world.components;
+  const eid = addBody(world, x, y, facing);
   addComponent(world, eid, Goalkeeper);
-  Position.x[eid] = x;
-  Position.y[eid] = y;
-  Position.z[eid] = 0;
-  Velocity.x[eid] = 0;
-  Velocity.y[eid] = 0;
-  Velocity.z[eid] = 0;
-  Facing[eid] = facing;
   Goalkeeper.watchingShotFor[eid] = 0;
   return eid;
 }

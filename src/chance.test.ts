@@ -5,7 +5,7 @@ import { bestShot, chanceAgainst, missesInCircle, shotOptions, type Keeper } fro
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addGoalkeeper, createGame, strikeBall } from "./world";
+import { addBall, addDefender, addGoalkeeper, createGame, strikeBall } from "./world";
 
 const PENALTY_SPOT: Point = [PITCH_LENGTH - 11, GOAL_CENTRE, 0];
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
@@ -15,14 +15,15 @@ const optionNearest = (from: Point, grade: number, y: number, z: number) =>
     Math.hypot(option.aim[1] - y, option.aim[2] - z) < Math.hypot(best.aim[1] - y, best.aim[2] - z) ? option : best,
   );
 
-function goalsWhenShotFor(from: Point, aim: Point, grade: number, keeper: Keeper): number {
+function goalsWhenShotFor(from: Point, aim: Point, grade: number, keeper: Keeper, defenders: [number, number][] = []): number {
   return missesInCircle(from, aim, spreadRadius(grade, from, aim)).filter((miss) => {
     const world = createGame();
-    const { GoalLineCrossing, Held } = world.components;
+    const { GoalLineCrossing, Held, Blocked } = world.components;
     addGoalkeeper(world, ...keeper);
+    for (const defender of defenders) addDefender(world, ...defender);
     const ball = addBall(world, from[0], from[1]);
     strikeBall(world, ball, kick(from, miss, strikeSpeed(grade)));
-    for (let time = 0; time < 5 && !hasComponent(world, ball, GoalLineCrossing) && !hasComponent(world, ball, Held); time += TIME_STEP) {
+    for (let time = 0; time < 5 && ![GoalLineCrossing, Held, Blocked].some((part) => hasComponent(world, ball, part)); time += TIME_STEP) {
       step(world);
     }
     return hasComponent(world, ball, GoalLineCrossing) && isGoal(GoalLineCrossing.y[ball]!, GoalLineCrossing.z[ball]!);
@@ -59,5 +60,18 @@ describe("the chance a shot goes in", () => {
       const estimated = chanceAgainst(option, keeper) * option.misses.length;
       expect(estimated).toBe(goalsWhenShotFor(from, option.aim, AVERAGE_SHOOTING_GRADE, keeper));
     }
+  });
+
+  test("matches what really happens when a defender stands in the way as well", () => {
+    const from: Point = [PITCH_LENGTH - 18, GOAL_CENTRE - 4, 0];
+    const keeper: Keeper = [PITCH_LENGTH - 1, GOAL_CENTRE - 1];
+    const defenders: [number, number][] = [[PITCH_LENGTH - 14, GOAL_CENTRE - 2.5]];
+    let blockedSome = false;
+    for (const option of shotOptions(from, AVERAGE_SHOOTING_GRADE)) {
+      const estimated = chanceAgainst(option, keeper, TIME_STEP, defenders) * option.misses.length;
+      blockedSome ||= estimated < chanceAgainst(option, keeper) * option.misses.length;
+      expect(estimated).toBe(goalsWhenShotFor(from, option.aim, AVERAGE_SHOOTING_GRADE, keeper, defenders));
+    }
+    expect(blockedSome).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import {
   PITCH_LENGTH,
   TIME_STEP,
 } from "./constants";
+import { blocks, type Defender } from "./defender";
 import { straightFlight, type StraightFlight } from "./flight";
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { bestInterception, firstDivingStep, type Keeper } from "./keeper";
@@ -70,18 +71,25 @@ function keeperReaches(flight: StraightFlight, keeper: Keeper, dt: number): bool
   return interception !== null && interception.shortfall <= 0;
 }
 
-export function chanceAgainst(option: ShotOption, keeper: Keeper | null, dt = TIME_STEP): number {
-  const beaten = keeper ? option.scoring.filter((flight) => !keeperReaches(flight, keeper, dt)) : option.scoring;
-  return beaten.length / option.misses.length;
+const getsThrough = (flight: StraightFlight, keeper: Keeper | null, defenders: Defender[], dt: number) =>
+  !defenders.some((defender) => blocks(defender, flight)) && !(keeper && keeperReaches(flight, keeper, dt));
+
+export function chanceAgainst(option: ShotOption, keeper: Keeper | null, dt = TIME_STEP, defenders: Defender[] = []): number {
+  return option.scoring.filter((flight) => getsThrough(flight, keeper, defenders, dt)).length / option.misses.length;
 }
 
 export type { Keeper };
 
-export function bestShot(options: ShotOption[], keeper: Keeper | null, dt = TIME_STEP): { aim: Point; chance: number } {
+export function bestShot(
+  options: ShotOption[],
+  keeper: Keeper | null,
+  dt = TIME_STEP,
+  defenders: Defender[] = [],
+): { aim: Point; chance: number } {
   let best = { aim: options[0]!.aim, chance: -1 };
   for (const option of options) {
     if (option.scoring.length / option.misses.length <= best.chance) break;
-    const chance = chanceAgainst(option, keeper, dt);
+    const chance = chanceAgainst(option, keeper, dt, defenders);
     if (chance > best.chance) best = { aim: option.aim, chance };
   }
   return best;
