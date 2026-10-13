@@ -144,7 +144,7 @@ const chancesOnceKeeperIsSet = new Map<string, number>();
 
 const toGrid = (value: number) => Math.round(value / SPOT_GRID) * SPOT_GRID;
 
-export const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
+const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
 
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
 

@@ -30,7 +30,7 @@ import {
   TURN_RATE,
 } from "./constants";
 import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
-import { bestShot, chanceOnceKeeperIsSet, onTheGrid, shotOptions, whereToStand } from "./chance";
+import { bestShot, chanceOnceKeeperIsSet, shotOptions, whereToStand } from "./chance";
 import { distanceRunIn, isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Mover } from "./interception";
@@ -592,10 +592,7 @@ function passValue(from: Point, receiver: Receiver, keeper: Keeper | null, defen
   const attempts = defenders.map(({ at, recoversIn }) => interceptionOf(flight, at, dt, recoversIn));
   if (attempts.some((attempt) => attempt && attempt.shortfall <= 0)) return 0;
   const defendersThen = defenders.map((defender, i) => whereTheyGetTo(defender, attempts[i]!));
-  const receivedAt = onTheGrid(pass.to);
-  const options = shotOptions(receivedAt, receiver.shooting, dt);
-  const setKeeper = keeper && (whereToStand(receivedAt, options, keeper, dt) ?? keeper);
-  const shootingFirstTime = bestShot(options, setKeeper, dt, defendersThen.map(({ at }) => at)).chance;
+  const shootingFirstTime = chanceOnceKeeperIsSet(pass.to, receiver.shooting, keeper !== null, dt);
   return Math.max(shootingFirstTime, bestChanceFurtherOn(pass.to, { ...receiver, speed: 0 }, keeper, defendersThen, dt, null));
 }
 
