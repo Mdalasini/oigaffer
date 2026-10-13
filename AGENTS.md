@@ -29,7 +29,7 @@ src/
   fixtures.ts     Double round robin (circle method)
   table.ts        League table
   season.ts       playSeason(world, rng, engine)
-  tactics.ts      Mentality, formations, assignRoles (moving players between lines)
+  tactics.ts      Mentality, board positions (SPOTS), formations, assignRoles (moving players between lines)
   manager.ts      Manager interface, the default decision-tree manager, humanManager
   commentary.ts   Turns match events into commentary lines (only the moments a manager reacts to)
   stats.ts        Per-team box-score stats counted from the event log
@@ -48,7 +48,8 @@ ui/               Vite + React app; imports the game straight from src/
 ## Domain model
 
 - Players have six attributes on a 1–20 scale: `passing`, `shooting`, `dribbling`, `tackling`, `goalkeeping` and `stamina` (how slowly they tire). `attackingRating`/`defendingRating` in `strength.ts` derive the summary values the Poisson engine uses.
-- `Player.position` is the natural position. In a match, `MatchPlayer.position` is the role in the current formation and can change.
+- `Player.position` is the natural line (GK/DEF/MID/FWD). In a match, `MatchPlayer.position` is the line in the current formation and can change, and `MatchPlayer.spot` is the position on the tactics board (LB, CDM, LW…).
+- The tactics board (`SPOTS` in `tactics.ts`) has a keeper and 23 outfield positions in rows (defence, wing-backs/holding midfield, midfield, attacking midfield/wingers, forwards) and five columns. Each position belongs to a line, which is what the engine's behaviour keys on: wing-backs are DEF, wingers are FWD. A formation is a list of ten positions; `arrangeSide` gives each line's players that line's positions in left-to-right order, and `spotSlot` turns a position into a slot.
 - `Club.playerIds` is the whole squad (18 from the seed: 2 GK, 6 DEF, 6 MID, 4 FWD, with reserves a notch weaker). `pickEleven` chooses the starters; `clubStrength` rates that eleven. There are no contracts or finances yet. The user explicitly wants the model kept minimal, so add fields only when a feature needs them.
 
 ## Two match engines
@@ -112,7 +113,8 @@ Lessons from previous tuning:
 - Raising `FOUL_ON_FAILED_TACKLE` to 0.42 gives real foul counts (about 11 a team; fouls are linear in it), but lowered the correlation to about 0.37: more fouls end more of the stronger side's attacks.
 - Open-play crosses are only about 1.6 a team (the calibrate "crosses" figure includes corner deliveries; real football has 10+). Wide carriers often have a teammate in the box, but a cross completes about 20% of the time against about 80% for a ground pass, so crosses lose on value, not availability.
 - Known open issues for animation: completed passes (about 240 a team) are below real football (about 375), and throw-ins (about 15) are short of the real 20. Contact corrections can still cause brief acceleration spikes.
-- Known open imbalances (400 matches per setting, relative to the 4-4-2 mirror match in the same run): 4-3-3 is the strongest setting (about +0.2 ppg) and 5-4-1 the weakest (about −0.4). Defensive mentality (−1, −2) is about −0.2 and concedes more, not less: following the receiving run cost it about 0.15 ppg. Goals are about 2.65 a game. Corners are about 4 a team, open-play crosses about 1.6, and fouls about 6.
+- Board positions: slots come from each position's row and column. Small layout changes move balance a lot. A strike pair closed up to 14 m added about 0.7 goals a game, so strikers keep their columns. Wide players at a sixth of the width (instead of a fifth) made a very attacking 4-4-2 about +0.2 ppg stronger. In a 4-3-3 the central pair ahead of the holding midfielder stands 26 m apart (`SCREENED_PAIR_GAP`); 14 m apart, 4-3-3 was +0.44 ppg over the mirror. A sweep of holding depth, pair gap and winger position found winger position mattered least. A holding midfielder at 24 m balanced it as well, but cut underdogs' goals against an attacking 4-3-3 (the default manager's favourite setup) by a third and goals to 2.3–2.4 a game; check `bun run calibrate`, not only tactics runs, after changing a shape the default manager uses. Raising `XG_MAX` from 0.98 to 1.00–1.02 added under 0.06 goals.
+- Known open imbalances (400 matches per setting, relative to the 4-4-2 mirror match in the same run): 4-5-1 is the strongest setting (about +0.15 ppg), 4-3-3 is about −0.1 and 5-4-1 the weakest (about −0.35). Defensive mentality (−1, −2) is about −0.2 and concedes more, not less: following the receiving run cost it about 0.15 ppg. Goals are about 2.5 a game in `bun run calibrate` (2.65 before board positions), at the bottom of the target, because the board's 4-3-3 gives underdogs fewer counters. Corners are about 4 a team, open-play crosses about 1.6, and fouls about 6.
 
 ## UI
 

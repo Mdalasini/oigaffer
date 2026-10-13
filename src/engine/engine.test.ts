@@ -4,9 +4,10 @@ import { seededRng } from "../random";
 import { SLOW_TEST, strongVsWeak } from "../test-helpers";
 import { MATCH_SECONDS } from "./constants";
 import { scoreOptions } from "./decide";
-import { anchor, assignSlots, keeperPosition } from "./formation";
+import { anchor, keeperPosition, spotSlot } from "./formation";
 import { distToSegment, moveTowards, PITCH_LENGTH, PITCH_WIDTH } from "./geometry";
 import { applyTactics, createMatchState, isFullTime, simulateEventMatch, startEventMatch, stepEventMatch } from "./match";
+import { FORMATIONS, type Spot } from "../tactics";
 import { giveBall, toTeamFrame, type MatchState } from "./state";
 import { assessPass, baseXg, looseBallWinChance } from "./valuation";
 
@@ -31,11 +32,31 @@ describe("geometry", () => {
   });
 });
 
-test("4-4-2 slots spread each line across the pitch", () => {
-  const slots = assignSlots(["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]);
-  expect(slots[0]).toEqual({ x: 4, y: PITCH_WIDTH / 2 });
-  expect(slots.slice(1, 5).map((s) => s.y)).toEqual([1, 2, 3, 4].map((i) => (PITCH_WIDTH * i) / 5));
-  expect(slots.slice(9).map((s) => s.y)).toEqual([PITCH_WIDTH / 3, (2 * PITCH_WIDTH) / 3]);
+test("4-4-2 slots spread the wide players and close up the centre-backs", () => {
+  const formation = ["GK", ...FORMATIONS["4-4-2"]] as const;
+  const ys = (spots: Spot[]) => spots.map((s) => spotSlot(s, formation).y);
+  expect(spotSlot("GK", formation)).toEqual({ x: 4, y: PITCH_WIDTH / 2 });
+  // A back four spread evenly across the pitch
+  [1, 2, 3, 4].forEach((i, n) => expect(ys(["LB", "LCB", "RCB", "RB"])[n]).toBeCloseTo((PITCH_WIDTH * i) / 5));
+  expect(ys(["LF", "RF"])).toEqual([PITCH_WIDTH / 3, (2 * PITCH_WIDTH) / 3]);
+  // With a centre-back between them, the other two stay in their columns
+  expect(spotSlot("LCB", ["GK", ...FORMATIONS["5-3-2"]]).y).toBeCloseTo(PITCH_WIDTH / 3);
+});
+
+test("4-3-3 lines its players up in their board positions", () => {
+  const state = createMatchState(world, world.clubs.strong!, world.clubs.weak!, seededRng(1), {
+    home: fixedManager({ formation: "4-3-3", mentality: 0 }),
+    away: fixedManager({ formation: "4-4-2", mentality: 0 }),
+  });
+  const home = state.players.filter((p) => p.side === "home").sort((a, b) => a.slot.y - b.slot.y);
+  const spots = (line: string) => home.filter((p) => p.position === line).map((p) => p.spot);
+  expect(spots("DEF")).toEqual(["LB", "LCB", "RCB", "RB"]);
+  expect(spots("MID")).toEqual(["LCM", "CDM", "RCM"]);
+  expect(spots("FWD")).toEqual(["LW", "CF", "RW"]);
+  const at = (spot: string) => home.find((p) => p.spot === spot)!.slot;
+  // The holding midfielder sits behind the other two, the wingers behind the centre-forward
+  expect(at("CDM").x).toBeLessThan(at("LCM").x);
+  expect(at("LW").x).toBeLessThan(at("CF").x);
 });
 
 describe("valuation", () => {

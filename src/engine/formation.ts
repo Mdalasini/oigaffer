@@ -1,4 +1,5 @@
 import type { Position } from "../model";
+import { FORMATIONS, SPOTS, type FormationName, type Spot } from "../tactics";
 import {
   ATTACK_PUSH,
   ATTACK_WIDTH,
@@ -26,8 +27,22 @@ import {
 
 import { restartTicks } from "./restarts";
 
-// Depth of each line in the team frame (own goal at x = 0)
-const LINE_X: Record<Position, number> = { GK: 4, DEF: 20, MID: 38, FWD: 50 };
+// Depth of each row of the tactics board in the team frame (own goal at x = 0):
+// keeper, defence, wing-backs and holding midfield, midfield, attacking midfield and wingers, forwards
+const ROW_X = [4, 20, 29, 38, 45, 50];
+// The five columns of the board. Wide players stand a fifth of the way in: out at a sixth,
+// a very attacking 4-4-2 stretched so wide it won about 0.2 points a game more.
+const COLUMN_Y = [PITCH_WIDTH / 5, PITCH_WIDTH / 3, PITCH_WIDTH / 2, (2 * PITCH_WIDTH) / 3, (4 * PITCH_WIDTH) / 5];
+// A central pair with nobody between them (two centre-backs, two central midfielders) stands this far apart,
+// which puts a back four and a flat midfield four evenly across the pitch.
+// Strikers keep their columns: closing a strike pair up to 14 m added about 0.7 goals a game.
+const CENTRAL_PAIR_GAP = PITCH_WIDTH / 5;
+const FRONT_ROW = 5;
+// With a holding midfielder behind them, the central pair spreads into the half-spaces.
+// Closer together, a 4-3-3 won about 0.4 points a game more than a 4-4-2 mirror match. Dropping
+// the holding midfielder to 24 m balanced it too, but cut underdogs' counter-attacks against an
+// attacking 4-3-3 by a third, and goals to about 2.4 a game.
+const SCREENED_PAIR_GAP = 26;
 // How deep and how high each line will go as the shape slides with the ball.
 // Without a floor a pinned-back defence ends up standing on its own goal line.
 const LINE_RANGE: Record<Position, [number, number]> = {
@@ -37,27 +52,47 @@ const LINE_RANGE: Record<Position, [number, number]> = {
   FWD: [48, 100],
 };
 
-// Spreads each positional line evenly across the pitch width.
-// Works for any formation: the shape comes from how many players are in each line.
-export function assignSlots(positions: Position[]): Vec[] {
-  const lineSize = new Map<Position, number>();
-  for (const pos of positions) lineSize.set(pos, (lineSize.get(pos) ?? 0) + 1);
-
-  const placed = new Map<Position, number>();
-  return positions.map((pos) => {
-    const index = placed.get(pos) ?? 0;
-    placed.set(pos, index + 1);
-    const count = lineSize.get(pos)!;
-    return { x: LINE_X[pos], y: (PITCH_WIDTH * (index + 1)) / (count + 1) };
-  });
+// Where a position stands in a formation, in the team frame
+export function spotSlot(spot: Spot, formation: readonly Spot[]): Vec {
+  const { row, col } = SPOTS[spot];
+  const holding = formation.some((s) => SPOTS[s].row === 2 && SPOTS[s].line === "MID");
+  const centreTaken = formation.some((s) => SPOTS[s].row === row && SPOTS[s].col === 2);
+  const gap = row === 3 && holding ? SCREENED_PAIR_GAP : CENTRAL_PAIR_GAP;
+  const y = (col === 1 || col === 3) && row !== FRONT_ROW && !centreTaken ? CENTRE.y + ((col - 2) * gap) / 2 : COLUMN_Y[col]!;
+  return { x: ROW_X[row]!, y };
 }
 
-// Recomputes a side's formation slots from the roles its players hold.
+const LINES: Position[] = ["GK", "DEF", "MID", "FWD"];
+// The position given to a lone player in a line the formation leaves empty
+const LINE_SPOT: Record<Position, Spot> = { GK: "GK", DEF: "CB", MID: "CM", FWD: "CF" };
+
+// Gives each player the slot of a position in the formation for their line.
 // Players keep their left-to-right order, so nobody crosses the pitch to a new slot.
-export function arrangeSide(state: MatchState, side: Side): void {
+// A line that is short (after a red card) spreads out evenly at the line's depth instead.
+export function arrangeSide(state: MatchState, side: Side, formation: FormationName): void {
+  const spots: Spot[] = ["GK", ...FORMATIONS[formation]];
   const team = state.players.filter((p) => p.side === side).sort((a, b) => a.slot.y - b.slot.y);
-  const slots = assignSlots(team.map((p) => p.position));
-  team.forEach((p, i) => (p.slot = slots[i]!));
+  for (const line of LINES) {
+    const players = team.filter((p) => p.position === line);
+    const lineSpots = spots.filter((s) => SPOTS[s].line === line).sort((a, b) => SPOTS[a].col - SPOTS[b].col);
+    const slots = lineSpots.map((s) => spotSlot(s, spots));
+    if (players.length === lineSpots.length) {
+      players.forEach((p, i) => {
+        p.spot = lineSpots[i]!;
+        p.slot = slots[i]!;
+      });
+      continue;
+    }
+    const x = slots.length > 0 ? slots.reduce((sum, s) => sum + s.x, 0) / slots.length : ROW_X[SPOTS[LINE_SPOT[line]].row]!;
+    players.forEach((p, i) => {
+      p.slot = { x, y: (PITCH_WIDTH * (i + 1)) / (players.length + 1) };
+      let best = 0;
+      for (let j = 1; j < slots.length; j++) {
+        if (Math.abs(slots[j]!.y - p.slot.y) < Math.abs(slots[best]!.y - p.slot.y)) best = j;
+      }
+      p.spot = lineSpots[best] ?? LINE_SPOT[line];
+    });
+  }
 }
 
 // Where an off-ball player wants to be: their slot, slid towards the ball,

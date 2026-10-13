@@ -21,7 +21,7 @@ function fitRoles(state: MatchState, side: Side, tactics: Tactics) {
     if (role !== p.position) moved.push({ playerId: p.id, from: p.position, to: role });
     p.position = role;
   }
-  arrangeSide(state, side);
+  arrangeSide(state, side, tactics.formation);
   return moved;
 }
 
@@ -122,6 +122,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
     id: on.id,
     side,
     position: off.position,
+    spot: off.spot,
     natural: on.natural,
     base: on.attributes,
     attributes: { ...on.attributes },
@@ -144,7 +145,7 @@ export function substitute(state: MatchState, side: Side, offId: Id, onId: Id): 
   if (on.natural === "GK" && standIn && standIn !== incoming) {
     standIn.position = incoming.position;
     incoming.position = "GK";
-    arrangeSide(state, side);
+    arrangeSide(state, side, state.teams[side].tactics.formation);
   }
 
   state.teams[side].subsUsed++;

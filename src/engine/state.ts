@@ -2,7 +2,7 @@ import type { Manager } from "../manager";
 import type { DebugHook } from "./debug";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
-import type { FormationName, Mentality, Tactics } from "../tactics";
+import type { FormationName, Mentality, Spot, Tactics } from "../tactics";
 import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
 import { dist, distSq, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, type Vec } from "./geometry";
@@ -14,7 +14,8 @@ export const opponent = (side: Side): Side => (side === "home" ? "away" : "home"
 export interface MatchPlayer {
   id: Id;
   side: Side;
-  position: Position; // the role they're playing in the current formation
+  position: Position; // the line they're playing in for the current formation
+  spot: Spot; // their position on the tactics board, such as LB or CDM
   natural: Position; // where they normally play
   base: Attributes; // fresh attributes
   attributes: Attributes; // current attributes, lowered by fatigue

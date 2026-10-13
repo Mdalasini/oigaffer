@@ -1,5 +1,5 @@
 import type { Attributes, Club, GameWorld, Player, Position } from "./model";
-import { FORMATIONS, type FormationName } from "./tactics";
+import { lineCount, type FormationName } from "./tactics";
 
 // How good someone is at playing in a line, whatever their natural position
 export function lineRating(a: Attributes, line: Position): number {
@@ -26,8 +26,8 @@ export function squadPlayers(world: GameWorld, club: Club): Player[] {
 // The best eleven for a formation: each line is filled with the best natural
 // players for it, then any gaps with whoever is best at that line among the rest.
 export function pickEleven(world: GameWorld, club: Club, formation: FormationName = "4-4-2"): Player[] {
-  const need: Record<Position, number> = { GK: 1, ...FORMATIONS[formation] };
   const lines: Position[] = ["GK", "DEF", "MID", "FWD"];
+  const need = Object.fromEntries(lines.map((line) => [line, lineCount(formation, line)])) as Record<Position, number>;
   const available = new Set(squadPlayers(world, club));
   const chosen: Player[] = [];
 
