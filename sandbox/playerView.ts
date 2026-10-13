@@ -118,30 +118,30 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     line([PITCH_LENGTH, near, CROSSBAR_HEIGHT], [PITCH_LENGTH, far, CROSSBAR_HEIGHT]);
   }
 
-  function drawKeeper(y: number) {
-    const corners: Point[] = [
-      [PITCH_LENGTH, y - KEEPER_HALF_WIDTH, 0],
-      [PITCH_LENGTH, y + KEEPER_HALF_WIDTH, 0],
-      [PITCH_LENGTH, y + KEEPER_HALF_WIDTH, KEEPER_HEIGHT],
-      [PITCH_LENGTH, y - KEEPER_HALF_WIDTH, KEEPER_HEIGHT],
+  function upright(x: number, y: number, halfWidth: number, height: number): Point[] {
+    const [acrossX, acrossY] = right();
+    return [
+      [x - acrossX * halfWidth, y - acrossY * halfWidth, 0],
+      [x - acrossX * halfWidth, y - acrossY * halfWidth, height],
+      [x + acrossX * halfWidth, y + acrossY * halfWidth, height],
+      [x + acrossX * halfWidth, y + acrossY * halfWidth, 0],
     ];
-    if (corners.some((corner) => depthOf(corner) < NEAREST_VISIBLE)) return;
+  }
+
+  function drawKeeper([x, y]: [number, number]) {
+    const body = upright(x, y, KEEPER_HALF_WIDTH, KEEPER_HEIGHT);
+    if (body.some((corner) => depthOf(corner) < NEAREST_VISIBLE)) return;
     ctx.fillStyle = COLOURS.keeper;
     ctx.beginPath();
-    for (const corner of corners) {
-      const [x, screenY] = project(corner);
-      ctx.lineTo(x, screenY);
+    for (const corner of body) {
+      const [screenX, screenY] = project(corner);
+      ctx.lineTo(screenX, screenY);
     }
     ctx.fill();
     ctx.strokeStyle = COLOURS.keeper;
     ctx.lineWidth = devicePixelRatio;
     ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
-    const reach: Point[] = [
-      [PITCH_LENGTH, y - KEEPER_REACH, 0],
-      [PITCH_LENGTH, y - KEEPER_REACH, KEEPER_HIGHEST_REACH],
-      [PITCH_LENGTH, y + KEEPER_REACH, KEEPER_HIGHEST_REACH],
-      [PITCH_LENGTH, y + KEEPER_REACH, 0],
-    ];
+    const reach = upright(x, y, KEEPER_REACH, KEEPER_HIGHEST_REACH);
     reach.slice(1).forEach((corner, i) => line(reach[i]!, corner));
     ctx.setLineDash([]);
   }
@@ -191,10 +191,10 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ctx.fill();
   }
 
-  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeperY: number | null) {
+  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeper: [x: number, y: number] | null) {
     drawGround();
     drawGoal();
-    if (keeperY !== null) drawKeeper(keeperY);
+    if (keeper !== null) drawKeeper(keeper);
     drawTrail(trail);
     drawCircle(circle);
     drawAim(aim);

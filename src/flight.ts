@@ -1,5 +1,17 @@
-import { BALL_BOUNCE_RESTITUTION, BALL_ROLLING_DECELERATION, GRAVITY, SETTLING_SPEED } from "./constants";
+import { BALL_BOUNCE_RESTITUTION, BALL_ROLLING_DECELERATION, GRAVITY, PITCH_LENGTH, SETTLING_SPEED } from "./constants";
 import type { Point } from "./shooting";
+
+export type Plane = { x: number; y: number; normalX: number; normalY: number };
+
+export const GOAL_LINE: Plane = { x: PITCH_LENGTH, y: 0, normalX: 1, normalY: 0 };
+
+export function acrossThePath(x: number, y: number, velocity: Point): Plane | null {
+  const speed = Math.hypot(velocity[0], velocity[1]);
+  return speed > 0 ? { x, y, normalX: velocity[0] / speed, normalY: velocity[1] / speed } : null;
+}
+
+const beyond = (plane: Plane, x: number, y: number) => (x - plane.x) * plane.normalX + (y - plane.y) * plane.normalY;
+const closingSpeed = (plane: Plane, velocity: Point) => velocity[0] * plane.normalX + velocity[1] * plane.normalY;
 
 export const isOnTheGround = (z: number, vz: number) => z === 0 && vz === 0;
 
@@ -18,21 +30,84 @@ export function flying(z: number, vz: number, dt: number): [z: number, vz: numbe
   return [0, bounceSpeed < SETTLING_SPEED ? 0 : bounceSpeed];
 }
 
-export function crossing(lineX: number, position: Point, velocity: Point): [y: number, z: number] {
-  const timeSinceCrossing = (position[0] - lineX) / velocity[0];
-  return [position[1] - velocity[1] * timeSinceCrossing, Math.max(0, position[2] - velocity[2] * timeSinceCrossing)];
+export function crossing(plane: Plane, position: Point, velocity: Point): Point {
+  const timeSinceCrossing = beyond(plane, position[0], position[1]) / closingSpeed(plane, velocity);
+  return [
+    position[0] - velocity[0] * timeSinceCrossing,
+    position[1] - velocity[1] * timeSinceCrossing,
+    Math.max(0, position[2] - velocity[2] * timeSinceCrossing),
+  ];
 }
 
-export function whereBallCrosses(lineX: number, position: Point, velocity: Point, dt: number): [y: number, z: number] | null {
+export const hasCrossed = (plane: Plane, position: Point) => beyond(plane, position[0], position[1]) >= 0;
+
+export function* ballFlight(position: Point, velocity: Point, dt: number): Generator<[position: Point, velocity: Point]> {
   let [x, y, z] = position;
   let [vx, vy, vz] = velocity;
-  if (x >= lineX) return null;
-  while (vx > 0) {
+  while (vx !== 0 || vy !== 0) {
     if (isOnTheGround(z, vz)) [vx, vy] = rolling(vx, vy, dt);
     else [z, vz] = flying(z, vz, dt);
     x += vx * dt;
     y += vy * dt;
-    if (x >= lineX) return crossing(lineX, [x, y, z], [vx, vy, vz]);
+    yield [
+      [x, y, z],
+      [vx, vy, vz],
+    ];
+  }
+}
+
+export function whereBallCrosses(plane: Plane, position: Point, velocity: Point, dt: number): Point | null {
+  if (hasCrossed(plane, position) || closingSpeed(plane, velocity) <= 0) return null;
+  for (const [now, moving] of ballFlight(position, velocity, dt)) {
+    if (hasCrossed(plane, now)) return crossing(plane, now, moving);
   }
   return null;
+}
+
+export function closestPassThisStep(x: number, y: number, position: Point, velocity: Point, dt: number): Point {
+  const [moveX, moveY, moveZ] = [velocity[0] * dt, velocity[1] * dt, velocity[2] * dt];
+  const [fromX, fromY, fromZ] = [position[0] - moveX, position[1] - moveY, position[2] - moveZ];
+  const length = moveX * moveX + moveY * moveY;
+  const share = length > 0 ? Math.max(0, Math.min(1, ((x - fromX) * moveX + (y - fromY) * moveY) / length)) : 1;
+  return [fromX + moveX * share, fromY + moveY * share, Math.max(0, fromZ + moveZ * share)];
+}
+
+export type StraightFlight = {
+  fromX: number;
+  fromY: number;
+  directionX: number;
+  directionY: number;
+  along: number[];
+  stepLength: number[];
+  height: number[];
+  climb: number[];
+  crossesGoalLineAt: Point | null;
+};
+
+export function straightFlight(from: Point, velocity: Point, dt: number): StraightFlight | null {
+  const speed = Math.hypot(velocity[0], velocity[1]);
+  if (speed === 0) return null;
+  const flight: StraightFlight = {
+    fromX: from[0],
+    fromY: from[1],
+    directionX: velocity[0] / speed,
+    directionY: velocity[1] / speed,
+    along: [],
+    stepLength: [],
+    height: [],
+    climb: [],
+    crossesGoalLineAt: null,
+  };
+  if (hasCrossed(GOAL_LINE, from)) return flight;
+  for (const [now, moving] of ballFlight(from, velocity, dt)) {
+    flight.along.push((now[0] - from[0]) * flight.directionX + (now[1] - from[1]) * flight.directionY);
+    flight.stepLength.push(Math.hypot(moving[0], moving[1]) * dt);
+    flight.height.push(now[2]);
+    flight.climb.push(moving[2] * dt);
+    if (hasCrossed(GOAL_LINE, now)) {
+      flight.crossesGoalLineAt = crossing(GOAL_LINE, now, moving);
+      break;
+    }
+  }
+  return flight;
 }

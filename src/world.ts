@@ -1,6 +1,7 @@
 import { addComponent, addEntity, createWorld, removeComponent } from "bitecs";
 import { AVERAGE_SHOOTING_GRADE } from "./constants";
 import { seededRandom } from "./random";
+import type { Point } from "./shooting";
 
 export const ANY_FACING = NaN;
 
@@ -21,9 +22,16 @@ export function createGame(seed = 1) {
       },
       Dribble: { x: [] as number[], y: [] as number[], nextTouchIn: [] as number[] },
       Shot: { x: [] as number[], y: [] as number[], z: [] as number[] },
+      Attacking: {
+        chance: [] as number[],
+        bestChanceFurtherOn: [] as number[],
+        aimY: [] as number[],
+        aimZ: [] as number[],
+      },
       GoalLineCrossing: { y: [] as number[], z: [] as number[] },
       Goalkeeper: { watchingShotFor: [] as number[] },
       Held: {},
+      Struck: {},
       Ball: {},
     },
   });
@@ -116,4 +124,21 @@ export function setShot(world: Game, eid: number, x: number, y: number, z: numbe
   Shot.x[eid] = x;
   Shot.y[eid] = y;
   Shot.z[eid] = z;
+}
+
+export function strikeBall(world: Game, ball: number, [vx, vy, vz]: Point): void {
+  const { Velocity, Struck } = world.components;
+  Velocity.x[ball] = vx;
+  Velocity.y[ball] = vy;
+  Velocity.z[ball] = vz;
+  addComponent(world, ball, Struck);
+}
+
+export function setAttacking(world: Game, eid: number): void {
+  const { Attacking } = world.components;
+  addComponent(world, eid, Attacking);
+  Attacking.chance[eid] = 0;
+  Attacking.bestChanceFurtherOn[eid] = 0;
+  Attacking.aimY[eid] = NaN;
+  Attacking.aimZ[eid] = NaN;
 }

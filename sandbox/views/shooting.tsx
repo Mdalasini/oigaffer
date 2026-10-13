@@ -17,7 +17,7 @@ import {
   strikeSpeed,
   type Point,
 } from "../../src/shooting";
-import { isGoal } from "../../src/systems";
+import { isGoal } from "../../src/goal";
 import { addBall, addGoalkeeper, addPlayer, createGame, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
@@ -106,7 +106,7 @@ function describeCrossing(y: number, z: number): string {
 
 function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvasElement, readout: HTMLElement) {
   const world = createGame();
-  const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing, Goalkeeper, Held } = world.components;
+  const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing, Goalkeeper, Held, Struck } = world.components;
   const player = addPlayer(world, 0, 0);
   const keeper = addGoalkeeper(world, PITCH_LENGTH, PITCH_WIDTH / 2);
   const ball = addBall(world, 0, 0);
@@ -161,7 +161,10 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     removeComponent(world, player, Target);
     removeComponent(world, ball, GoalLineCrossing);
     removeComponent(world, ball, Held);
+    removeComponent(world, ball, Struck);
+    Position.x[keeper] = PITCH_LENGTH;
     Position.y[keeper] = PITCH_WIDTH / 2;
+    Velocity.x[keeper] = 0;
     Velocity.y[keeper] = 0;
     Goalkeeper.watchingShotFor[keeper] = 0;
     trail = [];
@@ -230,7 +233,7 @@ function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTML
     topDown.drawPlayer(Position.x[player]!, Position.y[player]!, Facing[player]!);
     if (keeperInGoal()) topDown.drawPlayer(Position.x[keeper]!, Position.y[keeper]!, Facing[keeper]!, COLOURS.keeper);
     topDown.drawBall(...ballAt);
-    playerView.draw(ballAt, trail, aimPoint(), circleAroundAim(plannedShot().radius), keeperInGoal() ? Position.y[keeper]! : null);
+    playerView.draw(ballAt, trail, aimPoint(), circleAroundAim(plannedShot().radius), keeperInGoal() ? [Position.x[keeper]!, Position.y[keeper]!] : null);
     readout.textContent = `${describeShot()} — ${describePlan()}`;
   }
 
