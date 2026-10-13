@@ -3,7 +3,7 @@ import {
   STEER_CLOSE_ARRIVAL_TIME, STEER_CONTACT_PASSES, STEER_FACE_SPEED, STEER_JOG_TURN, STEER_MAX_SPEED,
   STEER_SEPARATION_RADIUS, STEER_SEPARATION_SPEED, STEER_SPRINT_TURN, STEER_SUBSTEPS,
 } from "./constants";
-import { fatigueRate, speedFactor, tire } from "./fatigue";
+import { accelFactor, fatigueRate, paceFactor, speedFactor, tire } from "./fatigue";
 import { PITCH_LENGTH, PITCH_WIDTH, type Vec } from "./geometry";
 import { owner, type MatchPlayer, type MatchState } from "./state";
 
@@ -30,8 +30,11 @@ export function turnFacing(p: MatchPlayer, ball: Vec, dt: number): void {
 export function steerPlayer(p: MatchPlayer, target: Vec, speed: number, standOff: number, ball: Vec,
   separationX = 0, separationY = 0, acceleration = STEER_ACCEL, restartRadius = 0): void {
   const dt = 1 / STEER_SUBSTEPS;
-  const maxSpeed = Math.min(STEER_MAX_SPEED, speed * speedFactor(p));
+  const pace = paceFactor(p);
+  const maxSpeed = Math.min(STEER_MAX_SPEED * pace, speed * speedFactor(p) * pace);
   const brake = STEER_BRAKE;
+  // Acceleration is scaled by the player's acceleration; the arrival choice above keeps the unscaled argument
+  const accel = acceleration * accelFactor(p);
   let x = p.pos.x, y = p.pos.y, velX = p.vel.x, velY = p.vel.y;
   const rate = fatigueRate(p);
   let energy = p.energy;
@@ -47,7 +50,7 @@ export function steerPlayer(p: MatchPlayer, target: Vec, speed: number, standOff
     const wanted = desiredSpeed > maxSpeed ? norm(vx, vy) : desiredSpeed;
     const braking = vx * velX + vy * velY < 0 || wanted < norm(velX, velY);
     const ax = vx - velX, ay = vy - velY;
-    const change = norm(ax, ay), limit = (braking ? brake : acceleration) * dt;
+    const change = norm(ax, ay), limit = (braking ? brake : accel) * dt;
     const fraction = change > limit ? limit / change : 1;
     velX += ax * fraction;
     velY += ay * fraction;
