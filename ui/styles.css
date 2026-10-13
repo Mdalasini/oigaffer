@@ -220,6 +220,28 @@ legend {
   gap: 8px;
 }
 
+.phases {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.phases button {
+  display: grid;
+  gap: 2px;
+  padding: 4px 2px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* a phase with a shape of its own, not just following the one above */
+.phases button.own {
+  border-style: dashed;
+  border-color: var(--us);
+}
+
+.phases .shape-name,
 .possession .shape-name {
   font-family: var(--display);
   font-weight: 600;

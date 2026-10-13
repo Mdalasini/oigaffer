@@ -2,7 +2,7 @@ import type { Manager } from "../manager";
 import type { DebugHook } from "./debug";
 import type { Attributes, Id, Position } from "../model";
 import type { ClubStrength } from "../strength";
-import type { Mentality, Spot, Tactics } from "../tactics";
+import type { Mentality, PlayPhase, Spot, Tactics } from "../tactics";
 import { CONTROL_MIN_TICKS, CONTROL_PRESSURE_TICKS, CONTROL_RADIUS, CONTROL_SKILL_FACTOR, CONTROL_TICKS, DECISION_PAUSE_TICKS, KEEPER_HOLD_TICKS, PRESSURE_RANGE } from "./constants";
 import type { Rng } from "../random";
 import { dist, distSq, PITCH_LENGTH, PITCH_WIDTH, REJECT_MARGIN, type Vec } from "./geometry";
@@ -16,10 +16,7 @@ export interface MatchPlayer {
   side: Side;
   position: Position; // the line they're playing in for the current formation
   spot: Spot; // their position on the tactics board, such as LB or CDM
-  // Where they play when the other side has the ball: board position, line and slot
-  outSpot: Spot;
-  outPosition: Position;
-  outSlot: Vec;
+  roles: Record<PlayPhase, Role>; // where they play in each phase of play
   natural: Position; // where they normally play
   base: Attributes; // fresh attributes
   attributes: Attributes; // current attributes, lowered by fatigue
@@ -31,6 +28,13 @@ export interface MatchPlayer {
   carryTarget?: Vec; // a successful take-on, pursued in the movement phase
   cooldown: number; // ticks before this player can challenge again
   yellow: boolean;
+}
+
+// A player's job in one phase of play: board position, line and slot (team frame)
+export interface Role {
+  spot: Spot;
+  position: Position;
+  slot: Vec;
 }
 
 // Players not on the pitch: the bench, and anyone who has gone off

@@ -1,7 +1,7 @@
 import { commentary, minuteLabel, type CommentaryLine, type Names } from "../src/commentary";
 import { opponent, type Side } from "../src/engine/state";
 import { teamStats, type TeamStats } from "../src/stats";
-import { MENTALITY_NAMES, shapeName, type Possession, type Spot } from "../src/tactics";
+import { MENTALITY_NAMES, pairedSpot, shapeName, type Board, type Spot } from "../src/tactics";
 import { SquadPanel } from "./SquadPanel";
 import { TacticsPicker } from "./TacticsPicker";
 import { SPEEDS, useMatch, type MatchSetup, type Speed } from "./useMatch";
@@ -38,10 +38,9 @@ export function MatchScreen({ setup, onExit }: { setup: MatchSetup; onExit: () =
   const theirs = state.teams[opponent(mySide)].tactics;
   const surname = (id: string) => names.player(id).split(" ").at(-1)!;
   const mine = state.players.filter((p) => p.side === mySide);
-  const atSpot: Record<Possession, Partial<Record<Spot, string>>> = {
-    in: Object.fromEntries(mine.map((p) => [p.spot, surname(p.id)])),
-    out: Object.fromEntries(mine.map((p) => [p.outSpot, surname(p.id)])),
-  };
+  const myTactics = state.teams[mySide].tactics;
+  const atSpot = (board: Board): Partial<Record<Spot, string>> =>
+    Object.fromEntries(mine.map((p) => [pairedSpot(myTactics, p.spot, board), surname(p.id)]));
   const whose = (side: Side) => (side === mySide ? "us" : "them");
 
   const clock = finished ? "FT" : state.phase === "half_time" ? "HT" : minuteLabel(state.period, state.clock);
