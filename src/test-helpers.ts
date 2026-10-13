@@ -16,6 +16,8 @@ export const player = (id: string, position: Position, attacking: number, defend
     acceleration: 10,
     jumping: 10,
     strength: 10,
+    agility: 10,
+    balance: 10,
   },
 });
 

@@ -14,6 +14,8 @@ export interface Attributes {
   acceleration: number; // how quickly they reach top speed
   jumping: number; // reach in the air
   strength: number; // holding off and winning physical challenges
+  agility: number; // quick changes of direction
+  balance: number; // staying on their feet in a challenge
 }
 
 export interface Player {

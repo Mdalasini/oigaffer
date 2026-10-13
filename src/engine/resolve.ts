@@ -29,6 +29,7 @@ import {
   TACKLE_COOLDOWN,
   TACKLE_RANGE,
   TACKLE_SKILL,
+  TACKLE_BALANCE,
   TACKLE_STRENGTH,
   TACTICAL_FOUL,
 } from "./constants";
@@ -83,7 +84,9 @@ export function attemptTackle(state: MatchState, carrier: MatchPlayer): boolean 
   tackler.cooldown = TACKLE_COOLDOWN;
   const winChance = clamp(
     TACKLE_BASE + TACKLE_SKILL * (challengeSkill(tackler) - carrier.attributes.dribbling) +
-      TACKLE_STRENGTH * (tackler.attributes.strength - carrier.attributes.strength),
+      TACKLE_STRENGTH * (tackler.attributes.strength - carrier.attributes.strength) -
+      // A well-balanced carrier stays on their feet and rides the challenge
+      TACKLE_BALANCE * (carrier.attributes.balance - 10),
     0.1,
     0.8,
   );

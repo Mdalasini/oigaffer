@@ -3,7 +3,7 @@ import type { Player, Position } from "./model";
 import { DEFAULT_CLUBS, generateWorld } from "./seed";
 import { seededRng } from "./random";
 
-const PHYSICALS = ["pace", "acceleration", "jumping", "strength"] as const;
+const PHYSICALS = ["pace", "acceleration", "jumping", "strength", "agility", "balance"] as const;
 
 const average = (players: Player[], attr: (typeof PHYSICALS)[number]) =>
   players.reduce((sum, p) => sum + p.attributes[attr], 0) / players.length;
@@ -13,7 +13,7 @@ describe("generateWorld physical attributes", () => {
   const players = Object.values(world.players);
   const byPosition = (position: Position) => players.filter((p) => p.position === position);
 
-  test("every player has all four physicals between 1 and 20", () => {
+  test("every player has all six physicals between 1 and 20", () => {
     for (const p of players) {
       for (const attr of PHYSICALS) {
         expect(p.attributes[attr]).toBeGreaterThanOrEqual(1);

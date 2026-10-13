@@ -13,7 +13,7 @@ const STARTERS: Record<Position, number> = { GK: 1, DEF: 4, MID: 4, FWD: 2 };
 const RESERVE_PENALTY = 2;
 
 // The skill attributes, which follow club quality with a positional offset
-type Skills = Omit<Attributes, "pace" | "acceleration" | "jumping" | "strength">;
+type Skills = Omit<Attributes, "pace" | "acceleration" | "jumping" | "strength" | "agility" | "balance">;
 
 // Offsets from the club's quality, per attribute
 const PROFILE: Record<Position, Skills> = {
@@ -37,11 +37,11 @@ const LAST_NAMES = ["Adeyemi", "Berg", "Costa", "Diallo", "Evans", "Fischer", "G
 // the gap between strong and weak sides.
 const PHYSICAL_BASE = 10;
 const PHYSICAL_QUALITY = 0.3;
-const PHYSICAL_PROFILE: Record<Position, { pace: number; acceleration: number; jumping: number; strength: number }> = {
-  GK: { pace: -2, acceleration: -1, jumping: 2, strength: 1 },
-  DEF: { pace: -1, acceleration: -1, jumping: 2, strength: 2 },
-  MID: { pace: 0, acceleration: 1, jumping: -1, strength: -1 },
-  FWD: { pace: 2, acceleration: 2, jumping: 0, strength: 0 },
+const PHYSICAL_PROFILE: Record<Position, { pace: number; acceleration: number; jumping: number; strength: number; agility: number; balance: number }> = {
+  GK: { pace: -2, acceleration: -1, jumping: 2, strength: 1, agility: 1, balance: 0 },
+  DEF: { pace: -1, acceleration: -1, jumping: 2, strength: 2, agility: -1, balance: 1 },
+  MID: { pace: 0, acceleration: 1, jumping: -1, strength: -1, agility: 1, balance: 0 },
+  FWD: { pace: 2, acceleration: 2, jumping: 0, strength: 0, agility: 1, balance: 0 },
 };
 
 const pick = <T>(items: T[], rng: Rng): T => items[Math.floor(rng() * items.length)]!;
@@ -82,6 +82,8 @@ export function generateWorld(clubNames: string[], rng: Rng): GameWorld {
           acceleration: PHYSICAL_BASE,
           jumping: PHYSICAL_BASE,
           strength: PHYSICAL_BASE,
+          agility: PHYSICAL_BASE,
+          balance: PHYSICAL_BASE,
         },
       };
       world.players[player.id] = player;
@@ -104,6 +106,8 @@ export function generateWorld(clubNames: string[], rng: Rng): GameWorld {
       a.acceleration = physical(profile.acceleration);
       a.jumping = physical(profile.jumping);
       a.strength = physical(profile.strength);
+      a.agility = physical(profile.agility);
+      a.balance = physical(profile.balance);
     }
   }
   return world;

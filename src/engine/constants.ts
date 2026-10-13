@@ -135,6 +135,8 @@ export const CARRY_DISTANCE = 7; // running into open space
 export const DRIBBLE_CONTEST_RANGE = 3;
 export const DRIBBLE_BASE = 0.5;
 export const DRIBBLE_SKILL = 0.004;
+export const DRIBBLE_AGILITY = 0.006; // per point of agility over the defender: changing direction past them
+export const DRIBBLE_BALANCE = 0.003; // per point of the defender's balance above 10: a steady defender is harder to get past
 export const DRIBBLE_FREE = 0.95;
 
 // Through balls: played into space ahead of a runner
@@ -157,6 +159,7 @@ export const TACKLE_ATTEMPT = 0.24; // chance/s: inertial closing and ball fligh
 export const TACKLE_BASE = 0.35;
 export const TACKLE_SKILL = 0.004;
 export const TACKLE_STRENGTH = 0.004; // per point of strength over the carrier: winning a physical challenge
+export const TACKLE_BALANCE = 0.003; // per point of the carrier's balance above 10: a well-balanced carrier rides the challenge
 export const TACKLE_COOLDOWN = 3;
 export const TACKLE_LOOSE = 0.55; // won tackles that poke the ball away rather than come away with it
 export const TACKLE_LOOSE_DISTANCE: [number, number] = [4, 16];

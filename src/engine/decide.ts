@@ -9,6 +9,8 @@ import {
   THROW_MAX_DISTANCE,
   DECISION_TEMPERATURE,
   CARRY_DISTANCE,
+  DRIBBLE_AGILITY,
+  DRIBBLE_BALANCE,
   DRIBBLE_BASE,
   DRIBBLE_CONTEST_RANGE,
   DRIBBLE_DISTANCE,
@@ -91,7 +93,15 @@ function assessDribble(state: MatchState, carrier: MatchPlayer): Action & { kind
     dir = normalize(add(dir, scale(perp, veer)));
   }
   const beat = defender
-    ? clamp(DRIBBLE_BASE + DRIBBLE_SKILL * (carrier.attributes.dribbling - challengeSkill(defender)), 0.15, 0.9)
+    ? clamp(
+        DRIBBLE_BASE +
+          DRIBBLE_SKILL * (carrier.attributes.dribbling - challengeSkill(defender)) +
+          // Quick feet get past a defender who can't turn as fast; a balanced defender is harder to beat
+          DRIBBLE_AGILITY * (carrier.attributes.agility - defender.attributes.agility) +
+          DRIBBLE_BALANCE * (10 - defender.attributes.balance),
+        0.15,
+        0.9,
+      )
     : DRIBBLE_FREE;
   const step = defender ? DRIBBLE_DISTANCE : CARRY_DISTANCE;
   return { kind: "dribble", to: clampToPitch(add(carrier.pos, scale(dir, step))), beat, defender };
