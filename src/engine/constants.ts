@@ -56,6 +56,10 @@ export const KEEPER_HOLD_TICKS = 6;
 export const PRESS_STAND_OFF = 1.5;
 // A defender only leaves their zone to press when the ball is this close to their anchor
 export const PRESS_TRIGGER = 30;
+// Attacking midfielders (LAM, CAM, RAM) close down only nearer their position. The press zone follows
+// the anchor, so at 30 m a CAM hunted centre-backs in their own third: a 4-3-3 with a CAM instead of
+// the CDM won 2.31 points a game against a 4-4-2 mirror's 1.44. Forwards don't press at all.
+export const HIGH_PRESS_TRIGGER = 15;
 
 // Mentality, per step from balanced (-2 … +2)
 export const MENTALITY_PUSH = 2; // metres players push up (or hold back) when their team has the ball
