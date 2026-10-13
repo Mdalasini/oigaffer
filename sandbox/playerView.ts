@@ -1,4 +1,13 @@
-import { CROSSBAR_HEIGHT, GOAL_WIDTH, KEEPER_HIGHEST_REACH, KEEPER_REACH, PITCH_LENGTH, PITCH_WIDTH } from "../src/constants";
+import {
+  BLOCKING_REACH,
+  CROSSBAR_HEIGHT,
+  GOAL_WIDTH,
+  HIGHEST_BLOCK,
+  KEEPER_HIGHEST_REACH,
+  KEEPER_REACH,
+  PITCH_LENGTH,
+  PITCH_WIDTH,
+} from "../src/constants";
 import type { Point } from "../src/shooting";
 import { COLOURS } from "./topDown";
 
@@ -13,8 +22,14 @@ const PENALTY_AREA = { depth: 16.5, width: 40.32 };
 const GOAL_AREA = { depth: 5.5, width: 18.32 };
 const KEEPER_HALF_WIDTH = 0.25;
 const KEEPER_HEIGHT = 1.9;
+const PLAYER_HALF_WIDTH = 0.25;
+const PLAYER_HEIGHT = 1.8;
+const LYING_HALF_WIDTH = 0.9;
+const LYING_HEIGHT = 0.3;
 
 const SKY = "#0c2234";
+
+type Defender = { at: [x: number, y: number]; grounded: boolean };
 
 
 export function createPlayerView(canvas: HTMLCanvasElement) {
@@ -128,22 +143,37 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ];
   }
 
-  function drawKeeper([x, y]: [number, number]) {
-    const body = upright(x, y, KEEPER_HALF_WIDTH, KEEPER_HEIGHT);
-    if (body.some((corner) => depthOf(corner) < NEAREST_VISIBLE)) return;
-    ctx.fillStyle = COLOURS.keeper;
+  function drawBody(body: Point[], colour: string) {
+    if (body.some((corner) => depthOf(corner) < NEAREST_VISIBLE)) return false;
+    ctx.fillStyle = colour;
     ctx.beginPath();
     for (const corner of body) {
       const [screenX, screenY] = project(corner);
       ctx.lineTo(screenX, screenY);
     }
     ctx.fill();
-    ctx.strokeStyle = COLOURS.keeper;
+    return true;
+  }
+
+  function drawReach(reach: Point[], colour: string) {
+    ctx.strokeStyle = colour;
     ctx.lineWidth = devicePixelRatio;
     ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
-    const reach = upright(x, y, KEEPER_REACH, KEEPER_HIGHEST_REACH);
     reach.slice(1).forEach((corner, i) => line(reach[i]!, corner));
     ctx.setLineDash([]);
+  }
+
+  function drawKeeper([x, y]: [number, number]) {
+    if (drawBody(upright(x, y, KEEPER_HALF_WIDTH, KEEPER_HEIGHT), COLOURS.keeper)) {
+      drawReach(upright(x, y, KEEPER_REACH, KEEPER_HIGHEST_REACH), COLOURS.keeper);
+    }
+  }
+
+  function drawDefender({ at: [x, y], grounded }: Defender) {
+    if (grounded) drawBody(upright(x, y, LYING_HALF_WIDTH, LYING_HEIGHT), COLOURS.defender);
+    else if (drawBody(upright(x, y, PLAYER_HALF_WIDTH, PLAYER_HEIGHT), COLOURS.defender)) {
+      drawReach(upright(x, y, BLOCKING_REACH, HIGHEST_BLOCK), COLOURS.defender);
+    }
   }
 
   function drawCircle(points: Point[]) {
@@ -191,10 +221,11 @@ export function createPlayerView(canvas: HTMLCanvasElement) {
     ctx.fill();
   }
 
-  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeper: [x: number, y: number] | null) {
+  function draw(ball: Point, trail: Point[], aim: Point, circle: Point[], keeper: [x: number, y: number] | null, defenders: Defender[] = []) {
     drawGround();
     drawGoal();
     if (keeper !== null) drawKeeper(keeper);
+    [...defenders].sort((a, b) => depthOf([...b.at, 0]) - depthOf([...a.at, 0])).forEach(drawDefender);
     drawTrail(trail);
     drawCircle(circle);
     drawAim(aim);

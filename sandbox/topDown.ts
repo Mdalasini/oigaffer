@@ -12,6 +12,7 @@ export const COLOURS = {
   lines: "rgba(238, 241, 230, 0.6)",
   player: "#f2b33d",
   keeper: "#5bb0ef",
+  defender: "#c58af0",
   facing: "#102c1c",
   ball: "#eef1e6",
   shadow: "rgba(0, 0, 0, 0.35)",
@@ -59,7 +60,8 @@ export function createTopDown(canvas: HTMLCanvasElement, area: PitchArea = WHOLE
     ctx.strokeRect(screenX(PITCH_LENGTH), postY, GOAL_DEPTH * pixelsPerMetre, GOAL_WIDTH * pixelsPerMetre);
   }
 
-  function drawCross(x: number, y: number) {
+  function drawCross(x: number, y: number, colour = COLOURS.aim) {
+    ctx.strokeStyle = colour;
     const half = CROSS_SIZE * pixelsPerMetre;
     ctx.beginPath();
     ctx.moveTo(screenX(x) - half, screenY(y) - half);
