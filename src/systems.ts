@@ -27,7 +27,7 @@ import {
   TURN_RATE,
 } from "./constants";
 import { closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight } from "./flight";
-import { bestShot, shotOptions, whereToStand } from "./chance";
+import { bestShot, chanceOnceKeeperIsSet, shotOptions, whereToStand } from "./chance";
 import { isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach } from "./interception";
@@ -347,9 +347,7 @@ function bestChanceFurtherOn(from: Point, shooting: number, dribbling: number, k
     const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
     const gettingThere = chanceOfGettingThere(next, carried, dribbling, defenders);
     if (gettingThere <= best) continue;
-    const options = shotOptions(next, shooting, dt);
-    const setKeeper = keeper && (whereToStand(next, options, keeper, dt) ?? keeper);
-    best = Math.max(best, gettingThere * bestShot(options, setKeeper, dt).chance);
+    best = Math.max(best, gettingThere * chanceOnceKeeperIsSet(next, shooting, keeper !== null, dt));
   }
   return best;
 }

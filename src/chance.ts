@@ -137,3 +137,26 @@ export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper,
   }
   return best.spot;
 }
+
+const SPOT_GRID = 0.5;
+const REMEMBERED_CHANCES = 4096;
+const chancesOnceKeeperIsSet = new Map<string, number>();
+
+const toGrid = (value: number) => Math.round(value / SPOT_GRID) * SPOT_GRID;
+
+export const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
+
+const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
+
+export function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
+  const near = onTheGrid(spot);
+  const key = `${near.join()}|${withKeeper}|${grade}|${dt}`;
+  const remembered = chancesOnceKeeperIsSet.get(key);
+  if (remembered !== undefined) return remembered;
+  const options = shotOptions(near, grade, dt);
+  const setKeeper = withKeeper ? (whereToStand(near, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
+  const chance = bestShot(options, setKeeper, dt).chance;
+  if (chancesOnceKeeperIsSet.size >= REMEMBERED_CHANCES) chancesOnceKeeperIsSet.delete(chancesOnceKeeperIsSet.keys().next().value!);
+  chancesOnceKeeperIsSet.set(key, chance);
+  return chance;
+}
