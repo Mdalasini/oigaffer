@@ -6,7 +6,7 @@ import { GOAL_LINE, whereBallCrosses } from "./flight";
 import { kick, type Point } from "./shooting";
 import { isGoal } from "./goal";
 import { step } from "./systems";
-import { addBall, addGoalkeeper, addPlayer, createGame, strikeBall } from "./world";
+import { addBall, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, strikeBall } from "./world";
 
 const GOAL_CENTRE = PITCH_WIDTH / 2;
 const PENALTY_SPOT: Point = [PITCH_LENGTH - 11, GOAL_CENTRE, 0];
@@ -142,9 +142,10 @@ describe("a goalkeeper taking up position", () => {
   function settleAgainst(ballAt: [x: number, y: number]) {
     const world = createGame();
     const { Position } = world.components;
-    addPlayer(world, ballAt[0] - 0.3, ballAt[1]);
+    const [home, away] = [addTeam(world), addTeam(world)];
+    joinTeam(world, addPlayer(world, ballAt[0] - 0.3, ballAt[1]), home);
     addBall(world, ...ballAt);
-    const keeper = addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+    const keeper = joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
     for (let time = 0; time < 4; time += TIME_STEP) step(world);
     return [Position.x[keeper]!, Position.y[keeper]!] as [number, number];
   }

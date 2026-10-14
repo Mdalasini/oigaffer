@@ -16,7 +16,7 @@ import { tackleWinChance } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { kick, type Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, createGame, setAttacking, setDribble, strikeBall } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking, setDribble, strikeBall } from "./world";
 
 describe("the tackle contest", () => {
   test("is even between an average dribbler and an average tackler", () => {
@@ -35,9 +35,10 @@ describe("the tackle contest", () => {
 function dribbleAtDefender({ dribbling = AVERAGE_GRADE, tackling = AVERAGE_GRADE, seed = 1, seconds = 6 } = {}) {
   const world = createGame(seed);
   const { Position, Grounded, Tackled } = world.components;
-  const attacker = addPlayer(world, 59.7, GOAL_CENTRE, 0, AVERAGE_GRADE, dribbling);
+  const [home, away] = [addTeam(world), addTeam(world)];
+  const attacker = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE, 0, AVERAGE_GRADE, dribbling), home);
   const ball = addBall(world, 60, GOAL_CENTRE);
-  const defender = addDefender(world, 70, GOAL_CENTRE + 2, Math.PI, tackling);
+  const defender = joinTeam(world, addDefender(world, 70, GOAL_CENTRE + 2, Math.PI, tackling), away);
   setDribble(world, attacker, PITCH_LENGTH, GOAL_CENTRE);
   let tackleAt: { ball: [number, number]; defender: [number, number]; time: number } | null = null;
   let time = 0;
@@ -131,10 +132,11 @@ describe("a defender in the way of a shot", () => {
 function attackPastDefender(attackerAt: [number, number], defenderAt: [number, number], grades: { shooting?: number; dribbling?: number; tackling?: number }) {
   const world = createGame();
   const { Position, Struck, Held, GoalLineCrossing, Grounded, Tackled, Blocked } = world.components;
-  const attacker = addPlayer(world, attackerAt[0] - 0.3, attackerAt[1], 0, grades.shooting ?? AVERAGE_GRADE, grades.dribbling ?? AVERAGE_GRADE);
+  const [home, away] = [addTeam(world), addTeam(world)];
+  const attacker = joinTeam(world, addPlayer(world, attackerAt[0] - 0.3, attackerAt[1], 0, grades.shooting ?? AVERAGE_GRADE, grades.dribbling ?? AVERAGE_GRADE), home);
   const ball = addBall(world, ...attackerAt);
-  const defender = addDefender(world, ...defenderAt, Math.PI, grades.tackling ?? AVERAGE_GRADE);
-  addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+  const defender = joinTeam(world, addDefender(world, ...defenderAt, Math.PI, grades.tackling ?? AVERAGE_GRADE), away);
+  joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
   setAttacking(world, attacker);
   let first: { what: "shot" | "tackle"; from: number } | null = null;
   let closestWhileDown = Infinity;

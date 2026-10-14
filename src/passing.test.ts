@@ -6,7 +6,7 @@ import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
 import type { Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, createGame, setAttacking, setDribble, setPassing, setSupporting } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking, setDribble, setPassing, setSupporting } from "./world";
 
 describe("a pass along the ground", () => {
   test("is led to where a running teammate will be, and gets there at a speed they can take", () => {
@@ -30,11 +30,12 @@ describe("a pass along the ground", () => {
 function passAcross(defenderAt: [number, number] | null, receiverVelocity: [number, number] = [0, 0]) {
   const world = createGame();
   const { Position, Velocity, Attacking, Intercepted, Passed } = world.components;
-  const passer = addPlayer(world, 59.7, GOAL_CENTRE);
-  const receiver = addPlayer(world, 60, GOAL_CENTRE + 10);
+  const [home, away] = [addTeam(world), addTeam(world)];
+  const passer = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), home);
+  const receiver = joinTeam(world, addPlayer(world, 60, GOAL_CENTRE + 10), home);
   [Velocity.x[receiver], Velocity.y[receiver]] = receiverVelocity;
   const ball = addBall(world, 60, GOAL_CENTRE);
-  const defender = defenderAt && addDefender(world, ...defenderAt);
+  const defender = defenderAt && joinTeam(world, addDefender(world, ...defenderAt), away);
   setSupporting(world, receiver);
   setPassing(world, passer, receiver);
   const defenderSteps: [number, number][] = [];
@@ -113,11 +114,12 @@ describe("passing to a teammate", () => {
 function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defenderAt: [number, number], seconds = 8) {
   const world = createGame();
   const { Position, Passed, Attacking, Supporting, Struck, Tackled, Grounded, Held, GoalLineCrossing, Blocked, Intercepted } = world.components;
-  const attacker = addPlayer(world, attackerAt[0] - 0.3, attackerAt[1]);
-  const mate = addPlayer(world, ...mateAt);
+  const [home, away] = [addTeam(world), addTeam(world)];
+  const attacker = joinTeam(world, addPlayer(world, attackerAt[0] - 0.3, attackerAt[1]), home);
+  const mate = joinTeam(world, addPlayer(world, ...mateAt), home);
   const ball = addBall(world, ...attackerAt);
-  const defender = addDefender(world, ...defenderAt);
-  addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+  const defender = joinTeam(world, addDefender(world, ...defenderAt), away);
+  joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
   setAttacking(world, attacker);
   setSupporting(world, mate);
   const events: string[] = [];
@@ -146,8 +148,9 @@ describe("a two-on-one", () => {
   test("the teammate catches up with the ball and keeps up with it, out to the side", () => {
     const world = createGame();
     const { Position } = world.components;
-    const carrier = addPlayer(world, 59.7, GOAL_CENTRE);
-    const mate = addPlayer(world, 56, GOAL_CENTRE + 6);
+    const team = addTeam(world);
+    const carrier = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), team);
+    const mate = joinTeam(world, addPlayer(world, 56, GOAL_CENTRE + 6), team);
     const ball = addBall(world, 60, GOAL_CENTRE);
     setDribble(world, carrier, PITCH_LENGTH, GOAL_CENTRE);
     setSupporting(world, mate);
@@ -159,11 +162,12 @@ describe("a two-on-one", () => {
   test("the teammate never aims to run beyond the last defender", () => {
     const world = createGame();
     const { Position, Target } = world.components;
-    const carrier = addPlayer(world, 59.7, GOAL_CENTRE);
-    const mate = addPlayer(world, 60, GOAL_CENTRE + 6);
+    const [home, away] = [addTeam(world), addTeam(world)];
+    const carrier = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), home);
+    const mate = joinTeam(world, addPlayer(world, 60, GOAL_CENTRE + 6), home);
     const ball = addBall(world, 60, GOAL_CENTRE);
-    const defender = addDefender(world, 63, GOAL_CENTRE - 10);
-    addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+    const defender = joinTeam(world, addDefender(world, 63, GOAL_CENTRE - 10), away);
+    joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
     setDribble(world, carrier, 75, GOAL_CENTRE - 30);
     setSupporting(world, mate);
     let furthestBeyond = -Infinity;

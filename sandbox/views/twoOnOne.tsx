@@ -4,7 +4,7 @@ import { AVERAGE_GRADE, BEST_GRADE, PITCH_LENGTH, PITCH_WIDTH, TOUCH_REACH, WORS
 import { tackleWinChance } from "../../src/defender";
 import { GOAL_CENTRE, isGoal } from "../../src/goal";
 import type { Point } from "../../src/shooting";
-import { addBall, addDefender, addGoalkeeper, addPlayer, createGame, setAttacking, setSupporting, type Game } from "../../src/world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking, setSupporting, type Game } from "../../src/world";
 import { circleAroundAim, holdBallWhereItCrossed, percent } from "../attackingRound";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
@@ -115,7 +115,7 @@ export function TwoOnOneView() {
 
 const between = (low: number, high: number) => low + Math.random() * (high - low);
 
-function addTeammate(world: Game, x: number, y: number, facing: number, grades: Grades) {
+function addTeammate(world: Game, team: number, x: number, y: number, facing: number, grades: Grades) {
   const side = Math.random() < 0.5 ? -1 : 1;
   const across = side * between(TEAMMATE_NEAREST_ACROSS, TEAMMATE_FURTHEST_ACROSS);
   const behind = between(0, TEAMMATE_FURTHEST_BEHIND);
@@ -127,6 +127,7 @@ function addTeammate(world: Game, x: number, y: number, facing: number, grades: 
     grades.shooting,
     grades.dribbling,
   );
+  joinTeam(world, teammate, team);
   setSupporting(world, teammate);
   return teammate;
 }
@@ -137,7 +138,8 @@ function setUpRound({ grades, withTeammate }: Setup) {
   const y = GOAL_CENTRE + between(-WIDEST_START, WIDEST_START);
   const facing = Math.atan2(GOAL_CENTRE - y, PITCH_LENGTH - x);
   const behind = TOUCH_REACH * 0.5;
-  const attacker = addPlayer(world, x - Math.cos(facing) * behind, y - Math.sin(facing) * behind, facing, grades.shooting, grades.dribbling);
+  const [attacking, defending] = [addTeam(world), addTeam(world)];
+  const attacker = joinTeam(world, addPlayer(world, x - Math.cos(facing) * behind, y - Math.sin(facing) * behind, facing, grades.shooting, grades.dribbling), attacking);
   const ball = addBall(world, x, y);
   const ahead = between(DEFENDER_NEAREST_AHEAD, DEFENDER_FURTHEST_AHEAD);
   const offTheLine = between(-DEFENDER_WIDEST_OFF_THE_LINE, DEFENDER_WIDEST_OFF_THE_LINE);
@@ -148,9 +150,10 @@ function setUpRound({ grades, withTeammate }: Setup) {
     facing + Math.PI,
     grades.tackling,
   );
-  const keeper = addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+  joinTeam(world, defender, defending);
+  const keeper = joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), defending);
   setAttacking(world, attacker);
-  const attackers = withTeammate ? [attacker, addTeammate(world, x, y, facing, grades)] : [attacker];
+  const attackers = withTeammate ? [attacker, addTeammate(world, attacking, x, y, facing, grades)] : [attacker];
   return { world, attackers, ball, defender, keeper, grades, startedAt: performance.now() };
 }
 

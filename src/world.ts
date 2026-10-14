@@ -45,6 +45,8 @@ export function createGame(seed = 1) {
       Held: {},
       Struck: {},
       Ball: {},
+      Team: {},
+      PlaysFor: [] as number[],
     },
   });
 }
@@ -183,4 +185,17 @@ export function setPassing(world: Game, eid: number, to: number): void {
 
 export function setSupporting(world: Game, eid: number): void {
   addComponent(world, eid, world.components.Supporting);
+}
+
+export function addTeam(world: Game): number {
+  const team = addEntity(world);
+  addComponent(world, team, world.components.Team);
+  return team;
+}
+
+export function joinTeam(world: Game, eid: number, team: number): number {
+  const { PlaysFor } = world.components;
+  addComponent(world, eid, PlaysFor);
+  PlaysFor[eid] = team;
+  return eid;
 }

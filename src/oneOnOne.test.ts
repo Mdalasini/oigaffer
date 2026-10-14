@@ -3,14 +3,15 @@ import { hasComponent } from "bitecs";
 import { AVERAGE_SHOOTING_GRADE, PITCH_LENGTH, TIME_STEP } from "./constants";
 import { GOAL_CENTRE } from "./goal";
 import { step } from "./systems";
-import { addBall, addGoalkeeper, addPlayer, createGame, setAttacking } from "./world";
+import { addBall, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking } from "./world";
 
 function oneOnOne(attackerAt: [x: number, y: number], keeperAt: [x: number, y: number] | null, seconds = 10) {
   const world = createGame();
   const { Position, Struck, Held, GoalLineCrossing, Velocity } = world.components;
-  const attacker = addPlayer(world, attackerAt[0] - 0.3, attackerAt[1], 0, AVERAGE_SHOOTING_GRADE);
+  const [home, away] = [addTeam(world), addTeam(world)];
+  const attacker = joinTeam(world, addPlayer(world, attackerAt[0] - 0.3, attackerAt[1], 0, AVERAGE_SHOOTING_GRADE), home);
   const ball = addBall(world, ...attackerAt);
-  const keeper = keeperAt && addGoalkeeper(world, ...keeperAt);
+  const keeper = keeperAt && joinTeam(world, addGoalkeeper(world, ...keeperAt), away);
   setAttacking(world, attacker);
   let struckFrom: [number, number] | null = null;
   let struckTowards: [number, number] | null = null;
