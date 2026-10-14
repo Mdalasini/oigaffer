@@ -1,4 +1,4 @@
-import { MAX_DRIBBLE_TOUCH_SPEED, PITCH_LENGTH, PITCH_WIDTH, TACKLE_REACH, TOP_SPEED, TOUCH_INTERVAL } from "./constants";
+import { MAX_DRIBBLE_TOUCH_SPEED, PITCH_LENGTH, TACKLE_REACH, TOP_SPEED, TOUCH_INTERVAL } from "./constants";
 import { bestShot, chanceRunningIn, onTheGrid, shotOptions, whereToStand } from "./chance";
 import { distanceRunIn, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { directionTo } from "./direction";
@@ -24,7 +24,7 @@ export const chanceOfBeating = (defenders: Opponent[], runner: Runner) =>
 
 export type Runner = { shooting: number; dribbling: number; speed: number };
 
-export type Support = Runner & { across: number };
+export type TeammateRun = (ballTo: Point, time: number) => Receiver | null;
 
 export function closingIn(defender: Opponent, spot: Point, time: number): Opponent {
   const { at, moving, recoversIn } = defender;
@@ -34,13 +34,14 @@ export function closingIn(defender: Opponent, spot: Point, time: number): Oppone
   return { ...defender, at: [at[0] + onwardX * covered, at[1] + onwardY * covered], moving: [0, 0], recoversIn: 0 };
 }
 
-export function passingAt(spot: Point, time: number, support: Support, defenders: Opponent[], keeper: Keeper | null, dt: number): number {
-  const teammate: [number, number] = [spot[0], Math.max(0, Math.min(PITCH_WIDTH, spot[1] + support.across))];
+export function passingAt(spot: Point, time: number, teammateRun: TeammateRun, defenders: Opponent[], keeper: Keeper | null, dt: number): number {
+  const teammate = teammateRun(spot, time);
+  if (!teammate) return 0;
   const defendersThen = defenders.map((defender) => closingIn(defender, spot, time));
-  return passValue(spot, { ...support, at: teammate, moving: [0, 0] }, keeper, defendersThen, dt);
+  return passValue(spot, teammate, keeper, defendersThen, dt);
 }
 
-export function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, support: Support | null): number {
+export function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, teammateRun: TeammateRun | null): number {
   const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
   const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
   const inTheWay = new Set<Opponent>();
@@ -51,8 +52,8 @@ export function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper 
     const timeThere = timeToRun(carried, MAX_DRIBBLE_TOUCH_SPEED, runner.speed);
     const wasFree = inTheWay.size === 0;
     for (const defender of defenders) if (canGetThere(defender, next, timeThere)) inTheWay.add(defender);
-    if (wasFree && inTheWay.size > 0 && support && lastFree) {
-      best = Math.max(best, passingAt(lastFree.spot, lastFree.time, support, defenders, keeper, dt));
+    if (wasFree && inTheWay.size > 0 && teammateRun && lastFree) {
+      best = Math.max(best, passingAt(lastFree.spot, lastFree.time, teammateRun, defenders, keeper, dt));
     }
     if (inTheWay.size === 0) lastFree = { spot: next, time: timeThere };
     const gettingThere = chanceOfBeating([...inTheWay], runner);

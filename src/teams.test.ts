@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
-import { PITCH_LENGTH, SUPPORT_AHEAD, TIME_STEP } from "./constants";
+import { PITCH_LENGTH, TIME_STEP } from "./constants";
 import { GOAL_CENTRE } from "./goal";
 import { step } from "./systems";
 import { opponentsOf, teammatesOf } from "./teams";
@@ -48,13 +48,6 @@ function attackingDownThePitch(defendersAt: [number, number][]) {
 }
 
 describe("a team attacking down the pitch", () => {
-  test("has its supporter keep just ahead of the ball, towards the goal it attacks", () => {
-    const { world, mate, ball } = attackingDownThePitch([[20, GOAL_CENTRE], [5, GOAL_CENTRE]]);
-    const { Position, Target } = world.components;
-    step(world);
-    expect(Target.x[mate]!).toBeCloseTo(Position.x[ball]! - SUPPORT_AHEAD, 1);
-  });
-
   test("has its supporter stay level with the second-last opponent rather than beyond them", () => {
     const { world, mate, ball, defenders } = attackingDownThePitch([[44, GOAL_CENTRE - 10], [5, GOAL_CENTRE]]);
     const { Position, Target } = world.components;

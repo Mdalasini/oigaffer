@@ -12,11 +12,9 @@ import {
   MAX_TOUCH_SPEED_AWAY_FROM_PLAYER,
   PASSING_GAP,
   PITCH_LENGTH,
-  PITCH_WIDTH,
   SHARPEST_TAKE_ON,
   STANDING_SPEED,
-  SUPPORT_AHEAD,
-  SUPPORT_WIDTH,
+  OFFER_SWITCH_GAIN,
   TACKLE_CLEARANCE_SPEED,
   TACKLE_REACH,
   TACKLE_RECOVERY_TIME,
@@ -34,8 +32,9 @@ import { bestInterception, hasReacted, isWithinReach, type Mover } from "./inter
 import { INTERCEPTOR, leadPass, untilCollected } from "./passing";
 import { KEEPER, type Keeper } from "./keeper";
 import { directionTo } from "./direction";
-import { bestChanceFurtherOn, passValue, type Opponent, type Support } from "./valuation";
-import { accelerated, angleBetween, steer, stoppingSpeed, turnTowards } from "./running";
+import { bestChanceFurtherOn, passValue, type Opponent, type TeammateRun } from "./valuation";
+import { nearestOffer, offerAim, offerValue, OFFERS, receiverOnTheRun, withBallHeadingTo, type Offer, type Scene } from "./offering";
+import { accelerated, angleBetween, steer, stoppingSpeed, turnTowards, type Body } from "./running";
 import { attackingDirectionOf, goalAttackedBy, goalDefendedBy, opponentsOf, teammatesOf } from "./teams";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setAttacking, setDribble, setPassing, setShot, setTarget, strikeBall, type Game } from "./world";
@@ -303,15 +302,6 @@ function secondLastOpponent(world: Game, eid: number): number | undefined {
   return opponentsOf(world, eid, [Position]).sort((a, b) => forward * (Position.x[b]! - Position.x[a]!))[1];
 }
 
-function furthestOnside(world: Game, eid: number, ball: number): { x: number; vx: number } {
-  const { Position, Velocity } = world.components;
-  const forward = attackingDirectionOf(world, eid);
-  const ahead = { x: Position.x[ball]! + forward * SUPPORT_AHEAD, vx: Velocity.x[ball]! };
-  const opponent = secondLastOpponent(world, eid);
-  const line = opponent !== undefined && forward * Position.x[opponent]! > forward * Position.x[ball]! ? opponent : ball;
-  return forward * Position.x[line]! < forward * ahead.x ? { x: Position.x[line]!, vx: Velocity.x[line]! } : ahead;
-}
-
 function isOnside(world: Game, eid: number, ball: number): boolean {
   const { Position } = world.components;
   const forward = attackingDirectionOf(world, eid);
@@ -320,16 +310,49 @@ function isOnside(world: Game, eid: number, ball: number): boolean {
   return forward * Position.x[eid]! <= Math.max(forward * Position.x[ball]!, forward * line);
 }
 
-export function support(world: Game): void {
-  const { Position, Velocity, Supporting, Receiving, Tackled, Ball } = world.components;
+function sceneFor(world: Game, supporter: number, ball: number): Scene {
+  const { Position, Velocity, Attacking, Tackling } = world.components;
+  const carrier = teammatesOf(world, supporter, [Position, Velocity, Attacking])[0];
+  const moving = carrier ?? ball;
+  return {
+    ball: [Position.x[ball]!, Position.y[ball]!],
+    path: [Velocity.x[moving]!, Velocity.y[moving]!],
+    carried: carrier !== undefined,
+    forward: attackingDirectionOf(world, supporter),
+    defenders: opponents(world, supporter),
+    standingOpponents: opponentsOf(world, supporter, [Position, Not(Tackling)]).map((eid): [number, number] => [Position.x[eid]!, Position.y[eid]!]),
+    keeper: opposingKeeper(world, supporter),
+  };
+}
+
+const bodyOf = (world: Game, eid: number): Body => {
+  const { Position, Velocity, Facing } = world.components;
+  return { x: Position.x[eid]!, y: Position.y[eid]!, vx: Velocity.x[eid]!, vy: Velocity.y[eid]!, facing: Facing[eid]! };
+};
+
+function reconsider(world: Game, eid: number, scene: Scene, dt: number): void {
+  const { Supporting, Shooting, Dribbling } = world.components;
+  const body = bodyOf(world, eid);
+  const runner = { shooting: Shooting[eid]!, dribbling: Dribbling[eid]!, speed: 0 };
+  const held = heldOffer(world, eid, scene);
+  [Supporting.along[eid], Supporting.across[eid]] = [held.along, held.across];
+  const next = Supporting.next[eid]!;
+  const candidate = OFFERS[next]!;
+  if (offerValue(body, candidate, scene, runner, dt) > offerValue(body, held, scene, runner, dt) + OFFER_SWITCH_GAIN) {
+    [Supporting.along[eid], Supporting.across[eid]] = [candidate.along, candidate.across];
+  }
+  Supporting.next[eid] = (next + 1) % OFFERS.length;
+}
+
+export function support(world: Game, dt: number): void {
+  const { Position, Supporting, Shooting, Dribbling, Receiving, Tackled, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
-  const ballY = Position.y[ball]!;
-  for (const eid of query(world, [Position, Supporting, Not(Receiving), Not(Tackled)])) {
-    const { x, vx } = furthestOnside(world, eid, ball);
-    const side = Position.y[eid]! >= ballY ? 1 : -1;
-    const y = Math.max(0, Math.min(PITCH_WIDTH, ballY + side * SUPPORT_WIDTH));
-    setTarget(world, eid, x, y, vx, Velocity.y[ball]!);
+  for (const eid of query(world, [Position, Shooting, Dribbling, Supporting, Not(Receiving), Not(Tackled)])) {
+    const scene = sceneFor(world, eid, ball);
+    reconsider(world, eid, scene, dt);
+    const aim = offerAim({ along: Supporting.along[eid]!, across: Supporting.across[eid]! }, scene, 0);
+    setTarget(world, eid, aim.x, aim.y, aim.vx, aim.vy);
   }
 }
 
@@ -424,12 +447,22 @@ function opponents(world: Game, attacker: number): Opponent[] {
   }));
 }
 
-function supportFor(world: Game, carrier: number, ball: Point): Support | null {
+const heldOffer = (world: Game, eid: number, scene: Scene): Offer => {
+  const { Position, Supporting } = world.components;
+  return Number.isNaN(Supporting.along[eid]!)
+    ? nearestOffer([Position.x[eid]!, Position.y[eid]!], scene)
+    : { along: Supporting.along[eid]!, across: Supporting.across[eid]! };
+};
+
+function teammateRunFor(world: Game, carrier: number, ball: number, dt: number): TeammateRun | null {
   const { Position, Shooting, Dribbling, Supporting, Tackled } = world.components;
   const teammate = teammatesOf(world, carrier, [Position, Shooting, Dribbling, Supporting, Not(Tackled)])[0];
   if (teammate === undefined) return null;
-  const side = Position.y[teammate]! >= ball[1] ? 1 : -1;
-  return { shooting: Shooting[teammate]!, dribbling: Dribbling[teammate]!, speed: 0, across: side * SUPPORT_WIDTH };
+  const scene = sceneFor(world, teammate, ball);
+  const body = bodyOf(world, teammate);
+  const offer = heldOffer(world, teammate, scene);
+  const runner = { shooting: Shooting[teammate]!, dribbling: Dribbling[teammate]!, speed: 0 };
+  return (ballTo, time) => receiverOnTheRun(body, offer, withBallHeadingTo(scene, ballTo, time), runner, time, dt);
 }
 
 function wayPast(from: Point, inTheWay: Defender[]): [x: number, y: number] | null {
@@ -501,7 +534,7 @@ export function attack(world: Game, dt: number): void {
     const towardsGoal = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
     const runningAt = Velocity.x[eid]! * towardsGoal.onwardX + Velocity.y[eid]! * towardsGoal.onwardY;
     const runner = { shooting: Shooting[eid]!, dribbling: Dribbling[eid]!, speed: runningAt };
-    const later = bestChanceFurtherOn(from, runner, keeper, defenders, dt, supportFor(world, eid, from));
+    const later = bestChanceFurtherOn(from, runner, keeper, defenders, dt, teammateRunFor(world, eid, ball, dt));
     const pass = bestPass(world, eid, ball, keeper, defenders, dt);
     const passing = pass?.worth ?? 0;
     Attacking.chance[eid] = now.chance;
@@ -637,12 +670,18 @@ function loseTheBallFor(world: Game, eid: number): void {
   if (hasComponent(world, eid, PlaysFor)) removeComponent(world, PlaysFor[eid]!, InPossession);
 }
 
+function startOffering(world: Game, eid: number): void {
+  const { Supporting } = world.components;
+  addComponent(world, eid, Supporting);
+  [Supporting.along[eid], Supporting.across[eid], Supporting.next[eid]] = [NaN, NaN, 0];
+}
+
 export function contribute(world: Game): void {
   const { Position, Dribbling, PlaysFor, Attacking, Dribble, Shot, Passing, Receiving, Supporting, Tackled } = world.components;
   for (const eid of query(world, [Position, Dribbling, PlaysFor])) {
     const offTheBall = ![Attacking, Dribble, Shot, Passing, Receiving, Tackled].some((part) => hasComponent(world, eid, part));
-    if (isInPossession(world, eid) && offTheBall) addComponent(world, eid, Supporting);
-    else removeComponent(world, eid, Supporting);
+    if (!isInPossession(world, eid) || !offTheBall) removeComponent(world, eid, Supporting);
+    else if (!hasComponent(world, eid, Supporting)) startOffering(world, eid);
   }
 }
 
@@ -652,7 +691,7 @@ export function step(world: Game, dt = TIME_STEP): void {
   dribble(world, dt);
   shoot(world);
   pass(world);
-  support(world);
+  support(world, dt);
   meetPass(world, dt);
   defend(world, dt);
   goalkeep(world, dt);
