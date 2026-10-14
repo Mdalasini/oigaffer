@@ -21,7 +21,7 @@ export function createGame(seed = 1) {
       Passing: { to: [] as number[] },
       Passed: { x: [] as number[], y: [] as number[] },
       Receiving: {},
-      Supporting: {},
+      Supporting: { aheadOfBall: [] as number[], acrossFromBall: [] as number[], rethinkIn: [] as number[] },
       Intercepted: {},
       WatchingPassFor: [] as number[],
       Target: {
@@ -182,5 +182,9 @@ export function setPassing(world: Game, eid: number, to: number): void {
 }
 
 export function setSupporting(world: Game, eid: number): void {
-  addComponent(world, eid, world.components.Supporting);
+  const { Supporting } = world.components;
+  addComponent(world, eid, Supporting);
+  Supporting.aheadOfBall[eid] = NaN;
+  Supporting.acrossFromBall[eid] = NaN;
+  Supporting.rethinkIn[eid] = 0;
 }

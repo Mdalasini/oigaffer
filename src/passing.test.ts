@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { hasComponent, query } from "bitecs";
-import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, PITCH_LENGTH, SUPPORT_WIDTH, TIME_STEP, TOP_SPEED, TOUCH_REACH } from "./constants";
+import { addComponent, hasComponent, query } from "bitecs";
+import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, PITCH_LENGTH, TIME_STEP, TOP_SPEED, TOUCH_REACH } from "./constants";
 import { ballFlight } from "./flight";
 import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
@@ -143,17 +143,42 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
 }
 
 describe("a two-on-one", () => {
-  test("the teammate catches up with the ball and keeps up with it, out to the side", () => {
+  test("while the defender is still well ahead, the teammate heads level with or beyond the ball, on the side away from the defender", () => {
     const world = createGame();
-    const { Position } = world.components;
-    const carrier = addPlayer(world, 59.7, GOAL_CENTRE);
-    const mate = addPlayer(world, 56, GOAL_CENTRE + 6);
-    const ball = addBall(world, 60, GOAL_CENTRE);
+    const { Position, Target } = world.components;
+    const carrier = addPlayer(world, PITCH_LENGTH - 30.3, GOAL_CENTRE);
+    const mate = addPlayer(world, PITCH_LENGTH - 36, GOAL_CENTRE + 1);
+    const ball = addBall(world, PITCH_LENGTH - 30, GOAL_CENTRE);
+    addDefender(world, PITCH_LENGTH - 16, GOAL_CENTRE - 3);
+    addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
     setDribble(world, carrier, PITCH_LENGTH, GOAL_CENTRE);
     setSupporting(world, mate);
-    for (let time = 0; time < 4; time += TIME_STEP) step(world);
-    expect(Math.abs(Position.x[mate]! - Position.x[ball]!)).toBeLessThan(2.5);
-    expect(Math.abs(Math.abs(Position.y[mate]! - Position.y[ball]!) - SUPPORT_WIDTH)).toBeLessThan(1);
+    for (let time = 0; time < 1; time += TIME_STEP) {
+      step(world);
+      expect(Target.x[mate]!).toBeGreaterThanOrEqual(Position.x[ball]! - 0.5);
+      expect(Target.y[mate]!).toBeGreaterThan(Position.y[ball]!);
+    }
+  });
+
+  test("a teammate with the defender between them and the ball moves to open up a way to pass to them", () => {
+    const world = createGame();
+    const { Position, Velocity, Grounded } = world.components;
+    const mate = addPlayer(world, PITCH_LENGTH - 25, GOAL_CENTRE + 10);
+    const ball = addBall(world, PITCH_LENGTH - 25, GOAL_CENTRE);
+    const defender = addDefender(world, PITCH_LENGTH - 25, GOAL_CENTRE + 5);
+    addComponent(world, defender, Grounded);
+    Grounded.recoversIn[defender] = Infinity;
+    addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+    setSupporting(world, mate);
+    const isCutOut = () => {
+      const from: Point = [Position.x[ball]!, Position.y[ball]!, 0];
+      const pass = leadPass(from, [Position.x[mate]!, Position.y[mate]!], [Velocity.x[mate]!, Velocity.y[mate]!])!;
+      const attempt = interceptionOf(passFlight(from, pass, TIME_STEP)!, [Position.x[defender]!, Position.y[defender]!], TIME_STEP);
+      return attempt !== null && attempt.shortfall <= 0;
+    };
+    expect(isCutOut()).toBe(true);
+    for (let time = 0; time < 2; time += TIME_STEP) step(world);
+    expect(isCutOut()).toBe(false);
   });
 
   test("a pass is worth more to a teammate running at goal than to the same teammate standing still", () => {

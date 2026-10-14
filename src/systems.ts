@@ -18,8 +18,12 @@ import {
   SHARPEST_TAKE_ON,
   SIDEWAYS_SPEED,
   STANDING_SPEED,
-  SUPPORT_AHEAD,
-  SUPPORT_WIDTH,
+  SUPPORT_FURTHEST_AHEAD,
+  SUPPORT_FURTHEST_BEHIND,
+  SUPPORT_RETHINK_INTERVAL,
+  SUPPORT_SPACING,
+  SUPPORT_SWITCHING_GAIN,
+  SUPPORT_WIDEST,
   TACKLE_CLEARANCE_SPEED,
   TACKLE_REACH,
   TACKLE_RECOVERY_TIME,
@@ -368,35 +372,72 @@ export function pass(world: Game): void {
   }
 }
 
-function secondLastOpponent(world: Game): number | undefined {
-  const { Position, Tackling, Goalkeeper } = world.components;
-  return [...query(world, [Position, Tackling]), ...query(world, [Position, Goalkeeper])].sort((a, b) => Position.x[b]! - Position.x[a]!)[1];
+const isOnside = (world: Game, eid: number, ball: number) =>
+  world.components.Position.x[eid]! <= offsideLine(world.components.Position.x[ball]!, opponentsX(opponents(world), keeperPosition(world)));
+
+type Holder = { at: [x: number, y: number]; moving: [vx: number, vy: number] };
+
+function whoWillHaveTheBall(world: Game, ball: number): Holder {
+  const { Position, Velocity, Attacking, Receiving } = world.components;
+  const holder = query(world, [Position, Velocity, Attacking])[0] ?? query(world, [Position, Velocity, Receiving])[0] ?? ball;
+  return { at: [Position.x[holder]!, Position.y[holder]!], moving: [Velocity.x[holder]!, Velocity.y[holder]!] };
 }
 
-function furthestOnside(world: Game, ball: number): { x: number; vx: number } {
-  const { Position, Velocity } = world.components;
-  const ahead = { x: Position.x[ball]! + SUPPORT_AHEAD, vx: Velocity.x[ball]! };
-  const opponent = secondLastOpponent(world);
-  const line = opponent !== undefined && Position.x[opponent]! > Position.x[ball]! ? opponent : ball;
-  return Position.x[line]! < ahead.x ? { x: Position.x[line]!, vx: Velocity.x[line]! } : ahead;
+const offsetsAlong = (from: number, to: number) => Array.from({ length: Math.floor((to - from) / SUPPORT_SPACING) + 1 }, (_, i) => from + i * SUPPORT_SPACING);
+
+const SUPPORT_SPOTS: [ahead: number, across: number][] = offsetsAlong(-SUPPORT_FURTHEST_BEHIND, SUPPORT_FURTHEST_AHEAD).flatMap((ahead) =>
+  offsetsAlong(SUPPORT_SPACING, SUPPORT_WIDEST).flatMap((across): [number, number][] => [
+    [ahead, across],
+    [ahead, -across],
+  ]),
+);
+
+function supportWorth(
+  [ahead, across]: [number, number],
+  supporter: Receiver,
+  holder: Holder,
+  passingMoment: Moment,
+  keeper: Keeper | null,
+  defenders: Opponent[],
+  dt: number,
+): number {
+  const { spot, time } = passingMoment;
+  const defendersThen = defenders.map((defender) => closingIn(defender, spot, time));
+  const line = offsideLine(spot[0], opponentsX(defendersThen, keeper));
+  const [x, y] = onThePitch([spot[0] + ahead, spot[1] + across]);
+  return passValue(spot, { ...supporter, at: [Math.min(x, line), y], moving: holder.moving }, keeper, defendersThen, dt);
 }
 
-function isOnside(world: Game, eid: number, ball: number): boolean {
-  const { Position } = world.components;
-  const opponent = secondLastOpponent(world);
-  return Position.x[eid]! <= Math.max(Position.x[ball]!, opponent === undefined ? PITCH_LENGTH : Position.x[opponent]!);
+function bestSupportSpot(supporter: Receiver, holder: Holder, planned: [number, number], keeper: Keeper | null, defenders: Opponent[], dt: number) {
+  const passingMoment = lastFreeMoment([...holder.at, 0], speedTowards(holder.moving, holder.at, GOAL), defenders);
+  const asNow: [number, number] = [supporter.at[0] - holder.at[0], supporter.at[1] - holder.at[1]];
+  const kept = planned.some(Number.isNaN) ? asNow : planned;
+  const worthOf = (spot: [number, number]) => supportWorth(spot, supporter, holder, passingMoment, keeper, defenders, dt);
+  let best = { spot: kept, worth: worthOf(kept) + SUPPORT_SWITCHING_GAIN };
+  for (const spot of SUPPORT_SPOTS) {
+    const worth = worthOf(spot);
+    if (worth > best.worth) best = { spot, worth };
+  }
+  return best.spot;
 }
 
-export function support(world: Game): void {
-  const { Position, Velocity, Supporting, Receiving, Tackled, Ball } = world.components;
+export function support(world: Game, dt: number): void {
+  const { Position, Supporting, Receiving, Tackled, Ball } = world.components;
   const ball = query(world, [Ball])[0];
   if (ball === undefined) return;
-  const ballY = Position.y[ball]!;
-  const { x, vx } = furthestOnside(world, ball);
+  const holder = whoWillHaveTheBall(world, ball);
+  const keeper = keeperPosition(world);
+  const defenders = opponents(world);
+  const line = offsideLine(holder.at[0], opponentsX(defenders, keeper));
   for (const eid of query(world, [Position, Supporting, Not(Receiving), Not(Tackled)])) {
-    const side = Position.y[eid]! >= ballY ? 1 : -1;
-    const y = Math.max(0, Math.min(PITCH_WIDTH, ballY + side * SUPPORT_WIDTH));
-    setTarget(world, eid, x, y, vx, Velocity.y[ball]!);
+    Supporting.rethinkIn[eid] = Supporting.rethinkIn[eid]! - dt;
+    if (Supporting.rethinkIn[eid]! <= 0) {
+      const current: [number, number] = [Supporting.aheadOfBall[eid]!, Supporting.acrossFromBall[eid]!];
+      [Supporting.aheadOfBall[eid], Supporting.acrossFromBall[eid]] = bestSupportSpot(receiverOf(world, eid), holder, current, keeper, defenders, dt);
+      Supporting.rethinkIn[eid] = SUPPORT_RETHINK_INTERVAL;
+    }
+    const [x, y] = onThePitch([holder.at[0] + Supporting.aheadOfBall[eid]!, holder.at[1] + Supporting.acrossFromBall[eid]!]);
+    setTarget(world, eid, Math.min(x, line), y, ...holder.moving);
   }
 }
 
@@ -526,15 +567,23 @@ function offsideLine(ballX: number, opponentsX: number[]): number {
 
 const opponentsX = (defenders: Opponent[], keeper: Keeper | null) => [...defenders.map(({ at }) => at[0]), ...(keeper ? [keeper[0]] : [])];
 
-function whereTheyWillBe(teammate: Receiver, time: number, line: number): Receiver {
-  const [x, y] = onThePitch([teammate.at[0] + teammate.moving[0] * time, teammate.at[1] + teammate.moving[1] * time]);
+type Teammate = Receiver & { planned: [ahead: number, across: number] };
+
+function whereTheyWillBe({ planned, ...teammate }: Teammate, ballThen: Point, time: number, line: number): Receiver {
+  const { at, moving } = teammate;
+  const heading: Point = planned.some(Number.isNaN)
+    ? [at[0] + moving[0] * time, at[1] + moving[1] * time, 0]
+    : [ballThen[0] + planned[0], ballThen[1] + planned[1], 0];
+  const { distance, onwardX, onwardY } = directionTo([...at, 0], heading[0], heading[1]);
+  const covered = Math.min(distance, distanceRunIn(time, TOP_SPEED, speedTowards(moving, at, heading)));
+  const [x, y] = onThePitch([at[0] + onwardX * covered, at[1] + onwardY * covered]);
   return { ...teammate, at: [Math.min(x, line), y] };
 }
 
-function passingAt(spot: Point, time: number, teammates: Receiver[], defenders: Opponent[], keeper: Keeper | null, dt: number): number {
+function passingAt(spot: Point, time: number, teammates: Teammate[], defenders: Opponent[], keeper: Keeper | null, dt: number): number {
   const defendersThen = defenders.map((defender) => closingIn(defender, spot, time));
   const line = offsideLine(spot[0], opponentsX(defendersThen, keeper));
-  return Math.max(0, ...teammates.map((teammate) => passValue(spot, whereTheyWillBe(teammate, time, line), keeper, defendersThen, dt)));
+  return Math.max(0, ...teammates.map((teammate) => passValue(spot, whereTheyWillBe(teammate, spot, time, line), keeper, defendersThen, dt)));
 }
 
 type Moment = { spot: Point; time: number };
@@ -553,7 +602,16 @@ function* runAtGoal(from: Point, speed: number, defenders: Opponent[]): Generato
   }
 }
 
-function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, teammates: Receiver[]): number {
+function lastFreeMoment(from: Point, speed: number, defenders: Opponent[]): Moment {
+  let lastFree: Moment = { spot: from, time: 0 };
+  for (const stride of runAtGoal(from, speed, defenders)) {
+    if (stride.inTheWay.length > 0) break;
+    lastFree = stride;
+  }
+  return lastFree;
+}
+
+function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, teammates: Teammate[]): number {
   let lastFree: Moment | null = null;
   let best = 0;
   for (const { spot, time, inTheWay } of runAtGoal(from, runner.speed, defenders)) {
@@ -580,11 +638,11 @@ function receiverOf(world: Game, eid: number): Receiver {
   };
 }
 
-function teammatesOf(world: Game, carrier: number): Receiver[] {
+function teammatesOf(world: Game, carrier: number): Teammate[] {
   const { Position, Velocity, Shooting, Dribbling, Supporting, Tackled } = world.components;
   return Array.from(query(world, [Position, Velocity, Shooting, Dribbling, Supporting, Not(Tackled)]))
     .filter((eid) => eid !== carrier)
-    .map((eid) => receiverOf(world, eid));
+    .map((eid) => ({ ...receiverOf(world, eid), planned: [Supporting.aheadOfBall[eid]!, Supporting.acrossFromBall[eid]!] }));
 }
 
 function wayPast(from: Point, inTheWay: Defender[]): [x: number, y: number] | null {
@@ -795,7 +853,7 @@ export function step(world: Game, dt = TIME_STEP): void {
   dribble(world, dt);
   shoot(world);
   pass(world);
-  support(world);
+  support(world, dt);
   meetPass(world, dt);
   defend(world, dt);
   goalkeep(world, dt);
