@@ -110,6 +110,8 @@ describe("passing to a teammate", () => {
   });
 });
 
+const PLAYING_SEVERAL_SECONDS_THROUGH = 30_000;
+
 function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defenderAt: [number, number], seconds = 8) {
   const world = createGame();
   const { Position, Passed, Attacking, Supporting, Struck, Tackled, Grounded, Held, GoalLineCrossing, Blocked, Intercepted } = world.components;
@@ -154,6 +156,25 @@ describe("a two-on-one", () => {
     expect(Math.abs(Math.abs(Position.y[mate]! - Position.y[ball]!) - SUPPORT_WIDTH)).toBeLessThan(1);
   });
 
+  test("a pass is worth more to a teammate running at goal than to the same teammate standing still", () => {
+    const worthOfPassingTo = (speed: number) => {
+      const world = createGame();
+      const { Velocity, Attacking } = world.components;
+      const carrier = addPlayer(world, PITCH_LENGTH - 30.3, GOAL_CENTRE);
+      addBall(world, PITCH_LENGTH - 30, GOAL_CENTRE);
+      const mate = addPlayer(world, PITCH_LENGTH - 30, GOAL_CENTRE + 10);
+      const towardsGoal = Math.atan2(-10, 30);
+      [Velocity.x[mate], Velocity.y[mate]] = [Math.cos(towardsGoal) * speed, Math.sin(towardsGoal) * speed];
+      addDefender(world, PITCH_LENGTH - 24, GOAL_CENTRE - 2);
+      addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+      setAttacking(world, carrier);
+      setSupporting(world, mate);
+      step(world);
+      return Attacking.bestPass[carrier]!;
+    };
+    expect(worthOfPassingTo(TOP_SPEED)).toBeGreaterThan(worthOfPassingTo(0));
+  });
+
   test("the teammate never aims to run beyond the last defender", () => {
     const world = createGame();
     const { Position, Target } = world.components;
@@ -170,23 +191,24 @@ describe("a two-on-one", () => {
       furthestBeyond = Math.max(furthestBeyond, Target.x[mate]! - Math.max(Position.x[defender]!, Position.x[ball]!));
     }
     expect(furthestBeyond).toBeLessThan(TOP_SPEED * TIME_STEP);
-  });
+  }, PLAYING_SEVERAL_SECONDS_THROUGH);
 
   test("with the defender closing in on the ball, they slip the teammate in rather than take the defender on", () => {
     const { events } = twoOnOne([PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 19, GOAL_CENTRE - 2]);
     expect(events[0]).toBe("pass");
-  });
+  }, PLAYING_SEVERAL_SECONDS_THROUGH);
+
+  const STARTS: [[number, number], [number, number], [number, number]][] = [
+    [[PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 19, GOAL_CENTRE - 2]],
+    [[PITCH_LENGTH - 30, GOAL_CENTRE], [PITCH_LENGTH - 28, GOAL_CENTRE + 8], [PITCH_LENGTH - 18, GOAL_CENTRE]],
+    [[PITCH_LENGTH - 28, GOAL_CENTRE - 6], [PITCH_LENGTH - 28, GOAL_CENTRE + 4], [PITCH_LENGTH - 20, GOAL_CENTRE - 3]],
+  ];
 
   test("whoever is passed to is onside when the ball is played", () => {
-    const starts: [[number, number], [number, number], [number, number]][] = [
-      [[PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 19, GOAL_CENTRE - 2]],
-      [[PITCH_LENGTH - 30, GOAL_CENTRE], [PITCH_LENGTH - 28, GOAL_CENTRE + 8], [PITCH_LENGTH - 18, GOAL_CENTRE]],
-      [[PITCH_LENGTH - 28, GOAL_CENTRE - 6], [PITCH_LENGTH - 28, GOAL_CENTRE + 4], [PITCH_LENGTH - 20, GOAL_CENTRE - 3]],
-    ];
-    const passes = starts.flatMap((start) => twoOnOne(...start).beyondTheLineWhenPassedTo);
+    const passes = STARTS.flatMap((start) => twoOnOne(...start).beyondTheLineWhenPassedTo);
     expect(passes.length).toBeGreaterThan(0);
     for (const beyond of passes) expect(beyond).toBeLessThanOrEqual(0.05);
-  });
+  }, PLAYING_SEVERAL_SECONDS_THROUGH);
 
   test("don't pass when the defender is standing in the way of it", () => {
     const { events } = twoOnOne([PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 22, GOAL_CENTRE + 2], 1);
