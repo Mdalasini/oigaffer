@@ -6,7 +6,7 @@ import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
 import type { Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, setDribble, setPassing, setSupporting } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, setDribble, setPassing, setInPossession } from "./world";
 
 describe("a pass along the ground", () => {
   test("is led to where a running teammate will be, and gets there at a speed they can take", () => {
@@ -36,7 +36,7 @@ function passAcross(defenderAt: [number, number] | null, receiverVelocity: [numb
   [Velocity.x[receiver], Velocity.y[receiver]] = receiverVelocity;
   const ball = addBall(world, 60, GOAL_CENTRE);
   const defender = defenderAt && joinTeam(world, addDefender(world, ...defenderAt), away);
-  setSupporting(world, receiver);
+  setAttacking(world, passer);
   setPassing(world, passer, receiver);
   const defenderSteps: [number, number][] = [];
   let passedFrom: Point | null = null;
@@ -121,7 +121,6 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
   const defender = joinTeam(world, addDefender(world, ...defenderAt), away);
   joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
   setAttacking(world, attacker);
-  setSupporting(world, mate);
   const events: string[] = [];
   const beyondTheLineWhenPassedTo: number[] = [];
 
@@ -153,7 +152,7 @@ describe("a two-on-one", () => {
     const mate = joinTeam(world, addPlayer(world, 56, GOAL_CENTRE + 6), team);
     const ball = addBall(world, 60, GOAL_CENTRE);
     setDribble(world, carrier, PITCH_LENGTH, GOAL_CENTRE);
-    setSupporting(world, mate);
+    setInPossession(world, team);
     for (let time = 0; time < 4; time += TIME_STEP) step(world);
     expect(Math.abs(Position.x[mate]! - Position.x[ball]!)).toBeLessThan(2.5);
     expect(Math.abs(Math.abs(Position.y[mate]! - Position.y[ball]!) - SUPPORT_WIDTH)).toBeLessThan(1);
@@ -169,7 +168,7 @@ describe("a two-on-one", () => {
     const defender = joinTeam(world, addDefender(world, 63, GOAL_CENTRE - 10), away);
     joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), away);
     setDribble(world, carrier, 75, GOAL_CENTRE - 30);
-    setSupporting(world, mate);
+    setInPossession(world, home);
     let furthestBeyond = -Infinity;
     for (let time = 0; time < 3; time += TIME_STEP) {
       step(world);

@@ -38,7 +38,7 @@ import { INTERCEPTOR, interceptionOf, leadPass, passFlight, untilCollected } fro
 import { KEEPER, type Keeper } from "./keeper";
 import { attackingDirectionOf, goalAttackedBy, goalDefendedBy, opponentsOf, teammatesOf } from "./teams";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
-import { setAttacking, setDribble, setPassing, setShot, setSupporting, setTarget, strikeBall, type Game } from "./world";
+import { setAttacking, setDribble, setPassing, setShot, setTarget, strikeBall, type Game } from "./world";
 
 const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
@@ -250,6 +250,7 @@ function loseTheBall(world: Game, attacker: number, ball: number): void {
   removeComponent(world, attacker, Shot);
   removeComponent(world, attacker, world.components.Passing);
   addComponent(world, attacker, Tackled);
+  loseTheBallFor(world, attacker);
   setTarget(world, attacker, Position.x[attacker]!, Position.y[attacker]!);
 }
 
@@ -338,7 +339,7 @@ export function block(world: Game, dt: number): void {
 }
 
 function playPass(world: Game, passer: number, receiver: number, ball: number): boolean {
-  const { Position, Velocity, Attacking, Passing, Passed, Receiving, Supporting, WatchingPassFor } = world.components;
+  const { Position, Velocity, Attacking, Passing, Passed, Receiving, WatchingPassFor } = world.components;
   const pass = leadPass(pointOf(Position, ball), [Position.x[receiver]!, Position.y[receiver]!], [Velocity.x[receiver]!, Velocity.y[receiver]!]);
   removeComponent(world, passer, Passing);
   if (!pass) return false;
@@ -347,8 +348,6 @@ function playPass(world: Game, passer: number, receiver: number, ball: number): 
   [Passed.x[ball], Passed.y[ball]] = [pass.to[0], pass.to[1]];
   for (const defender of query(world, [WatchingPassFor])) WatchingPassFor[defender] = 0;
   removeComponent(world, passer, Attacking);
-  setSupporting(world, passer);
-  removeComponent(world, receiver, Supporting);
   addComponent(world, receiver, Receiving);
   return true;
 }
@@ -451,6 +450,7 @@ export function intercept(world: Game, dt: number): void {
       removeComponent(world, ball, Passed);
       addComponent(world, ball, Intercepted);
       for (const receiver of query(world, [Position, Receiving])) {
+        loseTheBallFor(world, receiver);
         removeComponent(world, receiver, Receiving);
         setTarget(world, receiver, Position.x[receiver]!, Position.y[receiver]!);
       }
@@ -779,7 +779,24 @@ export function save(world: Game, dt: number): void {
   }
 }
 
+const isInPossession = (world: Game, eid: number) => hasComponent(world, world.components.PlaysFor[eid]!, world.components.InPossession);
+
+function loseTheBallFor(world: Game, eid: number): void {
+  const { PlaysFor, InPossession } = world.components;
+  if (hasComponent(world, eid, PlaysFor)) removeComponent(world, PlaysFor[eid]!, InPossession);
+}
+
+export function contribute(world: Game): void {
+  const { Position, Dribbling, PlaysFor, Attacking, Dribble, Shot, Passing, Receiving, Supporting, Tackled } = world.components;
+  for (const eid of query(world, [Position, Dribbling, PlaysFor])) {
+    const offTheBall = ![Attacking, Dribble, Shot, Passing, Receiving, Tackled].some((part) => hasComponent(world, eid, part));
+    if (isInPossession(world, eid) && offTheBall) addComponent(world, eid, Supporting);
+    else removeComponent(world, eid, Supporting);
+  }
+}
+
 export function step(world: Game, dt = TIME_STEP): void {
+  contribute(world);
   attack(world, dt);
   dribble(world, dt);
   shoot(world);

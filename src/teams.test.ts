@@ -4,7 +4,7 @@ import { PITCH_LENGTH, SUPPORT_AHEAD, TIME_STEP } from "./constants";
 import { GOAL_CENTRE } from "./goal";
 import { step } from "./systems";
 import { opponentsOf, teammatesOf } from "./teams";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, joinTeam, setDribble, setSupporting, UP_THE_PITCH } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, joinTeam, setDribble, setInPossession, UP_THE_PITCH } from "./world";
 
 describe("team membership", () => {
   test("teammates are the others on the same team, and opponents everyone on another", () => {
@@ -43,7 +43,7 @@ function attackingDownThePitch(defendersAt: [number, number][]) {
   const ball = addBall(world, 45, GOAL_CENTRE);
   const defenders = defendersAt.map((at) => joinTeam(world, addDefender(world, ...at, 0), defending));
   setDribble(world, carrier, 0, GOAL_CENTRE);
-  setSupporting(world, mate);
+  setInPossession(world, attacking);
   return { world, mate, ball, defenders };
 }
 

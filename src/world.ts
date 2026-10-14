@@ -1,4 +1,4 @@
-import { addComponent, addEntity, createWorld, removeComponent } from "bitecs";
+import { addComponent, addEntity, createWorld, hasComponent, removeComponent } from "bitecs";
 import { AVERAGE_GRADE, AVERAGE_SHOOTING_GRADE } from "./constants";
 import { seededRandom } from "./random";
 import type { Point } from "./shooting";
@@ -46,6 +46,7 @@ export function createGame(seed = 1) {
       Struck: {},
       Ball: {},
       Team: { attackingDirection: [] as number[] },
+      InPossession: {},
       PlaysFor: [] as number[],
     },
   });
@@ -166,8 +167,9 @@ export function strikeBall(world: Game, ball: number, [vx, vy, vz]: Point): void
 }
 
 export function setAttacking(world: Game, eid: number): void {
-  const { Attacking } = world.components;
+  const { Attacking, PlaysFor } = world.components;
   addComponent(world, eid, Attacking);
+  if (hasComponent(world, eid, PlaysFor)) setInPossession(world, PlaysFor[eid]!);
   Attacking.chance[eid] = 0;
   Attacking.bestChanceFurtherOn[eid] = 0;
   Attacking.bestPass[eid] = 0;
@@ -183,9 +185,6 @@ export function setPassing(world: Game, eid: number, to: number): void {
   Passing.to[eid] = to;
 }
 
-export function setSupporting(world: Game, eid: number): void {
-  addComponent(world, eid, world.components.Supporting);
-}
 
 export const UP_THE_PITCH = 1;
 export const DOWN_THE_PITCH = -1;
@@ -203,4 +202,8 @@ export function joinTeam(world: Game, eid: number, team: number): number {
   addComponent(world, eid, PlaysFor);
   PlaysFor[eid] = team;
   return eid;
+}
+
+export function setInPossession(world: Game, team: number): void {
+  addComponent(world, team, world.components.InPossession);
 }

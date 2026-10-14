@@ -4,7 +4,7 @@ import { AVERAGE_GRADE, BEST_GRADE, PITCH_LENGTH, PITCH_WIDTH, TOUCH_REACH, WORS
 import { tackleWinChance } from "../../src/defender";
 import { GOAL_CENTRE, isGoal } from "../../src/goal";
 import type { Point } from "../../src/shooting";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, setSupporting, type Game } from "../../src/world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, type Game } from "../../src/world";
 import { circleAroundAim, holdBallWhereItCrossed, percent } from "../attackingRound";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
@@ -127,9 +127,7 @@ function addTeammate(world: Game, team: number, x: number, y: number, facing: nu
     grades.shooting,
     grades.dribbling,
   );
-  joinTeam(world, teammate, team);
-  setSupporting(world, teammate);
-  return teammate;
+  return joinTeam(world, teammate, team);
 }
 
 function setUpRound({ grades, withTeammate }: Setup) {
