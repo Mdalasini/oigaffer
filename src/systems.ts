@@ -2,8 +2,6 @@ import { addComponent, hasComponent, Not, query, removeComponent } from "bitecs"
 import {
   ACCELERATION,
   BALL_ROLLING_DECELERATION,
-  ARRIVAL_DISTANCE,
-  BRAKING,
   DISTANCE_BEHIND_BALL,
   DRIBBLE_BRAKING,
   DRIBBLE_STOP_DISTANCE,
@@ -16,7 +14,6 @@ import {
   PITCH_LENGTH,
   PITCH_WIDTH,
   SHARPEST_TAKE_ON,
-  SIDEWAYS_SPEED,
   STANDING_SPEED,
   SUPPORT_AHEAD,
   SUPPORT_WIDTH,
@@ -30,97 +27,36 @@ import {
   TURN_RATE,
 } from "./constants";
 import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
-import { bestShot, chanceRunningIn, onTheGrid, shotOptions, whereToStand } from "./chance";
-import { distanceRunIn, isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
+import { bestShot, shotOptions, whereToStand } from "./chance";
+import { isWithinBlockingReach, tackleWinChance, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Mover } from "./interception";
-import { INTERCEPTOR, interceptionOf, leadPass, passFlight, untilCollected } from "./passing";
+import { INTERCEPTOR, leadPass, untilCollected } from "./passing";
 import { KEEPER, type Keeper } from "./keeper";
+import { directionTo } from "./direction";
+import { bestChanceFurtherOn, passValue, type Opponent, type Support } from "./valuation";
+import { accelerated, angleBetween, steer, stoppingSpeed, turnTowards } from "./running";
 import { attackingDirectionOf, goalAttackedBy, goalDefendedBy, opponentsOf, teammatesOf } from "./teams";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setAttacking, setDribble, setPassing, setShot, setTarget, strikeBall, type Game } from "./world";
 
-const angleBetween = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
-
-const facesAnyWay = (facing: number) => Number.isNaN(facing);
-
 const pointOf = (part: { x: number[]; y: number[]; z: number[] }, eid: number): Point => [part.x[eid]!, part.y[eid]!, part.z[eid]!];
-
-const stoppingSpeed = (distance: number, braking: number) => Math.sqrt(2 * braking * Math.max(0, distance));
-
-function turnTowards(facing: number, heading: number, maxTurn: number): number {
-  const turn = angleBetween(facing, heading);
-  return Math.abs(turn) <= maxTurn ? heading : facing + Math.sign(turn) * maxTurn;
-}
-
-function topSpeedFacing(facing: number, heading: number): number {
-  const ahead = Math.max(0, Math.cos(angleBetween(facing, heading)));
-  return SIDEWAYS_SPEED + (TOP_SPEED - SIDEWAYS_SPEED) * ahead;
-}
-
-function arrive(world: Game, eid: number, dt: number): void {
-  const { Position, Velocity, Target, Facing } = world.components;
-  Position.x[eid] = Target.x[eid]!;
-  Position.y[eid] = Target.y[eid]!;
-  Velocity.x[eid] = Target.vx[eid]!;
-  Velocity.y[eid] = Target.vy[eid]!;
-  const arrivalFacing = Target.arrivalFacing[eid]!;
-  if (facesAnyWay(arrivalFacing)) {
-    removeComponent(world, eid, Target);
-    return;
-  }
-  Facing[eid] = turnTowards(Facing[eid]!, arrivalFacing, TURN_RATE * dt);
-  if (Facing[eid] === arrivalFacing) removeComponent(world, eid, Target);
-}
 
 function accelerateTowards(world: Game, eid: number, wantX: number, wantY: number, dt: number): void {
   const { Velocity } = world.components;
-  const vx = Velocity.x[eid]!;
-  const vy = Velocity.y[eid]!;
-  const changeX = wantX - vx;
-  const changeY = wantY - vy;
-  const change = Math.hypot(changeX, changeY);
-  const speedingUp = Math.hypot(wantX, wantY) > Math.hypot(vx, vy);
-  const limit = (speedingUp ? ACCELERATION : BRAKING) * dt;
-  const share = change > limit ? limit / change : 1;
-  Velocity.x[eid] = vx + changeX * share;
-  Velocity.y[eid] = vy + changeY * share;
+  [Velocity.x[eid], Velocity.y[eid]] = accelerated(Velocity.x[eid]!, Velocity.y[eid]!, wantX, wantY, dt);
 }
 
 export function runToTarget(world: Game, dt: number): void {
   const { Position, Velocity, Target, Facing } = world.components;
   for (const eid of query(world, [Position, Velocity, Target, Facing])) {
-    const targetVx = Target.vx[eid]!;
-    const targetVy = Target.vy[eid]!;
-    const dx = Target.x[eid]! - Position.x[eid]!;
-    const dy = Target.y[eid]! - Position.y[eid]!;
-    const distance = Math.hypot(dx, dy);
-    const closingSpeed = Math.hypot(Velocity.x[eid]! - targetVx, Velocity.y[eid]! - targetVy);
-
-    if (distance < ARRIVAL_DISTANCE && closingSpeed < BRAKING * dt) {
-      arrive(world, eid, dt);
-      continue;
-    }
-
-    const distanceAfterStep = distance - closingSpeed * dt;
-    const approachSpeed = Math.min(TOP_SPEED, stoppingSpeed(distanceAfterStep, BRAKING));
-    const towardsX = distance > 0 ? dx / distance : 0;
-    const towardsY = distance > 0 ? dy / distance : 0;
-    let wantX = targetVx + towardsX * approachSpeed;
-    let wantY = targetVy + towardsY * approachSpeed;
-    const wantedSpeed = Math.hypot(wantX, wantY);
-    const heading = Math.atan2(wantY, wantX);
-
-    const arrivalFacing = Target.arrivalFacing[eid]!;
-    if (wantedSpeed > STANDING_SPEED) Facing[eid] = turnTowards(Facing[eid]!, heading, TURN_RATE * dt);
-    else if (!facesAnyWay(arrivalFacing)) Facing[eid] = turnTowards(Facing[eid]!, arrivalFacing, TURN_RATE * dt);
-
-    const allowedSpeed = topSpeedFacing(Facing[eid]!, heading);
-    if (wantedSpeed > allowedSpeed) {
-      wantX *= allowedSpeed / wantedSpeed;
-      wantY *= allowedSpeed / wantedSpeed;
-    }
-    accelerateTowards(world, eid, wantX, wantY, dt);
+    const { body, arrived } = steer(
+      { x: Position.x[eid]!, y: Position.y[eid]!, vx: Velocity.x[eid]!, vy: Velocity.y[eid]!, facing: Facing[eid]! },
+      { x: Target.x[eid]!, y: Target.y[eid]!, vx: Target.vx[eid]!, vy: Target.vy[eid]!, arrivalFacing: Target.arrivalFacing[eid]! },
+      dt,
+    );
+    [Position.x[eid], Position.y[eid], Velocity.x[eid], Velocity.y[eid], Facing[eid]] = [body.x, body.y, body.vx, body.vy, body.facing];
+    if (arrived) removeComponent(world, eid, Target);
   }
 }
 
@@ -140,13 +76,6 @@ function touchAwayFromPlayer(world: Game, eid: number, ball: number, wantX: numb
   const share = away > MAX_TOUCH_SPEED_AWAY_FROM_PLAYER ? MAX_TOUCH_SPEED_AWAY_FROM_PLAYER / away : 1;
   Velocity.x[ball] = Velocity.x[eid]! + awayX * share;
   Velocity.y[ball] = Velocity.y[eid]! + awayY * share;
-}
-
-function directionTo(from: Point, toX: number, toY: number) {
-  const dx = toX - from[0];
-  const dy = toY - from[1];
-  const distance = Math.hypot(dx, dy);
-  return { distance, onwardX: distance > 0 ? dx / distance : 0, onwardY: distance > 0 ? dy / distance : 0 };
 }
 
 const directionFromBall = (world: Game, ball: number, toX: number, toY: number) =>
@@ -485,8 +414,6 @@ function isOnTheBall(world: Game, eid: number, ball: number, dt: number): boolea
   return ready && Math.hypot(Position.x[ball]! - Position.x[eid]!, Position.y[ball]! - Position.y[eid]!) <= TOUCH_REACH;
 }
 
-type Opponent = { at: Defender; moving: [vx: number, vy: number]; tackling: number; recoversIn: number };
-
 function opponents(world: Game, attacker: number): Opponent[] {
   const { Position, Velocity, Tackling, Grounded } = world.components;
   return opponentsOf(world, attacker, [Position, Velocity, Tackling]).map((eid): Opponent => ({
@@ -495,59 +422,6 @@ function opponents(world: Game, attacker: number): Opponent[] {
     tackling: Tackling[eid]!,
     recoversIn: hasComponent(world, eid, Grounded) ? Grounded.recoversIn[eid]! : 0,
   }));
-}
-
-const speedTowards = ([vx, vy]: [number, number], from: [number, number], to: Point) => {
-  const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
-  return distance > 0 ? (vx * (to[0] - from[0]) + vy * (to[1] - from[1])) / distance : 0;
-};
-
-function canGetThere({ at, moving, recoversIn }: Opponent, spot: Point, timeThere: number): boolean {
-  const toReach = Math.max(0, Math.hypot(spot[0] - at[0], spot[1] - at[1]) - TACKLE_REACH);
-  return recoversIn + timeToRun(toReach, TOP_SPEED, recoversIn > 0 ? 0 : speedTowards(moving, at, spot)) <= timeThere;
-}
-
-const chanceOfBeating = (defenders: Opponent[], runner: Runner) =>
-  defenders.reduce((chance, { tackling }) => chance * (1 - tackleWinChance(tackling, runner.dribbling)), 1);
-
-type Runner = { shooting: number; dribbling: number; speed: number };
-
-type Support = Runner & { across: number };
-
-function closingIn(defender: Opponent, spot: Point, time: number): Opponent {
-  const { at, moving, recoversIn } = defender;
-  const { distance, onwardX, onwardY } = directionTo([...at, 0], spot[0], spot[1]);
-  const running = Math.max(0, time - recoversIn);
-  const covered = Math.min(Math.max(0, distance - TACKLE_REACH), distanceRunIn(running, TOP_SPEED, recoversIn > 0 ? 0 : speedTowards(moving, at, spot)));
-  return { ...defender, at: [at[0] + onwardX * covered, at[1] + onwardY * covered], moving: [0, 0], recoversIn: 0 };
-}
-
-function passingAt(spot: Point, time: number, support: Support, defenders: Opponent[], keeper: Keeper | null, dt: number): number {
-  const teammate: [number, number] = [spot[0], Math.max(0, Math.min(PITCH_WIDTH, spot[1] + support.across))];
-  const defendersThen = defenders.map((defender) => closingIn(defender, spot, time));
-  return passValue(spot, { ...support, at: teammate, moving: [0, 0] }, keeper, defendersThen, dt);
-}
-
-function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null, defenders: Opponent[], dt: number, support: Support | null): number {
-  const { distance, onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
-  const touch = MAX_DRIBBLE_TOUCH_SPEED * TOUCH_INTERVAL;
-  const inTheWay = new Set<Opponent>();
-  let lastFree: { spot: Point; time: number } | null = null;
-  let best = 0;
-  for (let carried = touch; carried < distance; carried += touch) {
-    const next: Point = [from[0] + onwardX * carried, from[1] + onwardY * carried, 0];
-    const timeThere = timeToRun(carried, MAX_DRIBBLE_TOUCH_SPEED, runner.speed);
-    const wasFree = inTheWay.size === 0;
-    for (const defender of defenders) if (canGetThere(defender, next, timeThere)) inTheWay.add(defender);
-    if (wasFree && inTheWay.size > 0 && support && lastFree) {
-      best = Math.max(best, passingAt(lastFree.spot, lastFree.time, support, defenders, keeper, dt));
-    }
-    if (inTheWay.size === 0) lastFree = { spot: next, time: timeThere };
-    const gettingThere = chanceOfBeating([...inTheWay], runner);
-    if (gettingThere <= best) continue;
-    best = Math.max(best, gettingThere * chanceRunningIn(next, runner.shooting, keeper !== null, dt));
-  }
-  return best;
 }
 
 function supportFor(world: Game, carrier: number, ball: Point): Support | null {
@@ -579,29 +453,6 @@ function carryOn(world: Game, eid: number, way: [x: number, y: number]): void {
   const { Dribble } = world.components;
   if (!hasComponent(world, eid, Dribble)) setDribble(world, eid, ...way);
   [Dribble.x[eid], Dribble.y[eid]] = way;
-}
-
-function whereTheyGetTo({ at, recoversIn, tackling }: Opponent, attempt: { point: Point; shortfall: number } | null): Opponent {
-  if (!attempt) return { at, moving: [0, 0], recoversIn, tackling };
-  const { distance, onwardX, onwardY } = directionTo([...at, 0], attempt.point[0], attempt.point[1]);
-  const moved = Math.max(0, distance - INTERCEPTOR.reach - attempt.shortfall);
-  return { at: [at[0] + onwardX * moved, at[1] + onwardY * moved], moving: [0, 0], recoversIn: 0, tackling };
-}
-
-type Receiver = Runner & { at: [x: number, y: number]; moving: [vx: number, vy: number] };
-
-function passValue(from: Point, receiver: Receiver, keeper: Keeper | null, defenders: Opponent[], dt: number): number {
-  const pass = leadPass(from, receiver.at, receiver.moving);
-  const flight = pass && passFlight(from, pass, dt);
-  if (!pass || !flight) return 0;
-  const attempts = defenders.map(({ at, recoversIn }) => interceptionOf(flight, at, dt, recoversIn));
-  if (attempts.some((attempt) => attempt && attempt.shortfall <= 0)) return 0;
-  const defendersThen = defenders.map((defender, i) => whereTheyGetTo(defender, attempts[i]!));
-  const receivedAt = onTheGrid(pass.to);
-  const options = shotOptions(receivedAt, receiver.shooting, dt);
-  const setKeeper = keeper && (whereToStand(receivedAt, options, keeper, dt) ?? keeper);
-  const shootingFirstTime = bestShot(options, setKeeper, dt, defendersThen.map(({ at }) => at)).chance;
-  return Math.max(shootingFirstTime, bestChanceFurtherOn(pass.to, { ...receiver, speed: 0 }, keeper, defendersThen, dt, null));
 }
 
 function passWorth(world: Game, from: Point, receiver: number, keeper: Keeper | null, defenders: Opponent[], dt: number): number {
