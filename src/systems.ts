@@ -412,9 +412,9 @@ function supportWorth(
 function bestSupportSpot(supporter: Receiver, holder: Holder, planned: [number, number], keeper: Keeper | null, defenders: Opponent[], dt: number) {
   const passingMoment = lastFreeMoment([...holder.at, 0], speedTowards(holder.moving, holder.at, GOAL), defenders);
   const asNow: [number, number] = [supporter.at[0] - holder.at[0], supporter.at[1] - holder.at[1]];
-  const kept = planned.some(Number.isNaN) ? asNow : planned;
+  const current = planned.some(Number.isNaN) ? asNow : planned;
   const worthOf = (spot: [number, number]) => supportWorth(spot, supporter, holder, passingMoment, keeper, defenders, dt);
-  let best = { spot: kept, worth: worthOf(kept) + SUPPORT_SWITCHING_GAIN };
+  let best = { spot: current, worth: worthOf(current) + SUPPORT_SWITCHING_GAIN };
   for (const spot of SUPPORT_SPOTS) {
     const worth = worthOf(spot);
     if (worth > best.worth) best = { spot, worth };

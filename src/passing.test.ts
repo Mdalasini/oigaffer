@@ -255,7 +255,7 @@ describe("a two-on-one", () => {
     for (const beyond of passes) expect(beyond).toBeLessThanOrEqual(0.05);
   }, PLAYING_SEVERAL_SECONDS_THROUGH);
 
-  test("with the defender still ten metres off, carry the ball at them rather than pass back to a teammate behind", () => {
+  test("with the defender still ten metres off, the carrier doesn't pass back to a teammate behind", () => {
     const starts: [[number, number], [number, number], [number, number]][] = [
       [[PITCH_LENGTH - 33, GOAL_CENTRE - 3], [PITCH_LENGTH - 38, GOAL_CENTRE + 5], [PITCH_LENGTH - 23, GOAL_CENTRE - 1]],
       [[PITCH_LENGTH - 26, GOAL_CENTRE - 3], [PITCH_LENGTH - 31, GOAL_CENTRE - 9], [PITCH_LENGTH - 16, GOAL_CENTRE - 2]],
