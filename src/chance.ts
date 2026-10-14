@@ -138,25 +138,43 @@ export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper,
   return best.spot;
 }
 
-const SPOT_GRID = 0.5;
-const REMEMBERED_CHANCES = 4096;
+const SPOT_GRID = 2;
+const REMEMBERED_CHANCES = 2 ** 16;
 const chancesOnceKeeperIsSet = new Map<string, number>();
-
-const toGrid = (value: number) => Math.round(value / SPOT_GRID) * SPOT_GRID;
-
-const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
+const bestChancesAroundOnceKeeperIsSet = new Map<string, number>();
 
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
 
-export function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
-  const near = onTheGrid(spot);
-  const key = `${near.join()}|${withKeeper}|${grade}|${dt}`;
+function remember(memory: Map<string, number>, key: string, chance: number): number {
+  if (memory.size >= REMEMBERED_CHANCES) memory.delete(memory.keys().next().value!);
+  memory.set(key, chance);
+  return chance;
+}
+
+function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: boolean, dt: number): number {
+  const key = `${spot.join()}|${withKeeper}|${grade}|${dt}`;
   const remembered = chancesOnceKeeperIsSet.get(key);
   if (remembered !== undefined) return remembered;
-  const options = shotOptions(near, grade, dt);
-  const setKeeper = withKeeper ? (whereToStand(near, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
-  const chance = bestShot(options, setKeeper, dt).chance;
-  if (chancesOnceKeeperIsSet.size >= REMEMBERED_CHANCES) chancesOnceKeeperIsSet.delete(chancesOnceKeeperIsSet.keys().next().value!);
-  chancesOnceKeeperIsSet.set(key, chance);
-  return chance;
+  const options = shotOptions(spot, grade, dt);
+  const setKeeper = withKeeper ? (whereToStand(spot, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
+  return remember(chancesOnceKeeperIsSet, key, bestShot(options, setKeeper, dt).chance);
+}
+
+const AROUND = [-SPOT_GRID, 0, SPOT_GRID].flatMap((dx) => [-SPOT_GRID, 0, SPOT_GRID].map((dy) => [dx, dy] as const));
+
+function bestChanceAroundGridSpot(x: number, y: number, grade: number, withKeeper: boolean, dt: number): number {
+  const key = `${x},${y}|${withKeeper}|${grade}|${dt}`;
+  const remembered = bestChancesAroundOnceKeeperIsSet.get(key);
+  if (remembered !== undefined) return remembered;
+  const chances = AROUND.map(([dx, dy]) => chanceOnceKeeperIsSet([x + dx, y + dy, 0], grade, withKeeper, dt));
+  return remember(bestChancesAroundOnceKeeperIsSet, key, Math.max(...chances));
+}
+
+export function bestChanceAroundOnceKeeperIsSet([x, y]: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
+  const [left, below] = [Math.floor(x / SPOT_GRID) * SPOT_GRID, Math.floor(y / SPOT_GRID) * SPOT_GRID];
+  const [across, up] = [(x - left) / SPOT_GRID, (y - below) / SPOT_GRID];
+  const at = (dx: number, dy: number) => bestChanceAroundGridSpot(left + dx, below + dy, grade, withKeeper, dt);
+  const nearSide = at(0, 0) * (1 - across) + at(SPOT_GRID, 0) * across;
+  const farSide = at(0, SPOT_GRID) * (1 - across) + at(SPOT_GRID, SPOT_GRID) * across;
+  return nearSide * (1 - up) + farSide * up;
 }

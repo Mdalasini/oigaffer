@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
 import { AVERAGE_SHOOTING_GRADE, BEST_SHOOTING_GRADE, GOAL_WIDTH, PITCH_LENGTH, TIME_STEP } from "./constants";
-import { bestShot, chanceAgainst, missesInCircle, shotOptions, type Keeper } from "./chance";
+import { bestChanceAroundOnceKeeperIsSet, bestShot, chanceAgainst, missesInCircle, shotOptions, type Keeper } from "./chance";
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { step } from "./systems";
@@ -73,5 +73,23 @@ describe("the chance a shot goes in", () => {
       expect(estimated).toBe(goalsWhenShotFor(from, option.aim, AVERAGE_SHOOTING_GRADE, keeper, defenders));
     }
     expect(blockedSome).toBe(true);
+  });
+});
+
+describe("the chance from a spot once the keeper is set", () => {
+  test("has no holes: a metre further on or across never halves or doubles it", () => {
+    const chanceAt = (x: number, y: number) => bestChanceAroundOnceKeeperIsSet([x, y, 0], AVERAGE_SHOOTING_GRADE, true);
+    for (let x = PITCH_LENGTH - 17; x <= PITCH_LENGTH - 8; x++) {
+      for (let y = GOAL_CENTRE - 6; y <= GOAL_CENTRE + 6; y++) {
+        expect(Math.abs(chanceAt(x + 1, y) - chanceAt(x, y))).toBeLessThan(0.5);
+        expect(Math.abs(chanceAt(x, y + 1) - chanceAt(x, y))).toBeLessThan(0.5);
+      }
+    }
+  });
+
+  test("is best close to goal and in front of it", () => {
+    const chanceAt = (x: number, y: number) => bestChanceAroundOnceKeeperIsSet([x, y, 0], AVERAGE_SHOOTING_GRADE, true);
+    expect(chanceAt(PITCH_LENGTH - 13, GOAL_CENTRE)).toBeGreaterThan(chanceAt(PITCH_LENGTH - 20, GOAL_CENTRE));
+    expect(chanceAt(PITCH_LENGTH - 13, GOAL_CENTRE)).toBeGreaterThan(chanceAt(PITCH_LENGTH - 13, GOAL_CENTRE + 10));
   });
 });
