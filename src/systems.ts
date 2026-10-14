@@ -30,7 +30,7 @@ import {
   TURN_RATE,
 } from "./constants";
 import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
-import { bestShot, chanceOnceKeeperIsSet, onTheGrid, shotOptions, whereToStand } from "./chance";
+import { bestShot, chanceRunningIn, onTheGrid, shotOptions, whereToStand } from "./chance";
 import { distanceRunIn, isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Mover } from "./interception";
@@ -540,7 +540,7 @@ function bestChanceFurtherOn(from: Point, runner: Runner, keeper: Keeper | null,
     if (inTheWay.size === 0) lastFree = { spot: next, time: timeThere };
     const gettingThere = chanceOfBeating([...inTheWay], runner);
     if (gettingThere <= best) continue;
-    best = Math.max(best, gettingThere * chanceOnceKeeperIsSet(next, runner.shooting, keeper !== null, dt));
+    best = Math.max(best, gettingThere * chanceRunningIn(next, runner.shooting, keeper !== null, dt));
   }
   return best;
 }

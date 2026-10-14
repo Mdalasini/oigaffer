@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent } from "bitecs";
 import { AVERAGE_SHOOTING_GRADE, BEST_SHOOTING_GRADE, GOAL_WIDTH, PITCH_LENGTH, TIME_STEP } from "./constants";
-import { bestShot, chanceAgainst, missesInCircle, shotOptions, type Keeper } from "./chance";
+import { bestShot, chanceAgainst, chanceRunningIn, missesInCircle, shotOptions, type Keeper } from "./chance";
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, createGame, strikeBall } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, createGame, setDribble, strikeBall } from "./world";
 
 const PENALTY_SPOT: Point = [PITCH_LENGTH - 11, GOAL_CENTRE, 0];
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
@@ -73,5 +73,38 @@ describe("the chance a shot goes in", () => {
       expect(estimated).toBe(goalsWhenShotFor(from, option.aim, AVERAGE_SHOOTING_GRADE, keeper, defenders));
     }
     expect(blockedSome).toBe(true);
+  });
+});
+
+function chanceOnArrivingAfterDribblingIn(spot: [number, number]): number {
+  const out = Math.hypot(PITCH_LENGTH - spot[0], spot[1] - GOAL_CENTRE);
+  const away: [number, number] = [(spot[0] - PITCH_LENGTH) / out, (spot[1] - GOAL_CENTRE) / out];
+  const start: [number, number] = [spot[0] + away[0] * 15, spot[1] + away[1] * 15];
+  const world = createGame();
+  const { Position } = world.components;
+  const attacker = addPlayer(world, start[0] + away[0] * 0.3, start[1] + away[1] * 0.3);
+  const ball = addBall(world, ...start);
+  const keeper = addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+  setDribble(world, attacker, ...spot);
+  for (let time = 0; time < 10; time += TIME_STEP) {
+    step(world);
+    if (Math.hypot(Position.x[ball]! - spot[0], Position.y[ball]! - spot[1]) < 0.3) break;
+  }
+  const from: Point = [Position.x[ball]!, Position.y[ball]!, 0];
+  return bestShot(shotOptions(from, AVERAGE_SHOOTING_GRADE), [Position.x[keeper]!, Position.y[keeper]!]).chance;
+}
+
+describe("the chance waiting further on a run at goal", () => {
+  test("matches the chance an attacker gets on dribbling there, with the keeper coming out to meet them", () => {
+    const spots: [number, number][] = [
+      [PITCH_LENGTH - 15, GOAL_CENTRE],
+      [PITCH_LENGTH - 9, GOAL_CENTRE],
+      [PITCH_LENGTH - 12.5, GOAL_CENTRE + 6],
+      [PITCH_LENGTH - 12, GOAL_CENTRE + 6],
+      [PITCH_LENGTH - 9.5, GOAL_CENTRE - 6],
+    ];
+    for (const spot of spots) {
+      expect(Math.abs(chanceRunningIn([...spot, 0], AVERAGE_SHOOTING_GRADE, true) - chanceOnArrivingAfterDribblingIn(spot))).toBeLessThanOrEqual(0.13);
+    }
   });
 });

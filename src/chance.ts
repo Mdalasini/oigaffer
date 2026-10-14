@@ -1,12 +1,15 @@
 import {
+  ACCELERATION,
   BALL_RADIUS,
   CROSSBAR_HEIGHT,
   GOAL_WIDTH,
   KEEPER_REACH,
+  MAX_DRIBBLE_TOUCH_SPEED,
   PITCH_LENGTH,
   TIME_STEP,
+  TOP_SPEED,
 } from "./constants";
-import { blocks, type Defender } from "./defender";
+import { blocks, distanceRunIn, type Defender } from "./defender";
 import { straightFlight, type StraightFlight } from "./flight";
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { bestInterception, firstMovingStep } from "./interception";
@@ -139,24 +142,46 @@ export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper,
 }
 
 const SPOT_GRID = 0.5;
-const REMEMBERED_CHANCES = 4096;
-const chancesOnceKeeperIsSet = new Map<string, number>();
 
 const toGrid = (value: number) => Math.round(value / SPOT_GRID) * SPOT_GRID;
 
 export const onTheGrid = ([x, y, z]: Point): Point => [toGrid(x), toGrid(y), z];
 
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
+const RAY_ANGLE_STEP = Math.PI / 180;
+const FURTHEST_FOLLOWED = 30;
 
-export function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
-  const near = onTheGrid(spot);
-  const key = `${near.join()}|${withKeeper}|${grade}|${dt}`;
-  const remembered = chancesOnceKeeperIsSet.get(key);
-  if (remembered !== undefined) return remembered;
-  const options = shotOptions(near, grade, dt);
-  const setKeeper = withKeeper ? (whereToStand(near, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
-  const chance = bestShot(options, setKeeper, dt).chance;
-  if (chancesOnceKeeperIsSet.size >= REMEMBERED_CHANCES) chancesOnceKeeperIsSet.delete(chancesOnceKeeperIsSet.keys().next().value!);
-  chancesOnceKeeperIsSet.set(key, chance);
-  return chance;
+type Run = { keeper: Keeper; keeperSpeed: number; chances: number[] };
+const runsIn = new Map<string, Run>();
+
+const spotOnRay = (angle: number, out: number): Point => [PITCH_LENGTH - Math.cos(angle) * out, GOAL_CENTRE + Math.sin(angle) * out, 0];
+
+function keeperFollows(run: Run, spot: Point, options: ShotOption[], time: number, dt: number): void {
+  const { keeper, keeperSpeed } = run;
+  const target = whereToStand(spot, options, keeper, dt) ?? keeper;
+  const gap = Math.hypot(target[0] - keeper[0], target[1] - keeper[1]);
+  const covered = Math.min(gap, distanceRunIn(time, TOP_SPEED, keeperSpeed));
+  if (gap > 0) run.keeper = [keeper[0] + ((target[0] - keeper[0]) * covered) / gap, keeper[1] + ((target[1] - keeper[1]) * covered) / gap];
+  run.keeperSpeed = covered < gap ? Math.min(TOP_SPEED, keeperSpeed + ACCELERATION * time) : 0;
+}
+
+function chanceAlongRun(angle: number, steps: number, grade: number, withKeeper: boolean, dt: number): number {
+  const key = `${angle}|${withKeeper}|${grade}|${dt}`;
+  const run = runsIn.get(key) ?? { keeper: KEEPER_ON_THE_LINE, keeperSpeed: 0, chances: [] };
+  runsIn.set(key, run);
+  const timePerStep = SPOT_GRID / MAX_DRIBBLE_TOUCH_SPEED;
+  while (run.chances.length <= steps) {
+    const spot = spotOnRay(angle, FURTHEST_FOLLOWED - run.chances.length * SPOT_GRID);
+    const options = shotOptions(spot, grade, dt);
+    if (withKeeper) keeperFollows(run, spot, options, timePerStep, dt);
+    run.chances.push(bestShot(options, withKeeper ? run.keeper : null, dt).chance);
+  }
+  return run.chances[steps]!;
+}
+
+export function chanceRunningIn(spot: Point, grade: number, withKeeper: boolean, dt = TIME_STEP): number {
+  const out = Math.hypot(PITCH_LENGTH - spot[0], spot[1] - GOAL_CENTRE);
+  const angle = Math.round(Math.atan2(spot[1] - GOAL_CENTRE, PITCH_LENGTH - spot[0]) / RAY_ANGLE_STEP) * RAY_ANGLE_STEP;
+  const steps = Math.max(0, Math.round((FURTHEST_FOLLOWED - out) / SPOT_GRID));
+  return chanceAlongRun(angle, steps, grade, withKeeper, dt);
 }

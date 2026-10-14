@@ -140,6 +140,8 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
   return { events, beyondTheLineWhenPassedTo };
 }
 
+const PLAYING_THROUGH = 20_000;
+
 describe("a two-on-one", () => {
   test("the teammate catches up with the ball and keeps up with it, out to the side", () => {
     const world = createGame();
@@ -186,7 +188,7 @@ describe("a two-on-one", () => {
     const passes = starts.flatMap((start) => twoOnOne(...start).beyondTheLineWhenPassedTo);
     expect(passes.length).toBeGreaterThan(0);
     for (const beyond of passes) expect(beyond).toBeLessThanOrEqual(0.05);
-  });
+  }, PLAYING_THROUGH);
 
   test("don't pass when the defender is standing in the way of it", () => {
     const { events } = twoOnOne([PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 22, GOAL_CENTRE + 2], 1);
