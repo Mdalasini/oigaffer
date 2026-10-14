@@ -88,6 +88,22 @@ describe("passing to a teammate", () => {
     expect(received).toBe(false);
   });
 
+  test("is called off if a defender gets into its way before it's struck", () => {
+    const world = createGame();
+    const { Attacking, Passing, Passed, Ball } = world.components;
+    const passer = addPlayer(world, 59.7, GOAL_CENTRE);
+    const receiver = addPlayer(world, 60, GOAL_CENTRE + 10);
+    addBall(world, 60, GOAL_CENTRE);
+    addDefender(world, 60.3, GOAL_CENTRE + 1.5);
+    setAttacking(world, passer);
+    setSupporting(world, receiver);
+    setPassing(world, passer, receiver);
+    step(world);
+    expect(hasComponent(world, passer, Passing)).toBe(false);
+    expect(hasComponent(world, query(world, [Ball])[0]!, Passed)).toBe(false);
+    expect(hasComponent(world, passer, Attacking)).toBe(true);
+  });
+
   test("a defender waits until they've reacted before going for it", () => {
     const { defenderSteps } = passAcross([66, GOAL_CENTRE + 5]);
     const stepsToReact = Math.ceil(DEFENDER_REACTION_TIME / TIME_STEP) - 1;
