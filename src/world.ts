@@ -45,7 +45,7 @@ export function createGame(seed = 1) {
       Held: {},
       Struck: {},
       Ball: {},
-      Team: {},
+      Team: { attackingDirection: [] as number[] },
       PlaysFor: [] as number[],
     },
   });
@@ -187,9 +187,14 @@ export function setSupporting(world: Game, eid: number): void {
   addComponent(world, eid, world.components.Supporting);
 }
 
-export function addTeam(world: Game): number {
+export const UP_THE_PITCH = 1;
+export const DOWN_THE_PITCH = -1;
+
+export function addTeam(world: Game, attackingDirection: typeof UP_THE_PITCH | typeof DOWN_THE_PITCH): number {
+  const { Team } = world.components;
   const team = addEntity(world);
-  addComponent(world, team, world.components.Team);
+  addComponent(world, team, Team);
+  Team.attackingDirection[team] = attackingDirection;
   return team;
 }
 

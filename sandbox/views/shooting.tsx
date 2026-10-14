@@ -18,7 +18,7 @@ import {
   type Point,
 } from "../../src/shooting";
 import { isGoal } from "../../src/goal";
-import { addBall, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setShot } from "../../src/world";
+import { addBall, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setShot } from "../../src/world";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
 import { COLOURS, createTopDown } from "../topDown";
@@ -107,7 +107,7 @@ function describeCrossing(y: number, z: number): string {
 function runShootingSandbox(topDownCanvas: HTMLCanvasElement, playerCanvas: HTMLCanvasElement, readout: HTMLElement) {
   const world = createGame();
   const { Position, Velocity, Facing, Shooting, Shot, Target, GoalLineCrossing, Goalkeeper, Held, Struck } = world.components;
-  const [attackers, defenders] = [addTeam(world), addTeam(world)];
+  const [attackers, defenders] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const player = joinTeam(world, addPlayer(world, 0, 0), attackers);
   const keeper = joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, PITCH_WIDTH / 2), defenders);
   const ball = addBall(world, 0, 0);

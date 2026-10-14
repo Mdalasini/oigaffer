@@ -6,7 +6,7 @@ import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
 import type { Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking, setDribble, setPassing, setSupporting } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, setDribble, setPassing, setSupporting } from "./world";
 
 describe("a pass along the ground", () => {
   test("is led to where a running teammate will be, and gets there at a speed they can take", () => {
@@ -30,7 +30,7 @@ describe("a pass along the ground", () => {
 function passAcross(defenderAt: [number, number] | null, receiverVelocity: [number, number] = [0, 0]) {
   const world = createGame();
   const { Position, Velocity, Attacking, Intercepted, Passed } = world.components;
-  const [home, away] = [addTeam(world), addTeam(world)];
+  const [home, away] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const passer = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), home);
   const receiver = joinTeam(world, addPlayer(world, 60, GOAL_CENTRE + 10), home);
   [Velocity.x[receiver], Velocity.y[receiver]] = receiverVelocity;
@@ -114,7 +114,7 @@ describe("passing to a teammate", () => {
 function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defenderAt: [number, number], seconds = 8) {
   const world = createGame();
   const { Position, Passed, Attacking, Supporting, Struck, Tackled, Grounded, Held, GoalLineCrossing, Blocked, Intercepted } = world.components;
-  const [home, away] = [addTeam(world), addTeam(world)];
+  const [home, away] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const attacker = joinTeam(world, addPlayer(world, attackerAt[0] - 0.3, attackerAt[1]), home);
   const mate = joinTeam(world, addPlayer(world, ...mateAt), home);
   const ball = addBall(world, ...attackerAt);
@@ -148,7 +148,7 @@ describe("a two-on-one", () => {
   test("the teammate catches up with the ball and keeps up with it, out to the side", () => {
     const world = createGame();
     const { Position } = world.components;
-    const team = addTeam(world);
+    const team = addTeam(world, UP_THE_PITCH);
     const carrier = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), team);
     const mate = joinTeam(world, addPlayer(world, 56, GOAL_CENTRE + 6), team);
     const ball = addBall(world, 60, GOAL_CENTRE);
@@ -162,7 +162,7 @@ describe("a two-on-one", () => {
   test("the teammate never aims to run beyond the last defender", () => {
     const world = createGame();
     const { Position, Target } = world.components;
-    const [home, away] = [addTeam(world), addTeam(world)];
+    const [home, away] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
     const carrier = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE), home);
     const mate = joinTeam(world, addPlayer(world, 60, GOAL_CENTRE + 6), home);
     const ball = addBall(world, 60, GOAL_CENTRE);

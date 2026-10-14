@@ -5,7 +5,7 @@ import { bestShot, chanceAgainst, chanceRunningIn, missesInCircle, shotOptions, 
 import { GOAL_CENTRE, isGoal } from "./goal";
 import { kick, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setDribble, strikeBall } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, joinTeam, setDribble, strikeBall, UP_THE_PITCH } from "./world";
 
 const PENALTY_SPOT: Point = [PITCH_LENGTH - 11, GOAL_CENTRE, 0];
 const KEEPER_ON_THE_LINE: Keeper = [PITCH_LENGTH, GOAL_CENTRE];
@@ -82,7 +82,7 @@ function chanceOnArrivingAfterDribblingIn(spot: [number, number]): number {
   const start: [number, number] = [spot[0] + away[0] * 15, spot[1] + away[1] * 15];
   const world = createGame();
   const { Position } = world.components;
-  const [attacking, defending] = [addTeam(world), addTeam(world)];
+  const [attacking, defending] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const attacker = joinTeam(world, addPlayer(world, start[0] + away[0] * 0.3, start[1] + away[1] * 0.3), attacking);
   const ball = addBall(world, ...start);
   const keeper = joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), defending);

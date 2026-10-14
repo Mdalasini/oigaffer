@@ -16,7 +16,7 @@ import { tackleWinChance } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { kick, type Point } from "./shooting";
 import { step } from "./systems";
-import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, joinTeam, setAttacking, setDribble, strikeBall } from "./world";
+import { addBall, addDefender, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, setDribble, strikeBall } from "./world";
 
 describe("the tackle contest", () => {
   test("is even between an average dribbler and an average tackler", () => {
@@ -35,7 +35,7 @@ describe("the tackle contest", () => {
 function dribbleAtDefender({ dribbling = AVERAGE_GRADE, tackling = AVERAGE_GRADE, seed = 1, seconds = 6 } = {}) {
   const world = createGame(seed);
   const { Position, Grounded, Tackled } = world.components;
-  const [home, away] = [addTeam(world), addTeam(world)];
+  const [home, away] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const attacker = joinTeam(world, addPlayer(world, 59.7, GOAL_CENTRE, 0, AVERAGE_GRADE, dribbling), home);
   const ball = addBall(world, 60, GOAL_CENTRE);
   const defender = joinTeam(world, addDefender(world, 70, GOAL_CENTRE + 2, Math.PI, tackling), away);
@@ -132,7 +132,7 @@ describe("a defender in the way of a shot", () => {
 function attackPastDefender(attackerAt: [number, number], defenderAt: [number, number], grades: { shooting?: number; dribbling?: number; tackling?: number }) {
   const world = createGame();
   const { Position, Struck, Held, GoalLineCrossing, Grounded, Tackled, Blocked } = world.components;
-  const [home, away] = [addTeam(world), addTeam(world)];
+  const [home, away] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
   const attacker = joinTeam(world, addPlayer(world, attackerAt[0] - 0.3, attackerAt[1], 0, grades.shooting ?? AVERAGE_GRADE, grades.dribbling ?? AVERAGE_GRADE), home);
   const ball = addBall(world, ...attackerAt);
   const defender = joinTeam(world, addDefender(world, ...defenderAt, Math.PI, grades.tackling ?? AVERAGE_GRADE), away);

@@ -36,7 +36,7 @@ import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Mover } from "./interception";
 import { INTERCEPTOR, interceptionOf, leadPass, passFlight, untilCollected } from "./passing";
 import { KEEPER, type Keeper } from "./keeper";
-import { opponentsOf, teammatesOf } from "./teams";
+import { attackingDirectionOf, goalAttackedBy, goalDefendedBy, opponentsOf, teammatesOf } from "./teams";
 import { kick, missAim, spreadRadius, strikeSpeed, type Point } from "./shooting";
 import { setAttacking, setDribble, setPassing, setShot, setSupporting, setTarget, strikeBall, type Game } from "./world";
 
@@ -242,7 +242,7 @@ function nearestDribbler(world: Game, defender: number, ball: number): number | 
 
 function loseTheBall(world: Game, attacker: number, ball: number): void {
   const { Position, Velocity, Attacking, Dribble, Shot, Tackled } = world.components;
-  const { onwardX, onwardY } = directionTo([PITCH_LENGTH, GOAL_CENTRE, 0], Position.x[ball]!, Position.y[ball]!);
+  const { onwardX, onwardY } = directionTo([...goalAttackedBy(world, attacker), 0], Position.x[ball]!, Position.y[ball]!);
   Velocity.x[ball] = onwardX * TACKLE_CLEARANCE_SPEED;
   Velocity.y[ball] = onwardY * TACKLE_CLEARANCE_SPEED;
   removeComponent(world, attacker, Attacking);
@@ -268,7 +268,7 @@ function tackle(world: Game, defender: number, attacker: number, ball: number): 
 function closeDown(world: Game, defender: number, ball: number): void {
   const { Position, Velocity } = world.components;
   const from = pointOf(Position, ball);
-  const { onwardX, onwardY } = directionTo(from, PITCH_LENGTH, GOAL_CENTRE);
+  const { onwardX, onwardY } = directionTo(from, ...goalDefendedBy(world, defender));
   const spotX = from[0] + onwardX * GOAL_SIDE_DISTANCE;
   const spotY = from[1] + onwardY * GOAL_SIDE_DISTANCE;
   setTarget(world, defender, spotX, spotY, Velocity.x[ball]!, Velocity.y[ball]!, Math.atan2(from[1] - spotY, from[0] - spotX));
@@ -371,21 +371,25 @@ export function pass(world: Game): void {
 
 function secondLastOpponent(world: Game, eid: number): number | undefined {
   const { Position } = world.components;
-  return opponentsOf(world, eid, [Position]).sort((a, b) => Position.x[b]! - Position.x[a]!)[1];
+  const forward = attackingDirectionOf(world, eid);
+  return opponentsOf(world, eid, [Position]).sort((a, b) => forward * (Position.x[b]! - Position.x[a]!))[1];
 }
 
 function furthestOnside(world: Game, eid: number, ball: number): { x: number; vx: number } {
   const { Position, Velocity } = world.components;
-  const ahead = { x: Position.x[ball]! + SUPPORT_AHEAD, vx: Velocity.x[ball]! };
+  const forward = attackingDirectionOf(world, eid);
+  const ahead = { x: Position.x[ball]! + forward * SUPPORT_AHEAD, vx: Velocity.x[ball]! };
   const opponent = secondLastOpponent(world, eid);
-  const line = opponent !== undefined && Position.x[opponent]! > Position.x[ball]! ? opponent : ball;
-  return Position.x[line]! < ahead.x ? { x: Position.x[line]!, vx: Velocity.x[line]! } : ahead;
+  const line = opponent !== undefined && forward * Position.x[opponent]! > forward * Position.x[ball]! ? opponent : ball;
+  return forward * Position.x[line]! < forward * ahead.x ? { x: Position.x[line]!, vx: Velocity.x[line]! } : ahead;
 }
 
 function isOnside(world: Game, eid: number, ball: number): boolean {
   const { Position } = world.components;
+  const forward = attackingDirectionOf(world, eid);
   const opponent = secondLastOpponent(world, eid);
-  return Position.x[eid]! <= Math.max(Position.x[ball]!, opponent === undefined ? PITCH_LENGTH : Position.x[opponent]!);
+  const line = opponent === undefined ? goalAttackedBy(world, eid)[0] : Position.x[opponent]!;
+  return forward * Position.x[eid]! <= Math.max(forward * Position.x[ball]!, forward * line);
 }
 
 export function support(world: Game): void {
@@ -442,7 +446,7 @@ export function intercept(world: Game, dt: number): void {
       const nearest = closestPassThisStep(at[0], at[1], pointOf(Position, ball), pointOf(Velocity, ball), dt);
       if (!isWithinReach(INTERCEPTOR, at, nearest)) continue;
       [Position.x[ball], Position.y[ball], Position.z[ball]] = nearest;
-      const { onwardX, onwardY } = directionTo([PITCH_LENGTH, GOAL_CENTRE, 0], nearest[0], nearest[1]);
+      const { onwardX, onwardY } = directionTo([...goalDefendedBy(world, defender), 0], nearest[0], nearest[1]);
       [Velocity.x[ball], Velocity.y[ball], Velocity.z[ball]] = [onwardX * TACKLE_CLEARANCE_SPEED, onwardY * TACKLE_CLEARANCE_SPEED, 0];
       removeComponent(world, ball, Passed);
       addComponent(world, ball, Intercepted);
