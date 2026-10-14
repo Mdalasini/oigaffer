@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { AVERAGE_SHOOTING_GRADE, PITCH_LENGTH, TOUCH_REACH } from "../../src/constants";
 import { GOAL_CENTRE, isGoal } from "../../src/goal";
 import type { Point } from "../../src/shooting";
-import { addBall, addGoalkeeper, addPlayer, createGame, setAttacking, type Game } from "../../src/world";
+import { addBall, addGoalkeeper, addPlayer, addTeam, createGame, DOWN_THE_PITCH, UP_THE_PITCH, joinTeam, setAttacking, type Game } from "../../src/world";
 import { circleAroundAim, holdBallWhereItCrossed, percent } from "../attackingRound";
 import { runEveryFrame } from "../frames";
 import { createPlayerView } from "../playerView";
@@ -60,9 +60,10 @@ function setUpRound() {
   const world = createGame(Math.floor(Math.random() * 2 ** 31));
   const [x, y] = randomStart();
   const facing = Math.atan2(GOAL_CENTRE - y, PITCH_LENGTH - x);
-  const attacker = addPlayer(world, x - Math.cos(facing) * TOUCH_REACH * 0.5, y - Math.sin(facing) * TOUCH_REACH * 0.5, facing, AVERAGE_SHOOTING_GRADE);
+  const [attackers, defenders] = [addTeam(world, UP_THE_PITCH), addTeam(world, DOWN_THE_PITCH)];
+  const attacker = joinTeam(world, addPlayer(world, x - Math.cos(facing) * TOUCH_REACH * 0.5, y - Math.sin(facing) * TOUCH_REACH * 0.5, facing, AVERAGE_SHOOTING_GRADE), attackers);
   const ball = addBall(world, x, y);
-  const keeper = addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE);
+  const keeper = joinTeam(world, addGoalkeeper(world, PITCH_LENGTH, GOAL_CENTRE), defenders);
   setAttacking(world, attacker);
   return { world, attacker, ball, keeper, startedAt: performance.now() };
 }
