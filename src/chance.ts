@@ -106,24 +106,35 @@ function towardsTheGoal(from: Point): [x: number, y: number] | null {
   return Math.cos(bisector) > 0 ? [Math.cos(bisector), Math.sin(bisector)] : null;
 }
 
-type Spot = { out: number; spot: Keeper; chance: number; risk: number };
+type LineToGoal = { from: Point; direction: [x: number, y: number]; toGoalLine: number; closest: number };
+type Spot = { out: number; chance: number; risk: number };
+type SpotChances = { line: LineToGoal; options: ShotOption[]; chances: number[] };
+
+function lineToGoal(from: Point): LineToGoal | null {
+  const direction = towardsTheGoal(from);
+  if (!direction || from[0] >= PITCH_LENGTH) return null;
+  const toGoalLine = (PITCH_LENGTH - from[0]) / direction[0];
+  return { from, direction, toGoalLine, closest: Math.min(KEEPER_REACH, toGoalLine) };
+}
+
+const spotAt = ({ from, direction }: LineToGoal, out: number): Keeper => [from[0] + direction[0] * out, from[1] + direction[1] * out];
+
+const consideredOut = ({ toGoalLine, closest }: LineToGoal, i: number) => toGoalLine - ((toGoalLine - closest) * i) / (KEEPER_SPOTS_CONSIDERED - 1);
+
+function spotChances(line: LineToGoal, options: ShotOption[], dt: number): SpotChances {
+  const chances = Array.from({ length: KEEPER_SPOTS_CONSIDERED }, (_, i) => bestShot(options, spotAt(line, consideredOut(line, i)), dt).chance);
+  return { line, options, chances };
+}
 
 const isSaferThan = (a: Spot, b: Spot) =>
   a.risk !== b.risk ? a.risk < b.risk : a.chance !== b.chance ? a.chance < b.chance : a.out > b.out;
 
-export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper, dt = TIME_STEP): Keeper | null {
-  const direction = towardsTheGoal(from);
-  if (!direction || from[0] >= PITCH_LENGTH) return null;
-  const toGoalLine = (PITCH_LENGTH - from[0]) / direction[0];
-  const closest = Math.min(KEEPER_REACH, toGoalLine);
+function safestSpotOn(line: LineToGoal, { options, chances }: SpotChances, keeper: Keeper, dt: number): Keeper {
+  const { from, direction, toGoalLine, closest } = line;
   const keeperOut = Math.max(closest, Math.min(toGoalLine, (keeper[0] - from[0]) * direction[0] + (keeper[1] - from[1]) * direction[1]));
-  const spotAt = (out: number): Spot => {
-    const spot: Keeper = [from[0] + direction[0] * out, from[1] + direction[1] * out];
-    const { chance } = bestShot(options, spot, dt);
-    return { out, spot, chance, risk: chance };
-  };
-  const here = spotAt(keeperOut);
-  const spots = Array.from({ length: KEEPER_SPOTS_CONSIDERED }, (_, i) => spotAt(toGoalLine - ((toGoalLine - closest) * i) / (KEEPER_SPOTS_CONSIDERED - 1)));
+  const hereChance = bestShot(options, spotAt(line, keeperOut), dt).chance;
+  const here: Spot = { out: keeperOut, chance: hereChance, risk: hereChance };
+  const spots = chances.map((chance, i): Spot => ({ out: consideredOut(line, i), chance, risk: chance }));
   const deeper = spots.filter((spot) => spot.out > keeperOut).sort((a, b) => a.out - b.out);
   const nearerTheBall = spots.filter((spot) => spot.out <= keeperOut).sort((a, b) => b.out - a.out);
   let best = here;
@@ -135,7 +146,37 @@ export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper,
       if (isSaferThan(spot, best)) best = spot;
     }
   }
-  return best.spot;
+  return spotAt(line, best.out);
+}
+
+export function whereToStand(from: Point, options: ShotOption[], keeper: Keeper, dt = TIME_STEP): Keeper | null {
+  const line = lineToGoal(from);
+  return line && safestSpotOn(line, spotChances(line, options, dt), keeper, dt);
+}
+
+const REMEMBERED_SPOT_CHANCES = 16;
+const spotChancesWorkedOut = new Map<string, SpotChances | null>();
+
+function spotChancesNear(near: Point, grade: number, dt: number): SpotChances | null {
+  const key = `${near.join()}|${grade}|${dt}`;
+  const remembered = spotChancesWorkedOut.get(key);
+  if (remembered !== undefined) {
+    spotChancesWorkedOut.delete(key);
+    spotChancesWorkedOut.set(key, remembered);
+    return remembered;
+  }
+  const line = lineToGoal(near);
+  const workedOut = line && spotChances(line, shotOptions(near, grade, dt), dt);
+  if (spotChancesWorkedOut.size >= REMEMBERED_SPOT_CHANCES) spotChancesWorkedOut.delete(spotChancesWorkedOut.keys().next().value!);
+  spotChancesWorkedOut.set(key, workedOut);
+  return workedOut;
+}
+
+export function whereToStandAgainst(ball: Point, grade: number, keeper: Keeper, dt = TIME_STEP): Keeper | null {
+  const line = lineToGoal(ball);
+  if (!line) return null;
+  const nearby = spotChancesNear(onTheGrid(ball), grade, dt);
+  return nearby ? safestSpotOn(line, nearby, keeper, dt) : whereToStand(ball, shotOptions(ball, grade, dt), keeper, dt);
 }
 
 const SPOT_GRID = 0.5;
@@ -153,8 +194,9 @@ export function chanceOnceKeeperIsSet(spot: Point, grade: number, withKeeper: bo
   const key = `${near.join()}|${withKeeper}|${grade}|${dt}`;
   const remembered = chancesOnceKeeperIsSet.get(key);
   if (remembered !== undefined) return remembered;
-  const options = shotOptions(near, grade, dt);
-  const setKeeper = withKeeper ? (whereToStand(near, options, KEEPER_ON_THE_LINE, dt) ?? KEEPER_ON_THE_LINE) : null;
+  const workedOut = withKeeper ? spotChancesNear(near, grade, dt) : null;
+  const options = workedOut?.options ?? shotOptions(near, grade, dt);
+  const setKeeper = withKeeper ? (workedOut ? safestSpotOn(workedOut.line, workedOut, KEEPER_ON_THE_LINE, dt) : KEEPER_ON_THE_LINE) : null;
   const chance = bestShot(options, setKeeper, dt).chance;
   if (chancesOnceKeeperIsSet.size >= REMEMBERED_CHANCES) chancesOnceKeeperIsSet.delete(chancesOnceKeeperIsSet.keys().next().value!);
   chancesOnceKeeperIsSet.set(key, chance);

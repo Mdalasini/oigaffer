@@ -30,7 +30,7 @@ import {
   TURN_RATE,
 } from "./constants";
 import { ballFlight, closestPassThisStep, crossing, flying, GOAL_LINE, isOnTheGround, rolling, straightFlight, type StraightFlight } from "./flight";
-import { bestShot, chanceOnceKeeperIsSet, onTheGrid, shotOptions, whereToStand } from "./chance";
+import { bestShot, chanceOnceKeeperIsSet, onTheGrid, shotOptions, whereToStand, whereToStandAgainst } from "./chance";
 import { distanceRunIn, isWithinBlockingReach, tackleWinChance, timeToRun, type Defender } from "./defender";
 import { GOAL_CENTRE } from "./goal";
 import { bestInterception, hasReacted, isWithinReach, type Mover } from "./interception";
@@ -726,7 +726,7 @@ function takeUpPosition(world: Game, keeper: number, ball: number, dt: number): 
   if (shooter === undefined) return;
   const from = pointOf(Position, ball);
   const keeperAt: Keeper = [Position.x[keeper]!, Position.y[keeper]!];
-  const spot = whereToStand(from, shotOptions(from, Shooting[shooter]!, dt), keeperAt, dt);
+  const spot = whereToStandAgainst(from, Shooting[shooter]!, keeperAt, dt);
   if (!spot) return;
   setTarget(world, keeper, spot[0], spot[1], 0, 0, Math.atan2(from[1] - spot[1], from[0] - spot[0]));
 }
