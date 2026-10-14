@@ -21,7 +21,7 @@ export function createGame(seed = 1) {
       Passing: { to: [] as number[] },
       Passed: { x: [] as number[], y: [] as number[] },
       Receiving: {},
-      Supporting: {},
+      Supporting: { along: [] as number[], across: [] as number[], next: [] as number[] },
       Intercepted: {},
       WatchingPassFor: [] as number[],
       Target: {

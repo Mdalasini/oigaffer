@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hasComponent, query } from "bitecs";
-import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, PITCH_LENGTH, SUPPORT_WIDTH, TIME_STEP, TOP_SPEED, TOUCH_REACH } from "./constants";
+import { DEFENDER_REACTION_TIME, PASS_ARRIVAL_SPEED, OFFER_DEPTHS, OFFER_WIDTHS, PITCH_LENGTH, TIME_STEP, TOP_SPEED, TOUCH_REACH } from "./constants";
 import { ballFlight } from "./flight";
 import { GOAL_CENTRE } from "./goal";
 import { interceptionOf, leadPass, passFlight } from "./passing";
@@ -137,6 +137,7 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
     }
     if (hasComponent(world, ball, Struck) && events.at(-1) !== "shot") events.push("shot");
     if (hasComponent(world, defender, Grounded) && events.at(-1) !== "tackle") events.push("tackle");
+    if (hasComponent(world, ball, Intercepted)) events.push("intercepted");
   }
   return { events, beyondTheLineWhenPassedTo };
 }
@@ -144,7 +145,7 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
 const PLAYING_THROUGH = 20_000;
 
 describe("a two-on-one", () => {
-  test("the teammate catches up with the ball and keeps up with it, out to the side", () => {
+  test("the teammate catches up with the ball and keeps up with it, out to the side within reach of a pass", () => {
     const world = createGame();
     const { Position } = world.components;
     const team = addTeam(world, UP_THE_PITCH);
@@ -154,8 +155,12 @@ describe("a two-on-one", () => {
     setDribble(world, carrier, PITCH_LENGTH, GOAL_CENTRE);
     setInPossession(world, team);
     for (let time = 0; time < 4; time += TIME_STEP) step(world);
-    expect(Math.abs(Position.x[mate]! - Position.x[ball]!)).toBeLessThan(2.5);
-    expect(Math.abs(Math.abs(Position.y[mate]! - Position.y[ball]!) - SUPPORT_WIDTH)).toBeLessThan(1);
+    const along = Position.x[mate]! - Position.x[ball]!;
+    const across = Math.abs(Position.y[mate]! - Position.y[ball]!);
+    expect(along).toBeGreaterThan(Math.min(...OFFER_DEPTHS) - 1);
+    expect(along).toBeLessThan(Math.max(...OFFER_DEPTHS) + 1);
+    expect(across).toBeGreaterThan(Math.min(...OFFER_WIDTHS) - 1);
+    expect(across).toBeLessThan(Math.max(...OFFER_WIDTHS) + 1);
   });
 
   test("the teammate never aims to run beyond the last defender", () => {
@@ -193,9 +198,9 @@ describe("a two-on-one", () => {
     for (const beyond of passes) expect(beyond).toBeLessThanOrEqual(0.05);
   }, PLAYING_THROUGH);
 
-  test("don't pass when the defender is standing in the way of it", () => {
-    const { events } = twoOnOne([PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 22, GOAL_CENTRE + 2], 1);
-    expect(events).not.toContain("pass");
+  test("with the defender standing in the way, the ball isn't passed into them", () => {
+    const { events } = twoOnOne([PITCH_LENGTH - 22, GOAL_CENTRE - 2], [PITCH_LENGTH - 22, GOAL_CENTRE + 6], [PITCH_LENGTH - 22, GOAL_CENTRE + 2], 3);
+    expect(events).not.toContain("intercepted");
   });
 });
 
