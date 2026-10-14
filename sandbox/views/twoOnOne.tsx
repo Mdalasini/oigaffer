@@ -184,7 +184,7 @@ function runTakeOns(
   function play() {
     round++;
     const { world, attackers, ball, defender, keeper, grades, startedAt } = setUpRound(currentSetup());
-    const { Position, Facing, Attacking, Struck, Target, Grounded, Passed } = world.components;
+    const { Position, Facing, Attacking, Struck, Target, Grounded, Passed, Supporting } = world.components;
     const trail: Point[] = [];
     let shot: { from: Point; chance: number; aim: Point } | null = null;
     let outcome: Outcome | null = null;
@@ -255,7 +255,10 @@ function runTakeOns(
       if (!shot && !outcome && !hasComponent(world, ball, Passed)) topDown.drawLine(ballAt[0], ballAt[1], aim[0], aim[1], COLOURS.aim);
       if (hasComponent(world, ball, Passed)) topDown.drawLine(ballAt[0], ballAt[1], Passed.x[ball]!, Passed.y[ball]!, COLOURS.player);
       if (hasComponent(world, keeper, Target)) {
-        topDown.drawLine(Position.x[keeper]!, Position.y[keeper]!, world.components.Target.x[keeper]!, world.components.Target.y[keeper]!, COLOURS.keeper);
+        topDown.drawLine(Position.x[keeper]!, Position.y[keeper]!, Target.x[keeper]!, Target.y[keeper]!, COLOURS.keeper);
+      }
+      for (const attacker of attackers.filter((eid) => hasComponent(world, eid, Supporting) && hasComponent(world, eid, Target))) {
+        topDown.drawLine(Position.x[attacker]!, Position.y[attacker]!, Target.x[attacker]!, Target.y[attacker]!, COLOURS.player);
       }
       for (const attacker of attackers) topDown.drawPlayer(Position.x[attacker]!, Position.y[attacker]!, Facing[attacker]!);
       topDown.drawPlayer(...defenderAt, Facing[defender]!, COLOURS.defender);
