@@ -124,6 +124,8 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
   setSupporting(world, mate);
   const events: string[] = [];
   const beyondTheLineWhenPassedTo: number[] = [];
+  const onTheBallBeforePassingBack: number[] = [];
+  let receivedAt: number | null = null;
 
   const over = () => [GoalLineCrossing, Held, Blocked, Intercepted].some((part) => hasComponent(world, ball, part)) || hasComponent(world, attacker, Tackled) || hasComponent(world, mate, Tackled);
   for (let time = 0; time < seconds && !over(); time += TIME_STEP) {
@@ -131,7 +133,9 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
     const line = Math.max(Position.x[ball]!, Position.x[defender]!);
     const beyond = [attacker, mate].map((eid) => Position.x[eid]! - line);
     step(world);
+    if (wasPassed && !hasComponent(world, ball, Passed)) receivedAt = time;
     if (!wasPassed && hasComponent(world, ball, Passed)) {
+      if (receivedAt !== null) onTheBallBeforePassingBack.push(time - receivedAt);
       events.push("pass");
       const receiver = hasComponent(world, mate, world.components.Receiving) ? 0 : 1;
       beyondTheLineWhenPassedTo.push(beyond[1 - receiver]!);
@@ -139,7 +143,7 @@ function twoOnOne(attackerAt: [number, number], mateAt: [number, number], defend
     if (hasComponent(world, ball, Struck) && events.at(-1) !== "shot") events.push("shot");
     if (hasComponent(world, defender, Grounded) && events.at(-1) !== "tackle") events.push("tackle");
   }
-  return { events, beyondTheLineWhenPassedTo };
+  return { events, beyondTheLineWhenPassedTo, onTheBallBeforePassingBack };
 }
 
 describe("a two-on-one", () => {
@@ -233,6 +237,20 @@ describe("a two-on-one", () => {
     const passes = STARTS.flatMap((start) => twoOnOne(...start).beyondTheLineWhenPassedTo);
     expect(passes.length).toBeGreaterThan(0);
     for (const beyond of passes) expect(beyond).toBeLessThanOrEqual(0.05);
+  }, PLAYING_SEVERAL_SECONDS_THROUGH);
+
+  test("with the defender still ten metres off, carry the ball at them rather than pass back to a teammate behind", () => {
+    const starts: [[number, number], [number, number], [number, number]][] = [
+      [[PITCH_LENGTH - 33, GOAL_CENTRE - 3], [PITCH_LENGTH - 38, GOAL_CENTRE + 5], [PITCH_LENGTH - 23, GOAL_CENTRE - 1]],
+      [[PITCH_LENGTH - 26, GOAL_CENTRE - 3], [PITCH_LENGTH - 31, GOAL_CENTRE - 9], [PITCH_LENGTH - 16, GOAL_CENTRE - 2]],
+      [[PITCH_LENGTH - 29, GOAL_CENTRE + 5], [PITCH_LENGTH - 33, GOAL_CENTRE + 13], [PITCH_LENGTH - 18, GOAL_CENTRE + 3]],
+    ];
+    for (const start of starts) expect(twoOnOne(...start, 1).events).not.toContain("pass");
+  }, PLAYING_SEVERAL_SECONDS_THROUGH);
+
+  test("a teammate who has just been passed to doesn't knock it straight back", () => {
+    const returns = STARTS.flatMap((start) => twoOnOne(...start).onTheBallBeforePassingBack);
+    for (const seconds of returns) expect(seconds).toBeGreaterThan(1);
   }, PLAYING_SEVERAL_SECONDS_THROUGH);
 
   test("don't pass when the defender is standing in the way of it", () => {

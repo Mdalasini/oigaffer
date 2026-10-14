@@ -63,6 +63,7 @@ export const PASS_ARRIVAL_SPEED = 8;
 export const HARDEST_PASS = 20;
 export const DEFENDER_REACTION_TIME = 0.25;
 export const INTERCEPTING_SPEED = 6;
+export const CLEAR_GAIN_TO_PASS = 0.1;
 export const SUPPORT_SPACING = 4;
 export const SUPPORT_FURTHEST_BEHIND = 8;
 export const SUPPORT_FURTHEST_AHEAD = 12;

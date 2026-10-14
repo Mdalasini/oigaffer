@@ -4,6 +4,7 @@ import {
   BALL_ROLLING_DECELERATION,
   ARRIVAL_DISTANCE,
   BRAKING,
+  CLEAR_GAIN_TO_PASS,
   DISTANCE_BEHIND_BALL,
   DRIBBLE_BRAKING,
   DRIBBLE_STOP_DISTANCE,
@@ -727,8 +728,8 @@ export function attack(world: Game, dt: number): void {
     Attacking.bestPass[eid] = passing;
     Attacking.aimY[eid] = now.aim[1];
     Attacking.aimZ[eid] = now.aim[2];
-    if (now.chance === 1 || (now.chance > 0 && now.chance >= later && now.chance >= passing)) setShot(world, eid, ...now.aim);
-    else if (pass && passing > later) setPassing(world, eid, pass.receiver);
+    if (pass && passing > Math.max(now.chance, later) + CLEAR_GAIN_TO_PASS) setPassing(world, eid, pass.receiver);
+    else if (now.chance > 0 && now.chance >= later) setShot(world, eid, ...now.aim);
     else carryOn(world, eid, wayPast(from, defenders.map(({ at }) => at)) ?? [PITCH_LENGTH, GOAL_CENTRE]);
   }
 }
