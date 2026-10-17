@@ -4,7 +4,7 @@ import { reactionDelay, shotSpreadRadius } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { createMatch, stepMatch } from './match'
-import { simulateShots } from './simulate'
+import { simulateAttacks } from './simulate'
 
 describe('grades', () => {
   test('better shooters have a tighter spread circle', () => {
@@ -37,9 +37,10 @@ describe('shooting', () => {
 })
 
 describe('match outcomes', () => {
-  const SHOTS = 300
+  const ATTACKS = 300
+  /** Goal rate for a striker against a keeper alone, so only these two grades matter. */
   const rate = (shooting: number, reaction: number) => {
-    const s = simulateShots(SHOTS, { shooting, reaction }, 11)
+    const s = simulateAttacks(ATTACKS, { seed: 11, defender: false, grades: { striker: { shooting }, keeper: { reaction } } })
     return s.goals / s.shots
   }
 
@@ -51,10 +52,10 @@ describe('match outcomes', () => {
     expect(rate(14, 18)).toBeLessThan(rate(14, 4) - 0.15)
   })
 
-  test('every shot is accounted for', () => {
-    const s = simulateShots(SHOTS, { shooting: 10, reaction: 10 }, 5)
-    expect(s.shots).toBe(SHOTS)
-    expect(s.goals + s.saves + s.misses).toBe(SHOTS)
+  test('every attack is accounted for', () => {
+    const s = simulateAttacks(ATTACKS, { seed: 5 })
+    expect(s.shots + s.lost).toBe(ATTACKS)
+    expect(s.goals + s.saves + s.misses).toBe(s.shots)
   })
 
   test('a stalled attack ends through the result phase and respects auto-replay', () => {
@@ -70,6 +71,7 @@ describe('match outcomes', () => {
   })
 
   test('the same seed replays the same match', () => {
-    expect(simulateShots(50, { shooting: 12, reaction: 9 }, 42)).toEqual(simulateShots(50, { shooting: 12, reaction: 9 }, 42))
+    const options = { seed: 42, grades: { striker: { shooting: 12 }, keeper: { reaction: 9 } } }
+    expect(simulateAttacks(50, options)).toEqual(simulateAttacks(50, options))
   })
 })

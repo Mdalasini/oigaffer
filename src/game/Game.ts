@@ -2,14 +2,16 @@ import { Batch } from '../render/batch'
 import { goalCamera, topDownCamera, topDownExtent } from '../render/cameras'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
-import { Position } from '../sim/components'
+import { Defender, DefenderMode, Position } from '../sim/components'
 import { FIXED_DT, GOAL_DEPTH, GOAL_X } from '../sim/constants'
 import {
   createMatch,
   getGrade,
-  GRADE_FIELDS,
+  gradeKeys,
   requestShot,
   resetPlay,
+  ROLES,
+  setDefenderActive,
   setGrade,
   stepMatch,
   type GradeKey,
@@ -18,6 +20,7 @@ import {
   type MatchStats,
   type Outcome,
   type Phase,
+  type Role,
 } from '../sim/match'
 
 export interface GameSnapshot {
@@ -26,9 +29,10 @@ export interface GameSnapshot {
   stats: MatchStats
   grades: Grades
   autoReset: boolean
+  defenderActive: boolean
+  /** What the defender is doing, while it is in play. */
+  defenderMode: DefenderMode | null
 }
-
-const GRADE_KEYS = Object.keys(GRADE_FIELDS) as GradeKey[]
 
 const PITCH_SKY: readonly [number, number, number, number] = [0.08, 0.1, 0.14, 1]
 const GOAL_SKY: readonly [number, number, number, number] = [0.16, 0.2, 0.28, 1]
@@ -78,8 +82,13 @@ export class Game {
 
   getSnapshot = () => this.snapshot
 
-  setGrade(key: GradeKey, grade: number) {
-    setGrade(this.match, key, grade)
+  setGrade<R extends Role>(role: R, key: GradeKey<R>, grade: number) {
+    setGrade(this.match, role, key, grade)
+    this.publishIfChanged()
+  }
+
+  setDefenderActive(on: boolean) {
+    setDefenderActive(this.match, on)
     this.publishIfChanged()
   }
 
@@ -136,15 +145,24 @@ export class Game {
       phase: m.phase,
       outcome: m.outcome,
       stats: { ...m.stats },
-      grades: Object.fromEntries(GRADE_KEYS.map((key) => [key, getGrade(m, key)])) as Grades,
+      grades: Object.fromEntries(
+        ROLES.map((role) => [role, Object.fromEntries(gradeKeys(role).map((key) => [key, getGrade(m, role, key)]))]),
+      ) as Grades,
       autoReset: m.autoReset,
+      defenderActive: m.defenderActive,
+      defenderMode: this.defenderMode(),
     }
+  }
+
+  private defenderMode(): DefenderMode | null {
+    const m = this.match
+    return m.defenderActive && m.phase === 'approach' ? (Defender.mode[m.defender] as DefenderMode) : null
   }
 
   private publishIfChanged() {
     const m = this.match
-    const grades = GRADE_KEYS.map((key) => getGrade(m, key))
-    const key = [m.phase, m.outcome, m.stats.shots, m.autoReset, ...grades].join('|')
+    const grades = ROLES.flatMap((role) => gradeKeys(role).map((key) => getGrade(m, role, key)))
+    const key = [m.phase, m.outcome, m.stats.shots, m.stats.lost, m.autoReset, m.defenderActive, this.defenderMode(), ...grades].join('|')
     if (key === this.snapshotKey) return
     this.snapshotKey = key
     this.snapshot = this.takeSnapshot()

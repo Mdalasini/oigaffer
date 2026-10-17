@@ -34,12 +34,22 @@ export function footY(eid: number) {
   return Position.y[eid] + Math.sin(Facing.angle[eid]) * FOOT_OFFSET
 }
 
+export function footDistance(eid: number, ball: number) {
+  return Math.hypot(Position.x[ball] - footX(eid), Position.y[ball] - footY(eid))
+}
+
 /** Whether `player` can play `ball` right now. */
 export function ballAtFeet(player: number, ball: number): boolean {
   if (Position.z[ball] > MAX_TOUCH_HEIGHT) return false
   return Math.hypot(Position.x[ball] - footX(player), Position.y[ball] - footY(player)) <= TOUCH_REACH
 }
 
+/**
+ * Within this distance (m) of a player's feet the ball is under their control:
+ * an opponent has to tackle for it. Beyond it the ball is loose, and a
+ * dribbler sprints to get back on it.
+ */
+export const CONTROL_RADIUS = 1.5
 /** How quickly a dribbler closes the gap to where it wants its feet. */
 const CHASE_GAIN = 3
 /** Seconds ahead a dribbler reads the ball's roll. */
@@ -48,9 +58,10 @@ const BALL_LOOKAHEAD = 0.15
 /**
  * Sets a player to dribble `ball` towards (dirX, dirY) with `style` touches:
  * run so the feet arrive just behind the ball, matching its roll, and play
- * the touch when it is there.
+ * the touch when it is there. `maxSpeed` slows the carry further, e.g. to
+ * probe a defender.
  */
-export function dribble(eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number) {
+export function dribble(eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number, maxSpeed = Infinity) {
   Dribbler.style[eid] = style
   Dribbler.dirX[eid] = dirX
   Dribbler.dirY[eid] = dirY
@@ -58,14 +69,15 @@ export function dribble(eid: number, ball: number, style: TouchStyle, dirX: numb
   const targetY = Position.y[ball] + Velocity.y[ball] * BALL_LOOKAHEAD - dirY * FOOT_OFFSET
   let vx = Velocity.x[ball] + (targetX - Position.x[eid]) * CHASE_GAIN
   let vy = Velocity.y[ball] + (targetY - Position.y[eid]) * CHASE_GAIN
-  if (style === TouchStyle.Small) {
-    // Keeping the ball close means short strides: no flat-out running.
-    const cap = closeControlSpeed(Physical.pace[eid], Outfielder.dribbling[eid])
-    const speed = Math.hypot(vx, vy)
-    if (speed > cap) {
-      vx *= cap / speed
-      vy *= cap / speed
-    }
+  // Keeping the ball close means short strides: no flat-out running, unless
+  // the ball has got away and needs chasing down.
+  const away = footDistance(eid, ball) > CONTROL_RADIUS
+  const closeControl = style === TouchStyle.Small ? closeControlSpeed(Physical.pace[eid], Outfielder.dribbling[eid]) : Infinity
+  const cap = away ? Infinity : Math.min(maxSpeed, closeControl)
+  const speed = Math.hypot(vx, vy)
+  if (speed > cap) {
+    vx *= cap / speed
+    vy *= cap / speed
   }
   MoveIntent.vx[eid] = vx
   MoveIntent.vy[eid] = vy

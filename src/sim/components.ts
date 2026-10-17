@@ -47,6 +47,8 @@ export const Outfielder = {
   shooting: new Uint8Array(MAX_ENTITIES),
   /** Touch accuracy: how true the ball goes where the player meant it to. */
   dribbling: new Uint8Array(MAX_ENTITIES),
+  /** How quickly a defender reads the ball carrier's changes of direction. */
+  marking: new Uint8Array(MAX_ENTITIES),
 }
 
 export const TouchStyle = {
@@ -67,6 +69,38 @@ export const Dribbler = {
   dirY: new Float32Array(MAX_ENTITIES),
   /** Seconds before the player can play another touch. */
   cooldown: new Float32Array(MAX_ENTITIES),
+}
+
+export const DefenderMode = {
+  /** Side-on, facing the ball: small, quick shuffles that mirror the carrier. */
+  Jockey: 0,
+  /** Facing where they're going: fast, but slow to read and to turn. */
+  Run: 1,
+} as const
+export type DefenderMode = (typeof DefenderMode)[keyof typeof DefenderMode]
+
+/** A player defending against the ball carrier. */
+export const Defender = {
+  mode: new Uint8Array(MAX_ENTITIES),
+  /**
+   * Where the defender believes the ball is and how it's moving. The read
+   * trails the real ball by the defender's reaction time, so cuts and
+   * knock-ons take a moment to register.
+   */
+  readX: new Float32Array(MAX_ENTITIES),
+  readY: new Float32Array(MAX_ENTITIES),
+  readVx: new Float32Array(MAX_ENTITIES),
+  readVy: new Float32Array(MAX_ENTITIES),
+}
+
+/** The ball carrier's plan for beating the defender in front of them. */
+export const TakeOn = {
+  /** Which way to go round: +1 to the defender's left (+y side), -1 to the right. */
+  side: new Int8Array(MAX_ENTITIES),
+  /** Seconds left selling a dummy the wrong way before the real cut. */
+  feintTimer: new Float32Array(MAX_ENTITIES),
+  /** Seconds left cutting this way before checking back if the defender has mirrored it. */
+  checkBackTimer: new Float32Array(MAX_ENTITIES),
 }
 
 export const Goalkeeper = {
