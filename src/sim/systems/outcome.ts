@@ -1,0 +1,68 @@
+import { Body, Position, Velocity } from '../components'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X } from '../constants'
+import { resetPlay, setPhase, type Match, type Outcome } from '../match'
+import type { GoalPoint } from '../shooting'
+
+/** Reach beyond the keeper's body when stretching out. */
+const ARM_REACH = 0.7
+const KEEPER_MAX_HEIGHT = 2.5
+const RESULT_PAUSE = 2.2
+const SHOT_TIMEOUT = 4
+
+export function outcomeSystem(world: Match, _dt: number) {
+  if (world.phase === 'result') {
+    if (world.autoReset && world.phaseTime >= RESULT_PAUSE) resetPlay(world)
+    return
+  }
+  if (world.phase !== 'shot') return
+
+  const { ball, keeper, prevBall } = world
+  const keeperX = Position.x[keeper]
+  const crossing = crossPlane(world, keeperX)
+  if (crossing) {
+    const reach = Body.radius[keeper] + ARM_REACH
+    if (Math.abs(crossing.y - Position.y[keeper]) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
+      parry(ball, crossing.y - Position.y[keeper])
+      finish(world, 'save', crossing)
+      return
+    }
+  }
+
+  const atLine = prevBall.x < GOAL_X ? crossPlane(world, GOAL_X) : null
+  if (atLine) {
+    const inside = Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS
+    const under = atLine.z <= GOAL_HEIGHT - BALL_RADIUS
+    finish(world, inside && under ? 'goal' : inside ? 'over' : 'wide', atLine)
+    return
+  }
+
+  if (world.phaseTime > SHOT_TIMEOUT) finish(world, 'wide', null)
+}
+
+/** Where the ball passed through the plane x = planeX during the last step. */
+function crossPlane(world: Match, planeX: number): GoalPoint | null {
+  const { ball, prevBall } = world
+  const x = Position.x[ball]
+  if (!(prevBall.x < planeX && x >= planeX)) return null
+  const f = (planeX - prevBall.x) / (x - prevBall.x)
+  return {
+    y: prevBall.y + (Position.y[ball] - prevBall.y) * f,
+    z: prevBall.z + (Position.z[ball] - prevBall.z) * f,
+  }
+}
+
+function parry(ball: number, offset: number) {
+  Velocity.x[ball] = -Math.abs(Velocity.x[ball]) * 0.25
+  Velocity.y[ball] = Math.sign(offset || 1) * 4
+  Velocity.z[ball] = 2
+}
+
+function finish(world: Match, outcome: Outcome, crossing: GoalPoint | null) {
+  world.outcome = outcome
+  if (world.shot) world.shot.crossing = crossing
+  if (outcome === 'goal') world.stats.goals++
+  else if (outcome === 'save') world.stats.saves++
+  else world.stats.misses++
+  setPhase(world, 'result')
+  world.onOutcome?.(outcome)
+}
