@@ -3,7 +3,7 @@ import { addComponent, addEntity, createWorld, type World } from 'bitecs'
 import { angleDelta } from './angles'
 import { Facing, MoveIntent, Physical, Position, Velocity } from './components'
 import { FIXED_DT } from './constants'
-import { sideStepSpeed, topSpeed } from './grades'
+import { accelerationRate, sideStepSpeed, topSpeed } from './grades'
 import { locomotionSystem } from './systems/locomotion'
 
 function player(world: World, { pace = 10, acceleration = 10, agility = 10 } = {}) {
@@ -51,6 +51,25 @@ describe('locomotion', () => {
     want(eid, 50, 0)
     timeUntil(world, () => false, 5)
     expect(speedOf(eid)).toBeCloseTo(topSpeed(20), 3)
+  })
+
+  test('running on a diagonal is still capped at top speed', () => {
+    const world = createWorld()
+    const eid = player(world, { pace: 1, agility: 20 })
+    want(eid, 50, 50, 1, 0)
+    timeUntil(world, () => false, 5)
+    expect(speedOf(eid)).toBeCloseTo(topSpeed(1), 3)
+  })
+
+  test('a reversal brakes to a stop, then accelerates for the rest of the step', () => {
+    const world = createWorld()
+    const eid = player(world, { acceleration: 20, agility: 20 })
+    Velocity.x[eid] = 0.01
+    want(eid, -10, 0, 1, 0)
+    locomotionSystem(world, FIXED_DT)
+    const accel = accelerationRate(20)
+    const brakingTime = 0.01 / (accel * 1.6)
+    expect(Velocity.x[eid]).toBeCloseTo(-accel * (FIXED_DT - brakingTime), 6)
   })
 
   test('turning takes longer at speed', () => {

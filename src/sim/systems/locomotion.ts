@@ -41,8 +41,15 @@ export function locomotionSystem(world: World, dt: number) {
     const forward = vx * fx + vy * fy
     const lateral = -vx * fy + vy * fx
     const side = sideStepSpeed(Physical.agility[eid])
-    const wantForward = clamp(dvx * fx + dvy * fy, -side, topSpeed(Physical.pace[eid]))
-    const wantLateral = clamp(-dvx * fy + dvy * fx, -side, side)
+    const top = topSpeed(Physical.pace[eid])
+    let wantForward = clamp(dvx * fx + dvy * fy, -side, top)
+    let wantLateral = clamp(-dvx * fy + dvy * fx, -side, side)
+    // Running on a diagonal is still bounded by top speed overall.
+    const wantSpeed = Math.hypot(wantForward, wantLateral)
+    if (wantSpeed > top) {
+      wantForward *= top / wantSpeed
+      wantLateral *= top / wantSpeed
+    }
 
     const accel = accelerationRate(Physical.acceleration[eid]) * dt
     const newForward = approach(forward, wantForward, accel, accel * BRAKE_FACTOR)
@@ -55,12 +62,19 @@ export function locomotionSystem(world: World, dt: number) {
   }
 }
 
-/** Moves `value` towards `target`, speeding up by at most `up` and slowing by at most `down`. */
+/**
+ * Moves the speed `value` towards `target` within one step, gaining at most
+ * `up` and shedding at most `down`. A reversal brakes to a stop first and
+ * spends only the rest of the step speeding up the other way.
+ */
 function approach(value: number, target: number, up: number, down: number): number {
-  const delta = target - value
-  const speedingUp = Math.abs(target) > Math.abs(value) && Math.sign(target) !== -Math.sign(value)
-  const limit = speedingUp ? up : down
-  return value + clamp(delta, -limit, limit)
+  if (value !== 0 && Math.sign(target) !== Math.sign(value)) {
+    if (Math.abs(value) >= down) return value - Math.sign(value) * down
+    up *= 1 - Math.abs(value) / down
+    value = 0
+  }
+  const limit = Math.abs(target) >= Math.abs(value) ? up : down
+  return value + clamp(target - value, -limit, limit)
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
