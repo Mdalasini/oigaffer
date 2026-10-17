@@ -20,7 +20,7 @@ import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
 import type { GoalPoint, Vec3 } from './shooting'
 import { ballSystem } from './systems/ball'
-import { collisionSystem } from './systems/collision'
+import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
 import { keeperSystem } from './systems/keeper'
@@ -299,6 +299,7 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   keeperSystem(world, dt)
   collisionSystem(world, dt)
   ballSystem(world, dt)
+  ballBodySystem(world, dt)
   contestSystem(world, dt)
   outcomeSystem(world, dt)
 }

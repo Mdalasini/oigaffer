@@ -3,7 +3,7 @@ import { angleDelta } from './angles'
 import { Defender, DefenderMode, Facing, Position, TakeOn, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
-import { collisionSystem } from './systems/collision'
+import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
 import { FOOT_OFFSET } from './touch'
@@ -76,11 +76,29 @@ describe('defender', () => {
     expect(strong).toBeLessThan(weak - 0.25)
   })
 
-  test('players cannot overlap', () => {
-    const world = faceOff(0.2)
+  test('players cannot overlap, even three at once', () => {
+    const world = faceOff(0.5)
+    const { striker, defender, keeper } = world
+    setVec(Position, keeper, GOAL_X - 19, 0, 0)
     collisionSystem(world, FIXED_DT)
-    const { striker, defender } = world
-    expect(Math.hypot(Position.x[defender] - Position.x[striker], Position.y[defender] - Position.y[striker])).toBeCloseTo(0.7, 5)
+    const gap = (a: number, b: number) => Math.hypot(Position.x[b] - Position.x[a], Position.y[b] - Position.y[a])
+    expect(gap(striker, defender)).toBeGreaterThan(0.7 - 1e-3)
+    expect(gap(defender, keeper)).toBeGreaterThan(0.75 - 1e-3)
+    expect(gap(striker, keeper)).toBeGreaterThan(0.75 - 1e-3)
+  })
+
+  test('a fast shot clipping the edge of the defender is still blocked', () => {
+    const world = faceOff(4)
+    const { ball, defender } = world
+    world.phase = 'shot'
+    // Starts just outside the legs and ends this step inside them, already heading out.
+    const dx = Position.x[defender]
+    const dy = Position.y[defender]
+    world.prevBall = { x: dx - 0.18, y: dy + 0.35, z: 0.5 }
+    setVec(Position, ball, dx + 0.028, dy + 0.35, 0.5)
+    setVec(Velocity, ball, 25, 0, 0)
+    ballBodySystem(world, FIXED_DT)
+    expect(world.outcome).toBe('blocked')
   })
 
   test('wins a ball that has got away from the carrier', () => {
