@@ -9,10 +9,18 @@ import { keeperSystem } from './systems/keeper'
 import { outcomeSystem } from './systems/outcome'
 import { locomotionSystem } from './systems/locomotion'
 import { strikerSystem } from './systems/striker'
-import { touchSystem } from './systems/touch'
+import { touchCooldownSystem, touchSystem } from './systems/touch'
 
 export type Phase = 'approach' | 'shot' | 'result'
-export type Outcome = 'goal' | 'save' | 'wide' | 'over' | 'claimed'
+export type Outcome =
+  | 'goal'
+  | 'save'
+  | 'wide'
+  | 'over'
+  /** The keeper gathered a loose ball. */
+  | 'claimed'
+  /** Open play ran on too long without a shot. */
+  | 'abandoned'
 
 export interface ShotInfo {
   /** Where the ball was struck from. */
@@ -29,7 +37,7 @@ export interface MatchStats {
   goals: number
   saves: number
   misses: number
-  /** Attacks that ended without a shot because the attacker lost the ball. */
+  /** Attacks that ended without a shot: the ball was lost or play stalled. */
   lost: number
 }
 
@@ -193,6 +201,7 @@ export function setPhase(world: Match, phase: Phase) {
 export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.time += dt
   world.phaseTime += dt
+  touchCooldownSystem(world, dt)
   strikerSystem(world, dt)
   touchSystem(world, dt)
   locomotionSystem(world, dt)

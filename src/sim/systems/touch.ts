@@ -7,10 +7,17 @@ import type { Match } from '../match'
 import { gaussian } from '../rng'
 import { ballAtFeet, TOUCH_SPECS } from '../touch'
 
+/**
+ * Runs down touch cooldowns. It comes first in the step so that decisions
+ * (shoot or touch?) and the touch itself see the same readiness.
+ */
+export function touchCooldownSystem(world: Match, dt: number) {
+  for (const eid of query(world, [Dribbler])) Dribbler.cooldown[eid] = Math.max(0, Dribbler.cooldown[eid] - dt)
+}
+
 /** Plays each dribbler's chosen touch once the ball is at their feet. */
-export function touchSystem(world: Match, dt: number) {
+export function touchSystem(world: Match, _dt: number) {
   for (const eid of query(world, [Dribbler, Outfielder, Position, Velocity, Facing])) {
-    Dribbler.cooldown[eid] = Math.max(0, Dribbler.cooldown[eid] - dt)
     const style = Dribbler.style[eid] as TouchStyle
     if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0) continue
     if (!ballAtFeet(eid, world.ball)) continue

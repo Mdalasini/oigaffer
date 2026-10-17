@@ -21,7 +21,7 @@ export function outcomeSystem(world: Match, _dt: number) {
     if (keeperCanClaim(world)) {
       Velocity.x[world.ball] = Velocity.y[world.ball] = Velocity.z[world.ball] = 0
       finish(world, 'claimed', null)
-    } else if (world.phaseTime > PLAY_TIMEOUT) resetPlay(world)
+    } else if (world.phaseTime > PLAY_TIMEOUT) finish(world, 'abandoned', null)
     return
   }
 
@@ -79,7 +79,7 @@ function finish(world: Match, outcome: Outcome, crossing: GoalPoint | null) {
   if (world.shot) world.shot.crossing = crossing
   if (outcome === 'goal') world.stats.goals++
   else if (outcome === 'save') world.stats.saves++
-  else if (outcome === 'claimed') world.stats.lost++
+  else if (outcome === 'claimed' || outcome === 'abandoned') world.stats.lost++
   else world.stats.misses++
   setPhase(world, 'result')
   world.onOutcome?.(outcome)

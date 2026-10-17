@@ -90,6 +90,17 @@ describe('touches', () => {
     expect(world.lastTouch).toBeNull()
   })
 
+  test('a shot takes priority over a touch when both become ready on the same tick', () => {
+    const world = setup(5)
+    const { striker } = world
+    world.shootRequested = true
+    Facing.angle[striker] = 0
+    Dribbler.cooldown[striker] = FIXED_DT / 2
+    stepMatch(world)
+    expect(world.phase).toBe('shot')
+    expect(world.lastTouch).toBeNull()
+  })
+
   test('the striker never shoots without the ball at its feet', () => {
     // Any shot origin must be within touching distance of the striker's feet.
     const world = createMatch({ seed: 4 })

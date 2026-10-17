@@ -49,6 +49,7 @@ const OUTCOME_COLOR: Record<Outcome, Color> = {
   goal: [0.25, 0.9, 0.4, 1],
   save: [0.35, 0.65, 1, 1],
   claimed: [0.35, 0.65, 1, 1],
+  abandoned: [0.7, 0.7, 0.7, 1],
   wide: [1, 0.35, 0.3, 1],
   over: [1, 0.35, 0.3, 1],
 }

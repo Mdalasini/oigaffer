@@ -3,6 +3,7 @@ import { BALL_RADIUS, GOAL_X, GRAVITY } from './constants'
 import { reactionDelay, shotSpreadRadius } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
+import { createMatch, stepMatch } from './match'
 import { simulateShots } from './simulate'
 
 describe('grades', () => {
@@ -54,6 +55,18 @@ describe('match outcomes', () => {
     const s = simulateShots(SHOTS, { shooting: 10, reaction: 10 }, 5)
     expect(s.shots).toBe(SHOTS)
     expect(s.goals + s.saves + s.misses).toBe(SHOTS)
+  })
+
+  test('a stalled attack ends through the result phase and respects auto-replay', () => {
+    const match = createMatch({ seed: 2 })
+    match.autoReset = false
+    // Pretend open play has already run for the full timeout.
+    match.phaseTime = 25
+    stepMatch(match)
+    expect(match.phase).toBe('result')
+    expect(match.outcome).toBe('abandoned')
+    for (let i = 0; i < 120 * 5; i++) stepMatch(match)
+    expect(match.phase).toBe('result')
   })
 
   test('the same seed replays the same match', () => {
