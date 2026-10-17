@@ -45,6 +45,28 @@ export const Ball = {}
 
 export const Outfielder = {
   shooting: new Uint8Array(MAX_ENTITIES),
+  /** Touch accuracy: how true the ball goes where the player meant it to. */
+  dribbling: new Uint8Array(MAX_ENTITIES),
+}
+
+export const TouchStyle = {
+  None: 0,
+  /** Ball kept close: wide range of directions, quick to play again, costs some speed. */
+  Small: 1,
+  /** Ball knocked ahead to run onto: only roughly forwards, but no loss of stride. */
+  Large: 2,
+} as const
+export type TouchStyle = (typeof TouchStyle)[keyof typeof TouchStyle]
+
+/** A player who can play the ball with touches while running. */
+export const Dribbler = {
+  /** The touch to play the next time the ball is at the player's feet. */
+  style: new Uint8Array(MAX_ENTITIES),
+  /** Direction to send the ball with that touch. */
+  dirX: new Float32Array(MAX_ENTITIES),
+  dirY: new Float32Array(MAX_ENTITIES),
+  /** Seconds before the player can play another touch. */
+  cooldown: new Float32Array(MAX_ENTITIES),
 }
 
 export const Goalkeeper = {

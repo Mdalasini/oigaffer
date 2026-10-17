@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Body, Facing, Goalkeeper, Position, Velocity } from '../sim/components'
+import { Body, Facing, Goalkeeper, Position, TouchStyle, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
   CIRCLE_RADIUS,
@@ -36,6 +36,10 @@ const BALL_FILL: Color = [1, 1, 1, 1]
 const BALL_EDGE: Color = [0.1, 0.1, 0.1, 1]
 const AIM: Color = [1, 0.85, 0.25, 1]
 const AIM_FILL: Color = [1, 0.85, 0.25, 0.16]
+const SMALL_TOUCH: Color = [0.4, 0.9, 1, 1]
+const LARGE_TOUCH: Color = [1, 0.6, 0.25, 1]
+/** Seconds a touch ring stays on screen. */
+const TOUCH_RING_LIFE = 0.45
 
 const STRIKER_KIT = { shirt: [0.84, 0.2, 0.22, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.84, 0.2, 0.22, 1] } as const
 const KEEPER_KIT = { shirt: [0.78, 0.9, 0.2, 1], shorts: [0.1, 0.1, 0.12, 1], socks: [0.78, 0.9, 0.2, 1] } as const
@@ -44,6 +48,7 @@ type Kit = { shirt: Color; shorts: Color; socks: Color }
 const OUTCOME_COLOR: Record<Outcome, Color> = {
   goal: [0.25, 0.9, 0.4, 1],
   save: [0.35, 0.65, 1, 1],
+  claimed: [0.35, 0.65, 1, 1],
   wide: [1, 0.35, 0.3, 1],
   over: [1, 0.35, 0.3, 1],
 }
@@ -62,6 +67,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
   drawGoal(batch)
   drawPlayer(batch, cam, world, world.striker, STRIKER_KIT)
   drawPlayer(batch, cam, world, world.keeper, KEEPER_KIT)
+  drawTouchRing(batch, world)
   drawBall(batch, cam, world.ball)
   drawShotGuide(batch, world)
 }
@@ -199,6 +205,18 @@ function drawGloves(b: Batch, cam: Camera, eid: number, shoulder: number) {
     const glove = { x: x - 0.1, y: y + side * reach, z: shoulder - 0.1 + lift }
     b.disc(glove, cam.right, cam.up, 0.1, [1, 1, 1, 1], 12)
   }
+}
+
+/** An expanding ring on the grass where the last touch was played. */
+function drawTouchRing(b: Batch, world: Match) {
+  const touch = world.lastTouch
+  if (!touch) return
+  const t = (world.time - touch.time) / TOUCH_RING_LIFE
+  if (t >= 1) return
+  const base = touch.style === TouchStyle.Large ? LARGE_TOUCH : SMALL_TOUCH
+  const color: Color = [base[0], base[1], base[2], 0.9 * (1 - t)]
+  const radius = (touch.style === TouchStyle.Large ? 0.5 : 0.3) + t * 0.6
+  b.arc({ x: touch.x, y: touch.y, z: 0.02 }, X, Y, radius, 0.08, 0, Math.PI * 2, color, 32)
 }
 
 function drawBall(b: Batch, cam: Camera, eid: number) {

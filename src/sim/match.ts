@@ -1,5 +1,5 @@
 import { addComponent, addEntity, createWorld, type World } from 'bitecs'
-import { Ball, Body, Facing, Goalkeeper, MoveIntent, Outfielder, Physical, Position, Velocity } from './components'
+import { Ball, Body, Dribbler, Facing, Goalkeeper, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
@@ -9,9 +9,10 @@ import { keeperSystem } from './systems/keeper'
 import { outcomeSystem } from './systems/outcome'
 import { locomotionSystem } from './systems/locomotion'
 import { strikerSystem } from './systems/striker'
+import { touchSystem } from './systems/touch'
 
 export type Phase = 'approach' | 'shot' | 'result'
-export type Outcome = 'goal' | 'save' | 'wide' | 'over'
+export type Outcome = 'goal' | 'save' | 'wide' | 'over' | 'claimed'
 
 export interface ShotInfo {
   /** Where the ball was struck from. */
@@ -28,10 +29,36 @@ export interface MatchStats {
   goals: number
   saves: number
   misses: number
+  /** Attacks that ended without a shot because the attacker lost the ball. */
+  lost: number
 }
+
+export interface LastTouch {
+  by: number
+  style: TouchStyle
+  /** Match time of the touch, and where the ball was. */
+  time: number
+  x: number
+  y: number
+}
+
+/** Every 1–20 grade in the match, the role it belongs to and where it is stored. */
+export const GRADE_FIELDS = {
+  shooting: { role: 'striker', store: Outfielder.shooting },
+  dribbling: { role: 'striker', store: Outfielder.dribbling },
+  pace: { role: 'striker', store: Physical.pace },
+  agility: { role: 'striker', store: Physical.agility },
+  reaction: { role: 'keeper', store: Goalkeeper.reaction },
+} as const
+export type GradeKey = keyof typeof GRADE_FIELDS
+export type Grades = Record<GradeKey, number>
+
+export const DEFAULT_GRADES: Grades = { shooting: 14, dribbling: 13, pace: 14, agility: 14, reaction: 12 }
 
 export interface MatchContext {
   rng: Rng
+  /** Seconds since the match was created. */
+  time: number
   phase: Phase
   phaseTime: number
   ball: number
@@ -47,6 +74,7 @@ export interface MatchContext {
   outcome: Outcome | null
   stats: MatchStats
   prevBall: Vec3
+  lastTouch: LastTouch | null
   onOutcome?: (outcome: Outcome) => void
 }
 
@@ -54,13 +82,13 @@ export type Match = World<MatchContext>
 
 export interface MatchOptions {
   seed?: number
-  shooting: number
-  reaction: number
+  grades?: Partial<Grades>
 }
 
-export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOptions): Match {
+export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
     rng: createRng(seed),
+    time: 0,
     phase: 'approach',
     phaseTime: 0,
     ball: 0,
@@ -72,8 +100,9 @@ export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOpti
     autoReset: true,
     shot: null,
     outcome: null,
-    stats: { shots: 0, goals: 0, saves: 0, misses: 0 },
+    stats: { shots: 0, goals: 0, saves: 0, misses: 0, lost: 0 },
     prevBall: { x: 0, y: 0, z: 0 },
+    lastTouch: null,
   })
 
   world.ball = addEntity(world)
@@ -89,9 +118,8 @@ export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOpti
   addComponent(world, world.striker, Facing)
   addComponent(world, world.striker, MoveIntent)
   addComponent(world, world.striker, Physical)
-  Physical.pace[world.striker] = 14
+  addComponent(world, world.striker, Dribbler)
   Physical.acceleration[world.striker] = 14
-  Physical.agility[world.striker] = 14
   Physical.strength[world.striker] = 12
   Body.radius[world.striker] = 0.35
   Body.height[world.striker] = 1.8
@@ -105,14 +133,19 @@ export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOpti
   Body.radius[world.keeper] = 0.4
   Body.height[world.keeper] = 1.9
 
-  setGrades(world, shooting, reaction)
+  for (const key of Object.keys(GRADE_FIELDS) as GradeKey[]) setGrade(world, key, grades[key] ?? DEFAULT_GRADES[key])
   resetPlay(world)
   return world
 }
 
-export function setGrades(world: Match, shooting: number, reaction: number) {
-  Outfielder.shooting[world.striker] = clampGrade(shooting)
-  Goalkeeper.reaction[world.keeper] = clampGrade(reaction)
+export function setGrade(world: Match, key: GradeKey, grade: number) {
+  const { role, store } = GRADE_FIELDS[key]
+  store[world[role]] = clampGrade(grade)
+}
+
+export function getGrade(world: Match, key: GradeKey): number {
+  const { role, store } = GRADE_FIELDS[key]
+  return store[world[role]]
 }
 
 /** Lines the striker up for a fresh run at goal. */
@@ -122,7 +155,11 @@ export function resetPlay(world: Match) {
   setVec(Velocity, striker, 0, 0, 0)
   // Start half-turned away so the striker has to come round onto goal.
   Facing.angle[striker] = Math.atan2(-Position.y[striker], GOAL_X - Position.x[striker]) + (rng() * 2 - 1) * 1.6
-  setVec(Position, ball, Position.x[striker], Position.y[striker], BALL_RADIUS)
+  // The ball starts at the striker's feet.
+  const facing = Facing.angle[striker]
+  setVec(Position, ball, Position.x[striker] + Math.cos(facing) * 0.4, Position.y[striker] + Math.sin(facing) * 0.4, BALL_RADIUS)
+  Dribbler.style[striker] = TouchStyle.None
+  Dribbler.cooldown[striker] = 0
   setVec(Velocity, ball, 0, 0, 0)
   setVec(Position, keeper, GOAL_X - 0.5, 0, 0)
   setVec(Velocity, keeper, 0, 0, 0)
@@ -130,11 +167,13 @@ export function resetPlay(world: Match) {
 
   world.phase = 'approach'
   world.phaseTime = 0
-  world.shootDistance = 13 + rng() * 6
+  // Shots come a touch or two after the striker decides to, so plan a little further out.
+  world.shootDistance = 16 + rng() * 6
   world.aimHigh = rng() < 0.5
   world.shootRequested = false
   world.shot = null
   world.outcome = null
+  world.lastTouch = null
 }
 
 export function requestShot(world: Match) {
@@ -152,8 +191,10 @@ export function setPhase(world: Match, phase: Phase) {
 }
 
 export function stepMatch(world: Match, dt: number = FIXED_DT) {
+  world.time += dt
   world.phaseTime += dt
   strikerSystem(world, dt)
+  touchSystem(world, dt)
   locomotionSystem(world, dt)
   keeperSystem(world, dt)
   ballSystem(world, dt)

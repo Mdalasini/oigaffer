@@ -38,7 +38,7 @@ describe('shooting', () => {
 describe('match outcomes', () => {
   const SHOTS = 300
   const rate = (shooting: number, reaction: number) => {
-    const s = simulateShots(SHOTS, shooting, reaction, 11)
+    const s = simulateShots(SHOTS, { shooting, reaction }, 11)
     return s.goals / s.shots
   }
 
@@ -51,12 +51,12 @@ describe('match outcomes', () => {
   })
 
   test('every shot is accounted for', () => {
-    const s = simulateShots(SHOTS, 10, 10, 5)
+    const s = simulateShots(SHOTS, { shooting: 10, reaction: 10 }, 5)
     expect(s.shots).toBe(SHOTS)
     expect(s.goals + s.saves + s.misses).toBe(SHOTS)
   })
 
   test('the same seed replays the same match', () => {
-    expect(simulateShots(50, 12, 9, 42)).toEqual(simulateShots(50, 12, 9, 42))
+    expect(simulateShots(50, { shooting: 12, reaction: 9 }, 42)).toEqual(simulateShots(50, { shooting: 12, reaction: 9 }, 42))
   })
 })

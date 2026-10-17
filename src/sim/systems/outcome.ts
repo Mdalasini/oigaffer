@@ -1,4 +1,5 @@
 import { Body, Position, Velocity } from '../components'
+import { ballAtFeet } from '../touch'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X } from '../constants'
 import { resetPlay, setPhase, type Match, type Outcome } from '../match'
 import type { GoalPoint } from '../shooting'
@@ -8,13 +9,21 @@ const ARM_REACH = 0.7
 const KEEPER_MAX_HEIGHT = 2.5
 const RESULT_PAUSE = 2.2
 const SHOT_TIMEOUT = 4
+/** An attack that never gets a shot away is abandoned and restarted. */
+const PLAY_TIMEOUT = 25
 
 export function outcomeSystem(world: Match, _dt: number) {
   if (world.phase === 'result') {
     if (world.autoReset && world.phaseTime >= RESULT_PAUSE) resetPlay(world)
     return
   }
-  if (world.phase !== 'shot') return
+  if (world.phase === 'approach') {
+    if (keeperCanClaim(world)) {
+      Velocity.x[world.ball] = Velocity.y[world.ball] = Velocity.z[world.ball] = 0
+      finish(world, 'claimed', null)
+    } else if (world.phaseTime > PLAY_TIMEOUT) resetPlay(world)
+    return
+  }
 
   const { ball, keeper, prevBall } = world
   const keeperX = Position.x[keeper]
@@ -37,6 +46,14 @@ export function outcomeSystem(world: Match, _dt: number) {
   }
 
   if (world.phaseTime > SHOT_TIMEOUT) finish(world, 'wide', null)
+}
+
+/** A loose ball that runs within the keeper's reach is gathered. */
+function keeperCanClaim(world: Match) {
+  const { ball, keeper, striker } = world
+  if (ballAtFeet(striker, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return false
+  const reach = Body.radius[keeper] + ARM_REACH
+  return Math.hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach
 }
 
 /** Where the ball passed through the plane x = planeX during the last step. */
@@ -62,6 +79,7 @@ function finish(world: Match, outcome: Outcome, crossing: GoalPoint | null) {
   if (world.shot) world.shot.crossing = crossing
   if (outcome === 'goal') world.stats.goals++
   else if (outcome === 'save') world.stats.saves++
+  else if (outcome === 'claimed') world.stats.lost++
   else world.stats.misses++
   setPhase(world, 'result')
   world.onOutcome?.(outcome)

@@ -2,21 +2,33 @@ import { Batch } from '../render/batch'
 import { goalCamera, topDownCamera, topDownExtent } from '../render/cameras'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
-import { Goalkeeper, Outfielder, Position } from '../sim/components'
+import { Position } from '../sim/components'
 import { FIXED_DT, GOAL_DEPTH, GOAL_X } from '../sim/constants'
-import { reactionDelay, shotSpreadRadius } from '../sim/grades'
-import { createMatch, requestShot, resetPlay, setGrades, stepMatch, type Match, type MatchStats, type Outcome, type Phase } from '../sim/match'
+import {
+  createMatch,
+  getGrade,
+  GRADE_FIELDS,
+  requestShot,
+  resetPlay,
+  setGrade,
+  stepMatch,
+  type GradeKey,
+  type Grades,
+  type Match,
+  type MatchStats,
+  type Outcome,
+  type Phase,
+} from '../sim/match'
 
 export interface GameSnapshot {
   phase: Phase
   outcome: Outcome | null
   stats: MatchStats
-  shooting: number
-  reaction: number
-  spreadRadius: number
-  reactionDelay: number
+  grades: Grades
   autoReset: boolean
 }
+
+const GRADE_KEYS = Object.keys(GRADE_FIELDS) as GradeKey[]
 
 const PITCH_SKY: readonly [number, number, number, number] = [0.08, 0.1, 0.14, 1]
 const GOAL_SKY: readonly [number, number, number, number] = [0.16, 0.2, 0.28, 1]
@@ -31,8 +43,8 @@ export class Game {
   /** Where the top-down camera is looking; eases after the ball. */
   private readonly view = { x: GOAL_X - 20, y: 0 }
 
-  constructor(shooting = 14, reaction = 12) {
-    this.match = createMatch({ shooting, reaction })
+  constructor() {
+    this.match = createMatch()
     this.snapshot = this.takeSnapshot()
   }
 
@@ -66,13 +78,8 @@ export class Game {
 
   getSnapshot = () => this.snapshot
 
-  setShooting(grade: number) {
-    setGrades(this.match, grade, Goalkeeper.reaction[this.match.keeper])
-    this.publishIfChanged()
-  }
-
-  setReaction(grade: number) {
-    setGrades(this.match, Outfielder.shooting[this.match.striker], grade)
+  setGrade(key: GradeKey, grade: number) {
+    setGrade(this.match, key, grade)
     this.publishIfChanged()
   }
 
@@ -125,23 +132,19 @@ export class Game {
 
   private takeSnapshot(): GameSnapshot {
     const m = this.match
-    const shooting = Outfielder.shooting[m.striker]
-    const reaction = Goalkeeper.reaction[m.keeper]
     return {
       phase: m.phase,
       outcome: m.outcome,
       stats: { ...m.stats },
-      shooting,
-      reaction,
-      spreadRadius: shotSpreadRadius(shooting),
-      reactionDelay: reactionDelay(reaction),
+      grades: Object.fromEntries(GRADE_KEYS.map((key) => [key, getGrade(m, key)])) as Grades,
       autoReset: m.autoReset,
     }
   }
 
   private publishIfChanged() {
     const m = this.match
-    const key = [m.phase, m.outcome, m.stats.shots, Outfielder.shooting[m.striker], Goalkeeper.reaction[m.keeper], m.autoReset].join('|')
+    const grades = GRADE_KEYS.map((key) => getGrade(m, key))
+    const key = [m.phase, m.outcome, m.stats.shots, m.autoReset, ...grades].join('|')
     if (key === this.snapshotKey) return
     this.snapshotKey = key
     this.snapshot = this.takeSnapshot()

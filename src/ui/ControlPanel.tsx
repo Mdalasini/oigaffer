@@ -1,29 +1,61 @@
 import type { Game, GameSnapshot } from '../game/Game'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
+import { reactionDelay, shotSpreadRadius, sideStepSpeed, topSpeed, touchAngleError } from '../sim/grades'
+import type { GradeKey } from '../sim/match'
 
 interface Props {
   game: Game
   snapshot: GameSnapshot
 }
 
+interface PlayerControls {
+  name: string
+  swatch: string
+  grades: { key: GradeKey; label: string; detail: (grade: number) => string }[]
+}
+
+const PLAYERS: PlayerControls[] = [
+  {
+    name: 'Striker',
+    swatch: 'bg-red-500',
+    grades: [
+      { key: 'shooting', label: 'Shooting', detail: (g) => `spread radius ${shotSpreadRadius(g).toFixed(2)} m` },
+      { key: 'dribbling', label: 'Dribbling', detail: (g) => `touch error ±${deg(touchAngleError(g))}°` },
+      { key: 'pace', label: 'Pace', detail: (g) => `top speed ${topSpeed(g).toFixed(1)} m/s` },
+      { key: 'agility', label: 'Agility', detail: (g) => `sidestep ${sideStepSpeed(g).toFixed(1)} m/s` },
+    ],
+  },
+  {
+    name: 'Keeper',
+    swatch: 'bg-lime-400',
+    grades: [{ key: 'reaction', label: 'Reaction', detail: (g) => `delay ${Math.round(reactionDelay(g) * 1000)} ms` }],
+  },
+]
+
+const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
+
 export function ControlPanel({ game, snapshot }: Props) {
   const conversion = snapshot.stats.shots ? Math.round((snapshot.stats.goals / snapshot.stats.shots) * 100) : 0
   return (
-    <aside className="absolute top-4 right-4 w-72 space-y-4 rounded-xl bg-black/60 p-4 text-sm shadow-xl backdrop-blur">
-      <GradeSlider
-        label="Striker · Shooting"
-        swatch="bg-red-500"
-        value={snapshot.shooting}
-        detail={`Spread radius ${snapshot.spreadRadius.toFixed(2)} m`}
-        onChange={(g) => game.setShooting(g)}
-      />
-      <GradeSlider
-        label="Keeper · Reaction"
-        swatch="bg-lime-400"
-        value={snapshot.reaction}
-        detail={`Reaction delay ${Math.round(snapshot.reactionDelay * 1000)} ms`}
-        onChange={(g) => game.setReaction(g)}
-      />
+    <aside className="absolute top-4 right-4 max-h-[calc(100%-2rem)] w-72 space-y-4 overflow-y-auto rounded-xl bg-black/60 p-4 text-sm shadow-xl backdrop-blur">
+      {PLAYERS.map((player) => (
+        <section key={player.name} className="space-y-2">
+          <h2 className="flex items-center gap-2 text-xs font-semibold tracking-wide text-neutral-300 uppercase">
+            <span className={`size-2.5 rounded-full ${player.swatch}`} />
+            {player.name}
+          </h2>
+          {player.grades.map(({ key, label, detail }) => (
+            <GradeSlider
+              key={key}
+              label={`${player.name} ${label}`}
+              shortLabel={label}
+              value={snapshot.grades[key]}
+              detail={detail(snapshot.grades[key])}
+              onChange={(g) => game.setGrade(key, g)}
+            />
+          ))}
+        </section>
+      ))}
 
       <div className="flex gap-2">
         <button
@@ -49,7 +81,8 @@ export function ControlPanel({ game, snapshot }: Props) {
       </label>
 
       <p className="text-xs leading-relaxed text-neutral-400">
-        The striker shoots at the yellow circle; the ball lands anywhere inside it. Conversion so far:{' '}
+        Rings on the ball mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
+        <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Conversion:{' '}
         <span className="font-semibold text-neutral-200">{conversion}%</span>
       </p>
     </aside>
@@ -58,21 +91,18 @@ export function ControlPanel({ game, snapshot }: Props) {
 
 interface GradeSliderProps {
   label: string
-  swatch: string
+  shortLabel: string
   value: number
   detail: string
   onChange: (grade: number) => void
 }
 
-function GradeSlider({ label, swatch, value, detail, onChange }: GradeSliderProps) {
+function GradeSlider({ label, shortLabel, value, detail, onChange }: GradeSliderProps) {
   return (
     <label className="block">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="flex items-center gap-2 font-medium">
-          <span className={`size-2.5 rounded-full ${swatch}`} />
-          {label}
-        </span>
-        <span className="text-lg font-bold tabular-nums">{value}</span>
+      <div className="flex items-baseline justify-between">
+        <span className="font-medium">{shortLabel}</span>
+        <span className="font-bold tabular-nums">{value}</span>
       </div>
       <input
         type="range"
@@ -83,7 +113,7 @@ function GradeSlider({ label, swatch, value, detail, onChange }: GradeSliderProp
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-amber-400"
       />
-      <div className="text-xs text-neutral-400">{detail}</div>
+      <div className="-mt-1 text-[11px] text-neutral-400">{detail}</div>
     </label>
   )
 }
