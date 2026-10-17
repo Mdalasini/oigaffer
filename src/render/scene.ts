@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Body, Goalkeeper, Position, Velocity } from '../sim/components'
+import { Body, Facing, Goalkeeper, Position, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
   CIRCLE_RADIUS,
@@ -31,6 +31,7 @@ const NET_LINE: Color = [1, 1, 1, 0.35]
 const SHADOW: Color = [0, 0, 0, 0.28]
 const SKIN: Color = [0.86, 0.68, 0.53, 1]
 const HAIR: Color = [0.18, 0.12, 0.08, 1]
+const BOOT: Color = [0.08, 0.08, 0.08, 1]
 const BALL_FILL: Color = [1, 1, 1, 1]
 const BALL_EDGE: Color = [0.1, 0.1, 0.1, 1]
 const AIM: Color = [1, 0.85, 0.25, 1]
@@ -142,38 +143,47 @@ function drawGoal(b: Batch) {
   }
 }
 
-/** A player built from boxes, with a sphere (billboarded disc) for the head. */
+/** A player built from boxes turned to their facing, with a sphere for the head. */
 function drawPlayer(b: Batch, cam: Camera, world: Match, eid: number, kit: Kit) {
   const x = Position.x[eid]
   const y = Position.y[eid]
+  const yaw = Facing.angle[eid]
+  const cos = Math.cos(yaw)
+  const sin = Math.sin(yaw)
   const h = Body.height[eid]
   const r = Body.radius[eid]
   const hip = h * 0.48
   const shoulder = h * 0.82
 
+  /** Box spanning z0..z1, centred at (forward, left) in the player's frame. */
+  const part = (forward: number, left: number, z0: number, z1: number, depth: number, width: number, color: Color) =>
+    b.orientedBox(
+      { x: x + forward * cos - left * sin, y: y + forward * sin + left * cos, z: (z0 + z1) / 2 },
+      { x: depth / 2, y: width / 2, z: (z1 - z0) / 2 },
+      yaw,
+      color,
+    )
+
   b.disc({ x: x + SUN.x * 0.6, y: y + SUN.y * 0.6, z: 0.01 }, X, Y, r * 1.1, SHADOW, 16)
 
   for (const side of [-1, 1]) {
-    const ly = y + side * r * 0.35
-    b.box({ x: x - 0.09, y: ly - 0.09, z: 0 }, { x: x + 0.09, y: ly + 0.09, z: hip * 0.55 }, kit.socks)
-    b.box({ x: x - 0.1, y: ly - 0.1, z: hip * 0.55 }, { x: x + 0.1, y: ly + 0.1, z: hip }, kit.shorts)
+    const left = side * r * 0.35
+    // Boots poke out in front of the body, so facing reads from overhead.
+    part(0.1, left, 0, 0.1, 0.3, 0.12, BOOT)
+    part(0, left, 0.1, hip * 0.55, 0.18, 0.18, kit.socks)
+    part(0, left, hip * 0.55, hip, 0.2, 0.2, kit.shorts)
   }
-  b.box({ x: x - r * 0.45, y: y - r, z: hip }, { x: x + r * 0.45, y: y + r, z: shoulder }, kit.shirt)
+  part(0, 0, hip, shoulder, r * 0.9, r * 2, kit.shirt)
 
   const headR = 0.13
   const head = { x, y, z: h - headR }
   b.disc(head, cam.right, cam.up, headR, SKIN, 16)
-  // Hair sits on top of the head, so only the overhead view sees most of it.
-  b.disc({ x: head.x - 0.02, y: head.y, z: head.z + 0.06 }, X, Y, headR * 0.85, HAIR, 16)
+  // Hair sits on top and towards the back of the head.
+  b.disc({ x: x - cos * 0.03, y: y - sin * 0.03, z: head.z + 0.06 }, X, Y, headR * 0.85, HAIR, 16)
 
   if (hasComponent(world, eid, Goalkeeper)) drawGloves(b, cam, eid, shoulder)
-  else drawArms(b, x, y, r, hip, shoulder, kit.shirt)
-}
-
-function drawArms(b: Batch, x: number, y: number, r: number, hip: number, shoulder: number, color: Color) {
-  for (const side of [-1, 1]) {
-    const ay = y + side * (r + 0.07)
-    b.box({ x: x - 0.07, y: ay - 0.07, z: hip + 0.05 }, { x: x + 0.07, y: ay + 0.07, z: shoulder - 0.02 }, color)
+  else {
+    for (const side of [-1, 1]) part(0, side * (r + 0.07), hip + 0.05, shoulder - 0.02, 0.14, 0.14, kit.shirt)
   }
 }
 

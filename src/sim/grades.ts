@@ -20,3 +20,23 @@ export function shotSpreadRadius(shooting: number): number {
 export function reactionDelay(reaction: number): number {
   return lerp(0.4, 0.08, gradeT(reaction))
 }
+
+/** Flat-out running speed (m/s). */
+export function topSpeed(pace: number): number {
+  return lerp(6.8, 9.4, gradeT(pace))
+}
+
+/** Forward acceleration (m/s²); braking is quicker than this. */
+export function accelerationRate(acceleration: number): number {
+  return lerp(3.2, 6.4, gradeT(acceleration))
+}
+
+/** Turn rate (rad/s) when standing still; it falls away with speed. */
+export function turnRate(agility: number): number {
+  return lerp(5, 10, gradeT(agility))
+}
+
+/** Top speed (m/s) when sidestepping or backpedalling. */
+export function sideStepSpeed(agility: number): number {
+  return lerp(2.4, 3.6, gradeT(agility))
+}

@@ -1,5 +1,5 @@
 import { query } from 'bitecs'
-import { Goalkeeper, Position, Velocity } from '../components'
+import { Facing, Goalkeeper, Position, Velocity } from '../components'
 import { GOAL_HALF_WIDTH, GOAL_X } from '../constants'
 import type { Match } from '../match'
 
@@ -12,7 +12,10 @@ const DIVE_ACCEL = 13
 const POST_OVERRUN = 0.4
 
 export function keeperSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Goalkeeper, Position, Velocity])) {
+  for (const eid of query(world, [Goalkeeper, Position, Velocity, Facing])) {
+    // Keepers stay square to the ball; their dives are lateral, so they move
+    // outside the locomotion model.
+    Facing.angle[eid] = Math.atan2(Position.y[world.ball] - Position.y[eid], Position.x[world.ball] - Position.x[eid])
     if (world.phase === 'approach') setPosition(world, eid, dt)
     else if (world.phase === 'shot') dive(world, eid, dt)
     else {
