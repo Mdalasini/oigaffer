@@ -16,7 +16,7 @@ const largeTouchTravel = (speed: number) => 3 + speed * 2.2
 /** Spare room (m) beyond a large touch's run before the line. */
 const LARGE_TOUCH_MARGIN = 3
 /** Within this distance (m) of a touchline, take defenders on the infield side. */
-const TOUCHLINE_MARGIN = 8
+const TOUCHLINE_MARGIN = 5
 /** Only shoot when facing within this angle (rad) of goal. */
 const MAX_SHOT_TURN = 1.3
 /** Don't shoot if the defender is within this distance (m) of the line to the aim point. */
@@ -42,7 +42,7 @@ const CHECK_BACK_AFTER = 0.6
 const CHECK_BACK_SPREAD = 0.6
 /** A beaten defender this close behind is chasing: shoot this much earlier, and run with it. */
 const CHASED_WITHIN = 7
-const CHASED_SHOOT_EARLIER = 5
+const CHASED_SHOOT_EARLIER = 3
 /** Shield when the defender is this close (m) and the ball is this tight (m) to the feet. */
 const SHIELD_RANGE = 1.4
 const SHIELD_CONTROL = 0.9

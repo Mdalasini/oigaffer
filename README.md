@@ -3,7 +3,8 @@
 A football match simulation. The simulation is fully 3D (metres, z-up, ballistic
 ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 
-Currently: a striker runs at goal against a defender and a goalkeeper, over and over.
+Currently: a striker runs at goal against a defender and a goalkeeper, over and over,
+on a small-sided 44 m × 28 m pitch with full-size goals.
 
 - **Shooting grade (1–20)** — the striker aims at a corner, and the ball lands
   uniformly inside a circle around that aim point on the goal plane. Better
@@ -48,7 +49,8 @@ Currently: a striker runs at goal against a defender and a goalkeeper, over and 
   long when there's room on the pitch for it, and takes defenders on the
   infield side near a touchline.
 
-The inset "striker's view" is a second camera on the same 3D scene, looking at
+The main view fits the whole pitch: lengthways across a landscape screen, up a
+portrait one. The inset "striker's view" is a second camera on the same 3D scene, looking at
 the goal mouth face-on so you can see the spread circle and where shots go.
 
 ## Stack
