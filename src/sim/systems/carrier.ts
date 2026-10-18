@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { Carry, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, passWindup, reactionDelay, topSpeed } from '../grades'
 import { rollDistanceIn } from '../passing'
@@ -13,6 +13,7 @@ import { attackedGoalX, opponent } from '../teams'
 import { arrivalTime } from '../space/arrival'
 import { teamArrival } from '../space/control'
 import { chooseAction, strikePass } from '../playmaking'
+import { chooseCarry } from '../carrying'
 import { meetTheBall } from './receive'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
 
@@ -47,6 +48,8 @@ const LARGE_TOUCH_MARGIN = 3
  */
 const LARGE_TOUCH_SAFETY = 0.3
 const CONTEST_REACH = 1
+/** A carry this close to straight at goal (cosine of the angle) counts as heading for it. */
+const FORWARD_CARRY = 0.7
 /** Within this distance (m) of a touchline, take defenders on the infield side. */
 const TOUCHLINE_MARGIN = 5
 /** Nobody shoots with less than this chance of scoring: from further out it's a clearance, not a shot. */
@@ -84,6 +87,8 @@ const SHIELD_CONTROL = 0.9
 const SHIELD_HOLD = 0.5
 const SHIELD_SPREAD = 0.8
 const SHIELD_REST = 1.5
+/** Seconds a spin away from a shield is seen through before the carrier rethinks. */
+const SPIN_COMMIT = 0.6
 /** Barely move while shielding (m/s). */
 const SHIELD_PACE = 1.2
 
@@ -158,15 +163,19 @@ export function carrierSystem(world: Match, dt: number) {
       }
     }
 
+    chooseCarry(world, eid)
     if (shield(world, eid, dirX, dirY, dt)) continue
-    if (takeOn(world, eid, dirX, dirY, dt)) continue
+    if (Carry.takeOn[eid] && takeOn(world, eid, dirX, dirY, dt)) continue
     TakeOn.side[eid] = 0
 
-    // Knock it long while the next contact would still come before shooting range,
+    // Heading for goal, knock it on while the next contact would still come before shooting range,
     // or whenever a beaten defender is chasing.
+    const cx = Carry.dirX[eid]
+    const cy = Carry.dirY[eid]
     const roomToRun = distance - largeTouchTravel(eid) > shootDistance
-    const style = roomToRun || chased ? TouchStyle.Large : TouchStyle.Small
-    carry(world, eid, ball, style, dirX, dirY)
+    const forward = cx * dirX + cy * dirY > FORWARD_CARRY
+    const style = forward && (roomToRun || chased) ? TouchStyle.Large : TouchStyle.Small
+    carry(world, eid, ball, style, cx, cy)
   }
 }
 
@@ -246,6 +255,9 @@ function shield(world: Match, eid: number, gx: number, gy: number, dt: number): 
     Shield.timer[eid] = SHIELD_REST
     const lateral = -(Position.x[defender] - Position.x[ball]) * gy + (Position.y[defender] - Position.y[ball]) * gx
     beginTakeOn(world, eid, lateral > 0 ? -1 : 1, false)
+    // Spinning away from them is a take-on of its own, seen through before thinking again.
+    Carry.takeOn[eid] = 1
+    Carry.nextLook[eid] = world.time + SPIN_COMMIT
     return false
   }
 

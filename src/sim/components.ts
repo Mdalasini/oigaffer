@@ -223,6 +223,17 @@ export const TakeOn = {
   checkBackTimer: new Float32Array(MAX_ENTITIES),
 }
 
+/** Where a carrier keeping the ball means to take it, decided a few times a second (see `chooseCarry`). */
+export const Carry = {
+  /** Unit direction to carry it. */
+  dirX: new Float32Array(MAX_ENTITIES),
+  dirY: new Float32Array(MAX_ENTITIES),
+  /** 1 if that means taking on the defender in the way, rather than going round him. */
+  takeOn: new Uint8Array(MAX_ENTITIES),
+  /** Match time of the next rethink. */
+  nextLook: new Float32Array(MAX_ENTITIES),
+}
+
 /** A player's place in their team's formation: an index into its slots. */
 export const Slot = {
   index: new Uint8Array(MAX_ENTITIES),

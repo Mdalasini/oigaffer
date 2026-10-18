@@ -5,7 +5,7 @@ import { reactionDelay, shotAngleError } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
-import { Mark, OffBall, OnBall, Position, Pressing } from './components'
+import { Mark, OffBall, OnBall, Position, Pressing, Run, RunPhase } from './components'
 import { createMatch, resetMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
 
@@ -163,7 +163,8 @@ describe('match outcomes', () => {
         if (wait > (before.get(eid) ?? Infinity) + 0.05 && world.phase === 'play' && eid !== world.carrier && eid !== world.presser) {
           const distance = Math.hypot(Position.x[eid] - Position.x[world.ball], Position.y[eid] - Position.y[world.ball])
           if (distance < 8 && Mark.target[eid] === -1) near.push(wait)
-          if (distance > 28 && Mark.target[eid] === -1 && !OffBall.showing[eid]) far.push(wait)
+          // Runners keep looking often, however far off they are.
+          if (distance > 28 && Mark.target[eid] === -1 && !OffBall.showing[eid] && Run.phase[eid] === RunPhase.None) far.push(wait)
         }
         before.set(eid, wait)
       }

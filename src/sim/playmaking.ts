@@ -12,6 +12,7 @@ import { gaussian } from './rng'
 import { arrivalTime, REACTION_TIME } from './space/arrival'
 import { passSafety, teamArrival, timeOnBall } from './space/control'
 import { shotValue } from './finishing'
+import { planCarry } from './carrying'
 import { shotChance, threat } from './space/threat'
 import { attackDir, attackedGoalX, opponent } from './teams'
 
@@ -123,7 +124,9 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
  * What keeping the ball is worth: if they keep it, the threat where they are
  * plus a little for carrying it on; if they lose it, the threat the other
  * team then has from here. The chance of keeping it falls the less time
- * they have before an opponent is on them, and rises with their dribbling.
+ * they have before an opponent is on them, and rises with their dribbling;
+ * when the best carry they see means taking their man on, it's no better
+ * than their chance of beating him (see `planCarry`).
  */
 export function keepValue(world: Match, carrier: number): number {
   const team = Team.id[carrier]
@@ -131,7 +134,9 @@ export function keepValue(world: Match, carrier: number): number {
   const by = Position.y[world.ball]
   // How long they reckon they have: a defender closing in from behind, unseen, isn't counted where they really are.
   const time = timeOnBall(world, carrier, carrier)
-  const keep = clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97)
+  // Keeping it means taking their man on if there's no way round him: no better than their chance of beating him.
+  const plan = planCarry(world, carrier)
+  const keep = Math.min(clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97), plan.takeOn ? plan.kept : 1)
   // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to
   // is worth over a clean one from here, but only if they have a moment on the ball to carry it on at all.
   const gain = Math.max(0, threat(world.pitch, team, bx, by) * CARRY_GAIN - shotChance(world.pitch, bx * attackDir(team), by))

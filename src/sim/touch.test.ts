@@ -154,6 +154,19 @@ describe('touches', () => {
     expect(widest).toBeLessThan(4.5)
   })
 
+  test('a dribbler at a standstill turns to face the way they mean to take the ball, so play never sticks', () => {
+    const world = setup(1)
+    const { carrier, ball } = world
+    // Facing away from the ball, which sits just behind them, right where they'd stand to take it back the way they came.
+    setVec(Position, ball, -20 - FOOT_OFFSET, 0, Position.z[ball])
+    for (let i = 0; i < 120; i++) {
+      dribble(carrier, ball, TouchStyle.Small, -1, 0)
+      tick(world)
+    }
+    expect(Position.x[ball]).toBeLessThan(-21)
+    expect(Math.abs(angleDelta(Facing.angle[carrier], Math.PI))).toBeLessThan(1)
+  })
+
   test('a large touch is judged to need as much room as the ball really rolls before it’s caught, even at full pace', () => {
     const world = setup(1, 0, 13)
     const { carrier, ball } = world
