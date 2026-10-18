@@ -3,6 +3,7 @@ import { clearIntentions } from './attacking'
 import { Facing, Goalkeeper, Mark, OffBall, Outfielder, Position, Run } from './components'
 import { blindSideDelay, runTimingError } from './grades'
 import type { Match } from './match'
+import { maybeScanBeforeReceiving } from './perception'
 import type { PassOption } from './playmaking'
 import { gaussian } from './rng'
 import { maybeSpringTrap } from './systems/defending'
@@ -74,6 +75,7 @@ export function cue(world: Match, c: Cue) {
       for (const t of [0, 1]) {
         for (const eid of world.teams[t].outfielders) OffBall.decideIn[eid] = BALL_MOVED_REACTION + world.rng() * BALL_MOVED_REACTION
       }
+      maybeScanBeforeReceiving(world, c.receiver)
       return
     case 'run':
       blindSide(world, c.runner)

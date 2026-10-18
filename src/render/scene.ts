@@ -1,4 +1,5 @@
 import { hasComponent } from 'bitecs'
+import { sinceScan } from '../sim/perception'
 import { Body, Call, CallKind, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, Team, TouchStyle, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
@@ -46,6 +47,9 @@ const PASS_LINE: Color = [1, 1, 1, 0.25]
 const CALL_RING: Color = [1, 0.95, 0.4, 0.7]
 const CALL_LINE: Color = [1, 0.95, 0.4, 0.3]
 const PASS_RING: Color = [1, 1, 1, 0.8]
+const SCAN_ARC: Color = [1, 1, 1, 0.5]
+/** Seconds a shoulder check stays on screen. */
+const SCAN_LIFE = 0.35
 /** Seconds a touch ring stays on screen. */
 const TOUCH_RING_LIFE = 0.45
 
@@ -94,6 +98,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Ove
   drawTouchRing(batch, world)
   drawPass(batch, world)
   drawCalls(batch, world)
+  drawScans(batch, world)
   drawBall(batch, cam, world.ball)
   drawShotGuide(batch, world)
 }
@@ -310,6 +315,19 @@ function drawCalls(b: Batch, world: Match) {
       const y = Position.y[eid]
       b.arc({ x, y, z: 0.02 }, X, Y, 0.75, 0.06, 0, Math.PI * 2, CALL_RING, 24)
       if (kind === CallKind.Space) b.groundLine(x, y, Call.x[eid], Call.y[eid], 0.05, 0.015, CALL_LINE)
+    }
+  }
+}
+
+/** A player checking over their shoulder: a fading arc behind them, where the look takes in what they couldn't see. */
+function drawScans(b: Batch, world: Match) {
+  for (const team of world.teams) {
+    for (const eid of team.outfielders) {
+      const age = sinceScan(world, eid)
+      if (age > SCAN_LIFE) continue
+      const back = Facing.angle[eid] + Math.PI
+      const color: Color = [SCAN_ARC[0], SCAN_ARC[1], SCAN_ARC[2], SCAN_ARC[3] * (1 - age / SCAN_LIFE)]
+      b.arc({ x: Position.x[eid], y: Position.y[eid], z: 0.02 }, X, Y, 1.1, 0.05, back - 1.2, back + 1.2, color, 16)
     }
   }
 }

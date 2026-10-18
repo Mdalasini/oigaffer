@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, Outfielder, Position, Velocity } from './components'
+import { Facing, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollStopTime, rollTime } from './passing'
+import { lookAround } from './perception'
 import { choosePass, passOptions, strikePass } from './playmaking'
 import { passToOutfielder } from './systems/keeper'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from './touch'
@@ -31,6 +32,8 @@ function scene(seed: number, x: number, y: number, mx: number, my: number, blue:
   place(mate, mx, my, Math.PI)
   const spots: [number, number][] = [...blue, [20, 14], [20, -14]]
   world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, spots[i][0], spots[i][1], Math.PI))
+  // Everyone has had a look at where everyone else has been put.
+  lookAround(world)
   return world
 }
 
@@ -211,15 +214,15 @@ describe('choosing a pass', () => {
     expect(choosePass(world, world.carrier)).toBeNull()
   })
 
-  test('better vision spots more of the teammates over their shoulder', () => {
-    const spotted = (vision: number) => {
-      // Behind and to the side: outside their field of view, but a pass they could play.
-      const world = scene(6, 0, 0, -6, 8, [], { red: { outfielder: { vision } } })
-      Outfielder.vision[world.carrier] = vision
-      let seen = 0
-      for (let i = 0; i < 200; i++) if (passOptions(world, world.carrier).length > 0) seen++
-      return seen / 200
-    }
-    expect(spotted(20)).toBeGreaterThan(spotted(1) + 0.4)
+  test('a teammate the carrier has lost track of behind them is no option until they look round', () => {
+    const world = scene(6, 0, 0, 8, 6)
+    const [carrier, mate] = world.teams[RED].outfielders
+    expect(passOptions(world, carrier).some((o) => o.receiver === mate)).toBe(true)
+    // Five seconds later they've drifted round behind, unseen and silent: forgotten as an option.
+    place(mate, -7, 6)
+    world.time += 5
+    expect(passOptions(world, carrier).some((o) => o.receiver === mate)).toBe(false)
+    lookAround(world)
+    expect(passOptions(world, carrier).some((o) => o.receiver === mate)).toBe(true)
   })
 })

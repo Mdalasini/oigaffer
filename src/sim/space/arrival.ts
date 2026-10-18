@@ -2,6 +2,7 @@ import { angleDelta } from '../angles'
 import { Facing, Physical, Position, Velocity } from '../components'
 import { accelerationRate, topSpeed, turnRate } from '../grades'
 import type { Match } from '../match'
+import { view, type View } from '../perception'
 
 /** Seconds before a player responds to something new: until then they carry on as they were. */
 export const REACTION_TIME = 0.2
@@ -19,12 +20,17 @@ const TURN_FALLOFF_SPEED = 2.5
  *
  * This is the arrival-time model from pitch-control research. It is quick to
  * evaluate, which matters more here than precision.
+ *
+ * Judged by `by` (see `perception`), it's from where they reckon `eid` is and
+ * how they last saw them moving; by default, from the truth.
  */
-export function arrivalTime(world: Match, eid: number, x: number, y: number, reach = 0, reaction = REACTION_TIME): number {
-  const vx = Velocity.x[eid]
-  const vy = Velocity.y[eid]
-  const ox = Position.x[eid] - x
-  const oy = Position.y[eid] - y
+export function arrivalTime(world: Match, eid: number, x: number, y: number, reach = 0, reaction = REACTION_TIME, by = -1): number {
+  const truth = by === -1 || by === eid
+  if (!truth) view(world, by, eid, seen)
+  const vx = truth ? Velocity.x[eid] : seen.vx
+  const vy = truth ? Velocity.y[eid] : seen.vy
+  const ox = (truth ? Position.x[eid] : seen.x) - x
+  const oy = (truth ? Position.y[eid] : seen.y) - y
   if (ox * ox + oy * oy <= reach * reach) return 0
   // Carried within reach while still reacting: the first moment their path enters it.
   const a = vx * vx + vy * vy
@@ -47,9 +53,13 @@ export function arrivalTime(world: Match, eid: number, x: number, y: number, rea
   const top = keeper ? KEEPER_SPEED : topSpeed(Physical.pace[eid])
   const accel = keeper ? KEEPER_ACCEL : accelerationRate(Physical.acceleration[eid])
   // Keepers stay square to the ball and move sideways, so only outfielders pay to turn.
-  const turn = keeper ? 0 : Math.abs(angleDelta(Facing.angle[eid], Math.atan2(uy, ux))) / (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED))
+  const facing = truth ? Facing.angle[eid] : seen.facing
+  const turn = keeper ? 0 : Math.abs(angleDelta(facing, Math.atan2(uy, ux))) / (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED))
   return reaction + turn + runTime(gap - reach, Math.min(along, top), top, accel)
 }
+
+/** Scratch for how the judge sees the player being timed; read straight out, never held across calls. */
+const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
 
 /** Whether `eid` is either side's goalkeeper. */
 export const isKeeper = (world: Match, eid: number) => eid === world.teams[0].keeper || eid === world.teams[1].keeper
@@ -58,9 +68,10 @@ export const isKeeper = (world: Match, eid: number) => eid === world.teams[0].ke
  * The fastest (m/s) `eid` can be moving at any point on the way somewhere:
  * no one speeds up past their top speed, though they may already be going faster.
  */
-export function fastest(world: Match, eid: number): number {
+export function fastest(world: Match, eid: number, by = -1): number {
   const top = isKeeper(world, eid) ? KEEPER_SPEED : topSpeed(Physical.pace[eid])
-  return Math.max(top, Math.sqrt(Velocity.x[eid] ** 2 + Velocity.y[eid] ** 2))
+  view(world, by, eid, seen)
+  return Math.max(top, Math.sqrt(seen.vx * seen.vx + seen.vy * seen.vy))
 }
 
 /** Seconds to cover `distance` starting at `v0`, accelerating at `accel` up to `top`. */

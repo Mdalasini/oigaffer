@@ -59,7 +59,7 @@ const REST_DEFENCE_FROM = 3
 const REST_BEHIND = 6
 /** One runner in behind at a time for every this many outfielders. */
 const PLAYERS_PER_RUNNER = 4
-/** A teammate calls for it to feet when a pass to them would get through at least this often. */
+/** A teammate calls for it to feet when they reckon a pass to them would get through at least this often. */
 const CALL_WHEN_SAFE = 0.85
 
 // Running in behind: the cue is a carrier with at least CARRIER_TIME seconds
@@ -196,7 +196,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     }
   }
   Call.kind[eid] = CallKind.None
-  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid]).safety >= CALL_WHEN_SAFE) {
+  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid], eid).safety >= CALL_WHEN_SAFE) {
     Call.kind[eid] = CallKind.Feet
     Call.x[eid] = Position.x[eid]
     Call.y[eid] = Position.y[eid]
@@ -278,7 +278,7 @@ function showForIt(world: Match, eid: number): Intent {
     others.push(Math.atan2((showing ? Call.y[mate] : Position.y[mate]) - by, (showing ? Call.x[mate] : Position.x[mate]) - bx))
   }
   const score = (x: number, y: number) => {
-    const { value } = rateFeetPass(world, team, eid, x, y)
+    const { value } = rateFeetPass(world, team, eid, x, y, eid)
     const angle = Math.atan2(y - by, x - bx)
     const overlap = others.reduce((sum, other) => sum + Math.max(0, 1 - Math.abs(angleDelta(angle, other)) / SAME_ANGLE), 0)
     return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y) - SAME_ANGLE_COST * overlap
@@ -342,7 +342,7 @@ function runTarget(world: Match, eid: number) {
     for (const across of RUN_ACROSS) {
       const x = u * attackDir(team)
       const y = clamp(Position.y[eid] + across, -(W - 3), W - 3)
-      const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
+      const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, eid) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
       if (race < MIN_RACE) continue
       const score = threat(team, x, y) * race
       if (score > bestScore) {

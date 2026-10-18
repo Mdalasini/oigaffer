@@ -11,10 +11,11 @@ import {
   passAngleError,
   passWeightError,
   reactionDelay,
+  preReceiveScanChance,
   readLag,
+  scanRate,
   shotAngleError,
   sideStepSpeed,
-  spotChance,
   tackleSkill,
   topSpeed,
   touchAngleError,
@@ -47,7 +48,7 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'tackling', label: 'Tackling', detail: (g) => `${Math.round(tackleSkill(g, 10) * 100)}% vs a 10 dribbler, before reach` },
       { key: 'passing', label: 'Passing', detail: (g) => `aim error ±${deg(passAngleError(g))}°, weight ±${Math.round(passWeightError(g) * 100)}%` },
       { key: 'firstTouch', label: 'First touch', detail: (g) => `takes a ${cleanTakeSpeed(g).toFixed(0)} m/s ball dead` },
-      { key: 'vision', label: 'Vision', detail: (g) => `spots ${Math.round(spotChance(g) * 100)}% of teammates over the shoulder` },
+      { key: 'vision', label: 'Vision', detail: (g) => `scans every ${(1 / scanRate(g)).toFixed(1)} s, and before ${Math.round(preReceiveScanChance(g) * 100)}% of passes to them` },
       { key: 'decisions', label: 'Decisions', detail: (g) => `misjudges options by ±${Math.round(judgementError(g) * 100)}%` },
       { key: 'offTheBall', label: 'Off the ball', detail: (g) => `goes for ${Math.round((0.15 + 0.45 * gradeT(g)) * 100)}% of chances to run in behind` },
       { key: 'positioning', label: 'Positioning', detail: (g) => `picks up a blind-side run in ${Math.round(blindSideDelay(g) * 1000)} ms; springs the trap ${Math.round(trapChance(g) * 100)}% of the time` },
@@ -168,7 +169,7 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
         the carrier has time to play forward; a yellow ring means one is calling for it, with a line to the space they
         want it in. When a pass is the better bet it's played: a white ring marks where it's aimed, dashed for a through
         ball. Without the ball, one defender presses, one covers behind them, and the rest pick up the attackers around
-        their zones. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
+        their zones. Players decide from what they've seen: a white arc behind someone is a look over the shoulder. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
         <span className="text-orange-300">large</span> knocks it ahead. Most shots from here would land inside the yellow circle, which grows with distance and pressure. Space makes
         whoever has the ball shoot.
       </p>
