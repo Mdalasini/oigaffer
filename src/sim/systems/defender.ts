@@ -7,6 +7,7 @@ import type { Match } from '../match'
 import { attackedGoalX } from '../teams'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from '../touch'
 import { seenFacing, seenVx, seenVy, seenX, seenY } from '../perception'
+import { STAND_WINDUP } from './challenge'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
 const STANDOFF = 1.7
@@ -25,8 +26,8 @@ const POSITION_GAIN = 3
  * on. Committing is a gamble, so they don't go every time they could.
  */
 const POUNCE_RATE = 4
-const STAND_RATE_BASE = 0.3
-const STAND_RATE_SKILL = 1
+const STAND_RATE_BASE = 0.1
+const STAND_RATE_SKILL = 0.3
 const STAND_RATE_SHIELDED = 0.4
 const BARGE_RATE = 1.2
 const SLIDE_RATE_BASE = 0.2
@@ -94,13 +95,14 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   const ballDistance = Math.hypot(toBallX, toBallY)
   const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
   const carrierDistance = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
-  const exposed = footDistance(carrier, ball) > EXPOSED_DISTANCE
+  // A standing tackle is timed for where the ball will be when the foot gets there: off the carrier's feet, ideally.
+  const exposedAtContact = exposedIn(world, eid, STAND_WINDUP)
   const shielded = Shield.active[carrier] === 1 || bodyBetween(carrier, eid, ball)
   const skill = gradeT(Outfielder.tackling[eid])
   const chance = (rate: number) => rng() < rate * dt
 
   if (ballDistance <= STAND_REACH && ballAhead <= STAND_CONE) {
-    const rate = exposed ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
+    const rate = exposedAtContact ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
     if (chance(rate)) return startStandingTackle(eid)
   }
   if (carrierDistance <= BARGE_RANGE && footDistance(carrier, ball) < CONTROL_RADIUS) {

@@ -4,7 +4,7 @@ import { getUp, resolveBarge, resolveSlideTackle, resolveStandingTackle, slideRe
 import type { Match } from '../match'
 
 /** A standing tackle meets the ball this long (s) after it starts, and is over by STAND_DURATION. */
-const STAND_WINDUP = 0.18
+export const STAND_WINDUP = 0.18
 const STAND_DURATION = 0.45
 /** Sliding defenders decelerate at this rate (m/s²) and stay down this long (s) once stopped. */
 const SLIDE_DECEL = 7
