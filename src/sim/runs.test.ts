@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
-import { SMALL_SIDED_PITCH } from './pitch'
+import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { lookAround } from './perception'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { attackingIntent, restDefender } from './attacking'
-import { passOptions } from './playmaking'
+import { passOptions, rateFeetPass } from './playmaking'
 import { along, homePosition, onsideLimit } from './shape'
 import { passSafety } from './space/control'
 import { FOOT_OFFSET } from './touch'
@@ -254,12 +254,23 @@ describe('five a side: complementary support', () => {
   })
 
   test('the rest defence holds behind the ball even when the deepest place left is ahead of it', () => {
-    // The base player has it deep; the next deepest place in the diamond is a wide one, level with or ahead of the ball.
-    const world = closedDown(-10, 0, [[-6, -15], [-6, 15], [8, 0]], [[-30, 15], [-28, -15], [20, 15], [22, -15]])
+    // The base player has it at halfway; the next deepest place in the diamond is a wide one, level with or ahead of the ball.
+    const world = closedDown(0, 0, [[4, -15], [4, 15], [16, 0]], [[-20, 15], [-18, -15], [20, 15], [22, -15]])
     const rest = restDefender(world)
     expect(along(RED, homePosition(world, rest).x)).toBeGreaterThan(along(RED, Position.x[world.ball]) - 1)
     const intent = attackingIntent(world, rest)
     expect(along(RED, intent.x)).toBeLessThan(along(RED, Position.x[world.ball]) - 3)
+  })
+
+  test('building it up deep in their own half, the rest defence comes up level with the ball to offer the pass across', () => {
+    // The base player has it a few metres from their own goal line, under no pressure; the next deepest place is ahead of the ball.
+    const world = closedDown(-24, 0, [[-20, -14], [-20, 14], [-5, 0]], [[-5, 10], [-5, -10], [10, 5], [12, -5]])
+    const rest = restDefender(world)
+    const ball = along(RED, Position.x[world.ball])
+    expect(along(RED, homePosition(world, rest).x)).toBeGreaterThan(ball)
+    const intent = attackingIntent(world, rest)
+    expect(along(RED, intent.x)).toBeGreaterThan(ball - 1)
+    expect(along(RED, intent.x)).toBeLessThanOrEqual(ball + 1e-4)
   })
 
   test('two or fewer outfielders a side spare nobody for rest defence', () => {
@@ -297,4 +308,126 @@ describe('five a side: complementary support', () => {
       expect(tooManyRunning).toBe(0)
     })
   })
+})
+
+describe('opening a lane', () => {
+  test('a teammate ahead of the ball whose lane is cut out moves across off their place to where a pass would reach them', () => {
+    // Red's base player has the ball in midfield with time, facing forward. A Blue defender stands in the lane to the
+    // pivot's place up front; the others are well away.
+    const world = createMatch({ seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
+    const [carrier, wideA, wideB, pivot] = world.teams[RED].outfielders
+    handOver(world, carrier)
+    world.phase = 'play'
+    world.possession = RED
+    place(carrier, -14, 0)
+    setVec(Position, world.ball, -14 + FOOT_OFFSET, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    place(wideA, -10, -16)
+    place(wideB, -10, 16)
+    const [blocker, ...others] = world.teams[BLUE].outfielders
+    place(others[0], -2, -18, Math.PI)
+    place(others[1], 1, 19, Math.PI)
+    place(others[2], 10, 15, Math.PI)
+    place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+    // Where the blocker goes depends on the pivot's place, which depends on Blue's line: they stand in front of it.
+    place(blocker, -5, 0, Math.PI)
+    place(pivot, 6, 0)
+    const home = homePosition(world, pivot)
+    place(pivot, home.x, home.y)
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    place(blocker, bx + (home.x - bx) * 0.5, by + (home.y - by) * 0.5, Math.PI)
+    // No run in behind for now: this is about holding a place.
+    Run.rest[pivot] = 5
+    lookAround(world)
+    const spot = attackingIntent(world, pivot)
+    expect(OffBall.showing[pivot]).toBe(0)
+    const safety = (x: number, y: number) => rateFeetPass(world, RED, pivot, x, y).safety
+    expect(safety(home.x, home.y)).toBeLessThan(0.3)
+    expect(safety(spot.x, spot.y)).toBeGreaterThan(0.6)
+    // Across or forward of their place, not dropping towards the ball.
+    expect(along(RED, spot.x)).toBeGreaterThan(along(RED, home.x) - 0.5)
+  })
+
+  test('who looks for a lane goes by where they reckon their teammates are, not where those teammates have since gone unseen', () => {
+    const world = createMatch({ outfielders: 10, seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
+    const reds = world.teams[RED].outfielders
+    const carrier = reds[4]
+    const seeker = reds[9]
+    const others = reds.filter((eid) => eid !== carrier && eid !== seeker)
+    handOver(world, carrier)
+    world.phase = 'play'
+    world.possession = RED
+    place(carrier, -20, 0)
+    setVec(Position, world.ball, -20 + FOOT_OFFSET, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    // Everyone else well away from the ball: deep, or wide and far up.
+    others.forEach((eid, i) => place(eid, i < 4 ? -40 : 15, i < 4 ? -25 + 16 * i : (i % 2 ? -30 : 30)))
+    const blues = world.teams[BLUE].outfielders
+    // Blue's line is two wide defenders at x = 5; the rest are out of play behind the ball.
+    blues.forEach((eid, i) => place(eid, i < 3 ? 5 : -45, i < 3 ? (i % 2 ? -30 : 30) : -30 + 8 * i, Math.PI))
+    place(world.teams[BLUE].keeper, FULL_PITCH.halfLength - 0.5, 0, Math.PI)
+    place(seeker, 0, 0)
+    const home = homePosition(world, seeker)
+    place(seeker, home.x, home.y)
+    Run.rest[seeker] = 5
+    // One Blue defender in the lane to the seeker's place.
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    place(blues[0], bx + (home.x - bx) * 0.5, by + (home.y - by) * 0.5, Math.PI)
+    lookAround(world)
+    attackingIntent(world, seeker)
+    const lane = [OffBall.laneX[seeker], OffBall.laneY[seeker]]
+    expect(Math.hypot(lane[0], lane[1])).toBeGreaterThan(1)
+    // Three teammates slip in nearer the ball, ahead of it, while the seeker isn't looking.
+    place(others[4], bx + 6, by - 5)
+    place(others[5], bx + 6, by + 5)
+    place(others[6], bx + 8, by)
+    attackingIntent(world, seeker)
+    expect([OffBall.laneX[seeker], OffBall.laneY[seeker]]).toEqual(lane)
+  })
+
+  test('the rest defence and players behind the ball keep their places', () => {
+    const world = createMatch({ seed: 5 })
+    const [carrier, wideA, wideB, pivot] = world.teams[RED].outfielders
+    handOver(world, wideA)
+    world.phase = 'play'
+    world.possession = RED
+    place(wideA, 10, -10)
+    setVec(Position, world.ball, 10 + FOOT_OFFSET, -10, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    place(carrier, -10, 0)
+    place(wideB, 0, 14)
+    place(pivot, 18, 0)
+    world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, 22, -12 + 8 * i, Math.PI))
+    place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+    lookAround(world)
+    const rest = restDefender(world)
+    expect(rest).toBe(carrier)
+    for (const eid of [carrier, wideB]) {
+      const home = homePosition(world, eid)
+      expect(along(RED, home.x)).toBeLessThan(along(RED, Position.x[world.ball]) + 2)
+      attackingIntent(world, eid)
+      expect(OffBall.laneX[eid]).toBe(0)
+      expect(OffBall.laneY[eid]).toBe(0)
+    }
+  })
+
+  test('eleven a side, with support opening lanes and the rest defence offering the pass across, under half the passes go backward', () => {
+    // Pooled over three ten-minute matches: measured at 45–49% over seeds 21–29, against 54–56% with the rest
+    // defence dropping off in build-up and nobody moving to open a lane.
+    let passes = 0
+    let backward = 0
+    for (const seed of [24, 25, 26]) {
+      const world = createMatch({ seed, outfielders: 10 })
+      world.onCue = (c) => {
+        if (c.kind !== 'passStruck' || !world.pass) return
+        passes++
+        if (along(world.possession, world.pass.x) - along(world.possession, Position.x[world.ball]) <= -2) backward++
+      }
+      while (world.time < 600) stepMatch(world)
+    }
+    expect(passes).toBeGreaterThan(300)
+    expect(backward / passes).toBeLessThan(0.51)
+  }, 30_000)
 })
