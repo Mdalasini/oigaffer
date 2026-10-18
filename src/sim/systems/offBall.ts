@@ -2,10 +2,10 @@ import { hasComponent, query } from 'bitecs'
 import { Defender, DefenderMode, Effort, Mark, MoveIntent, OffBall, Outfielder, Position, Run, RunPhase, Sliding, Team } from '../components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
 import { attackingIntent, endRun, tickRun } from '../attacking'
-import { lineTarget, pressCue, trapping } from './defending'
+import { coverSpot, lineTarget, pressCue, trapping } from './defending'
 import type { Match } from '../match'
 import { setTarget, steer } from '../movement'
-import { along, onsideLimit } from '../shape'
+import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
 
 /** Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so the team doesn't move in lockstep. */
@@ -16,8 +16,7 @@ const DECIDE_SPREAD = 0.2
 const BASE_RADIUS = 1.2
 const RADIUS_PER_METRE = 0.06
 
-/** The covering defender sits this far (m) behind the ball, towards goal, and this far across towards the free attacker. */
-const COVER_DEPTH = 5.5
+/** A defender covering and marking at once shades this far (m) across towards their man. */
 const COVER_SHADE = 3
 /** Attackers aim to stay this far (m) onside of the opposition's line, or RUNNER_MARGIN when running in behind. */
 const ONSIDE_MARGIN = 1
@@ -33,17 +32,17 @@ const MARK_LOOSE_AT = 20
 /** A marker shades this far (m) towards the ball, to see it and cut the pass. */
 const MARK_BALL_SHADE = 1
 /**
- * How far nearer to goal than the ball (m) the free attacker must get before
- * the covering defender picks them up entirely, and how far behind the ball
- * before they cover the presser instead.
+ * How far nearer to goal than the ball (m) a man must get before their
+ * marker picks them up entirely, and how far behind the ball before the
+ * marker leaves them to their zone.
  */
 const MARK_WHEN_AHEAD = 2
-const COVER_WHEN_BEHIND = 5
+const MARK_FROM_BEHIND = 5
 
 /**
  * The outfielders without a job on the ball: the carrier's teammates hold
  * the shape, show for it or run in behind (see `attackingIntent`), and the
- * presser's teammates cover and mark. While a keeper holds the ball everyone is off it: the keeper's
+ * presser's teammates do the jobs their team has shared out (see `defend`). While a keeper holds the ball everyone is off it: the keeper's
  * team spreads out to receive, and the other side picks up a man each.
  */
 export function offBallSystem(world: Match, dt: number) {
@@ -70,7 +69,7 @@ export function offBallSystem(world: Match, dt: number) {
       if (attacking) {
         const intent = attackingIntent(world, eid)
         go(world, eid, intent.x, intent.y, intent.effort)
-      } else cover(world, eid)
+      } else defend(world, eid)
     }
     const face = attacking ? halfTurn(world, eid) : { x: Position.x[ball] - Position.x[eid], y: Position.y[ball] - Position.y[eid] }
     steer(eid, face.x, face.y)
@@ -78,30 +77,33 @@ export function offBallSystem(world: Match, dt: number) {
 }
 
 /**
- * Cover the presser or mark the free attacker. The defender sits behind the
- * ball, ready to step in if the presser is beaten. As the free attacker gets
- * nearer goal than the ball, the defender slides across to pick them up,
- * goal-side and a little towards the ball. Behind the ball the attacker is
- * less of a threat and can be left until they come forward.
+ * Does the job the team has given them. The cover stands behind the ball,
+ * between it and the middle of the goal, ready to step in if the presser is
+ * beaten. Everyone else starts from their place in the block, which slides
+ * with the ball and keeps the team compact. A defender with a man moves off
+ * that place to pick him up as he becomes a threat: goal-side of him once
+ * he's nearer goal than the ball, tighter the nearer he is to it. A man well
+ * behind the ball is watched from the zone, not followed.
  */
-function cover(world: Match, eid: number) {
+function defend(world: Match, eid: number) {
   const ball = world.ball
-  const goalX = ownGoalX(Team.id[eid])
+  const team = Team.id[eid]
+  const goalX = ownGoalX(team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  const team = Team.id[eid]
+  let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : homePosition(world, eid)
   const man = Mark.target[eid]
-  const toGoal = unit(goalX - bx, -by)
-  let x = bx + toGoal.x * COVER_DEPTH
-  let y = by + toGoal.y * COVER_DEPTH
   if (man !== -1) {
     const mx = Position.x[man]
     const my = Position.y[man]
-    // Covering: shade across towards the side the free attacker is on.
-    const side = Math.sign(-(mx - bx) * toGoal.y + (my - by) * toGoal.x)
-    x += -toGoal.y * side * COVER_SHADE
-    y += toGoal.x * side * COVER_SHADE
-    // Marking: goal-side of them, tighter the nearer they are to the ball.
+    if (Mark.cover[eid]) {
+      // Covering and marking at once: shade across towards the side the man is on.
+      const toGoal = unit(goalX - bx, -by)
+      const side = Math.sign(-(mx - bx) * toGoal.y + (my - by) * toGoal.x)
+      x += -toGoal.y * side * COVER_SHADE
+      y += toGoal.x * side * COVER_SHADE
+    }
+    // Goal-side of them, tighter the nearer they are to the ball, shading towards it to see it and cut the pass.
     const manToGoal = unit(goalX - mx, -my)
     const manToBall = unit(bx - mx, by - my)
     // On a pressing cue they get tight, to deny the pass.
@@ -110,7 +112,7 @@ function cover(world: Match, eid: number) {
     const markX = mx + manToGoal.x * depth + manToBall.x * MARK_BALL_SHADE
     const markY = my + manToGoal.y * depth + manToBall.y * MARK_BALL_SHADE
     const ahead = Math.hypot(goalX - bx, by) - Math.hypot(goalX - mx, my)
-    const w = clamp((ahead + COVER_WHEN_BEHIND) / (MARK_WHEN_AHEAD + COVER_WHEN_BEHIND), 0, 1)
+    const w = clamp((ahead + MARK_FROM_BEHIND) / (MARK_WHEN_AHEAD + MARK_FROM_BEHIND), 0, 1)
     x += (markX - x) * w
     y += (markY - y) * w
   }

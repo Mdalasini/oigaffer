@@ -193,3 +193,50 @@ describe('moving like footballers', () => {
     expect(goalSide / coverSamples).toBeGreaterThan(0.75)
   })
 })
+
+describe('moving like footballers, five a side', () => {
+  const world = createMatch({ seed: 9 })
+  let samples = 0
+  let easy = 0
+  let pairs = 0
+  let bunched = 0
+  let coverSamples = 0
+  let goalSide = 0
+  for (let tick = 0; world.time < 300; tick++) {
+    stepMatch(world)
+    if (tick % 12 || world.phase !== 'play') continue
+    for (const team of [RED, BLUE]) {
+      const squad = world.teams[team].outfielders
+      for (let i = 0; i < squad.length; i++) {
+        for (let j = i + 1; j < squad.length; j++) {
+          pairs++
+          if (Math.hypot(Position.x[squad[i]] - Position.x[squad[j]], Position.y[squad[i]] - Position.y[squad[j]]) < 3) bunched++
+        }
+      }
+    }
+    for (const eid of allOutfielders(world)) {
+      if (eid === world.carrier || eid === world.presser) continue
+      samples++
+      if (Math.hypot(Velocity.x[eid], Velocity.y[eid]) < 4.5) easy++
+      const team = world.teams[RED].outfielders.includes(eid) ? RED : BLUE
+      if (team === world.possession) continue
+      coverSamples++
+      const goalX = ownGoalX(team)
+      if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
+    }
+  }
+
+  test('off the ball they mostly walk and jog', () => {
+    // Measured at 78–81% across seeds.
+    expect(easy / samples).toBeGreaterThan(0.75)
+  })
+
+  test('four teammates keep apart rather than crowd each other', () => {
+    // Measured at about 5%: before jobs were shared out, every spare defender went to the same cover spot and it was 9%.
+    expect(bunched / pairs).toBeLessThan(0.07)
+  })
+
+  test('defenders without the ball stay goal-side of it', () => {
+    expect(goalSide / coverSamples).toBeGreaterThan(0.7)
+  })
+})

@@ -3,9 +3,9 @@ import { Facing, Mark, OffBall, Outfielder, Position, Run, RunPhase, Velocity } 
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { strikePass } from './playmaking'
-import { along, baseLine } from './shape'
+import { along, baseLine, homePosition } from './shape'
 import { attackingIntent } from './attacking'
-import { canPlayForward, lineTarget, maybeSpringTrap, pressCue, trapping } from './systems/defending'
+import { canPlayForward, coverSpot, lineTarget, maybeSpringTrap, pressCue, trapping } from './systems/defending'
 import { FOOT_OFFSET } from './touch'
 
 const RED = 0
@@ -217,5 +217,60 @@ describe('review fixes', () => {
     world.windup = { carrier: world.carrier, option: { receiver: world.teams[RED].outfielders[1], kind: 'feet', x: 8, y: 8, speed: 9, safety: 1, value: 1 }, at: world.time + 0.2 }
     resetMatch(world)
     expect(world.windup).toBeNull()
+  })
+})
+
+describe('five-a-side: defending as a unit', () => {
+  /** Red's four attacking from (x, y) with the ball, the rest where given; Blue's four where given. */
+  function five(red: [number, number][], blue: [number, number][]): Match {
+    const world = createMatch({ seed: 1 })
+    const reds = world.teams[RED].outfielders
+    handOver(world, reds[0])
+    reds.forEach((eid, i) => place(eid, red[i][0], red[i][1], 0))
+    setVec(Position, world.ball, red[0][0] + FOOT_OFFSET, red[0][1], BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, blue[i][0], blue[i][1], Math.PI))
+    place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+    world.presser = world.teams[BLUE].outfielders[0]
+    world.nextMarking = [0, 0]
+    // Everyone decides on this step.
+    for (const eid of [...reds, ...world.teams[BLUE].outfielders]) OffBall.decideIn[eid] = 0
+    return world
+  }
+
+  test('one presses, one covers behind them, and the dangerous men are picked up once each', () => {
+    // Red's carrier in midfield; two Red attackers high, one deep behind the ball.
+    const world = five([[0, 0], [15, -8], [15, 8], [-12, 0]], [[2, 0], [10, 0], [14, -6], [14, 6]])
+    stepMatch(world)
+    const blue = world.teams[BLUE].outfielders
+    const [, highLeft, highRight] = world.teams[RED].outfielders
+    expect(Mark.target[world.presser]).toBe(world.carrier)
+    const covers = blue.filter((d) => Mark.cover[d])
+    expect(covers).toHaveLength(1)
+    expect(covers[0]).not.toBe(world.presser)
+    const marked = blue.filter((d) => d !== world.presser).map((d) => Mark.target[d])
+    expect(marked).toContain(highLeft)
+    expect(marked).toContain(highRight)
+    expect(new Set(marked.filter((m) => m !== -1)).size).toBe(marked.filter((m) => m !== -1).length)
+  })
+
+  test('the cover goes behind the ball, between it and goal', () => {
+    const world = five([[0, 0], [15, -8], [15, 8], [-12, 0]], [[2, 0], [10, 0], [14, -6], [14, 6]])
+    stepMatch(world)
+    const cover = world.teams[BLUE].outfielders.find((d) => Mark.cover[d])!
+    const spot = coverSpot(world, BLUE)
+    expect(Math.hypot(OffBall.targetX[cover] - spot.x, OffBall.targetY[cover] - spot.y)).toBeLessThan(4)
+    expect(along(BLUE, OffBall.targetX[cover])).toBeLessThan(along(BLUE, Position.x[world.ball]))
+  })
+
+  test('a man well behind the ball is watched from the zone, not followed', () => {
+    // A deep Red player is the only one left; whoever has him stays near their place in the block.
+    const world = five([[0, 0], [-14, -12], [-14, 12], [-20, 0]], [[2, 0], [10, 0], [6, -6], [6, 6]])
+    stepMatch(world)
+    for (const d of world.teams[BLUE].outfielders) {
+      if (d === world.presser || Mark.cover[d] || Mark.target[d] === -1) continue
+      const home = homePosition(world, d)
+      expect(Math.hypot(OffBall.targetX[d] - home.x, OffBall.targetY[d] - home.y)).toBeLessThan(4.5)
+    }
   })
 })
