@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Dribbler, Facing, Offside, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
+import { lookAround } from './perception'
 import { createMatch, endShot, handOver, requestShot, scoreFromPlay, setVec, stepMatch, winBall, type Match } from './match'
 import { inOffsidePosition } from './offside'
 import { passOptions, strikePass, type PassOption } from './playmaking'
@@ -33,6 +34,7 @@ function scene(x: number, mx: number, my: number, d1: number, d2: number): Match
   place(blueA, d1, -10, Math.PI)
   place(blueB, d2, 10, Math.PI)
   place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+  lookAround(world)
   return world
 }
 

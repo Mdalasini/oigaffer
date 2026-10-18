@@ -1,10 +1,11 @@
 import { angleDelta } from './angles'
-import { Call, CallKind, Effort, Facing, OffBall, Outfielder, Position, Run, RunPhase } from './components'
+import { Call, CallKind, Effort, OffBall, Outfielder, Position, Run, RunPhase } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { cue } from './cues'
 import { gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
+import { seenFacing } from './perception'
 import { rateFeetPass } from './playmaking'
 import { gaussian } from './rng'
 import { along, homePosition, onsideLimit } from './shape'
@@ -59,7 +60,7 @@ const REST_DEFENCE_FROM = 3
 const REST_BEHIND = 6
 /** One runner in behind at a time for every this many outfielders. */
 const PLAYERS_PER_RUNNER = 4
-/** A teammate calls for it to feet when a pass to them would get through at least this often. */
+/** A teammate calls for it to feet when they reckon a pass to them would get through at least this often. */
 const CALL_WHEN_SAFE = 0.85
 
 // Running in behind: the cue is a carrier with at least CARRIER_TIME seconds
@@ -136,7 +137,7 @@ export function attackingIntent(world: Match, eid: number): Intent {
     endRun(world, eid)
   }
 
-  if (pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
+  if (pressured(world, eid, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
   OffBall.showing[eid] = 0
   if (runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
     const target = runTarget(world, eid)
@@ -196,7 +197,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     }
   }
   Call.kind[eid] = CallKind.None
-  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid]).safety >= CALL_WHEN_SAFE) {
+  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid], eid).safety >= CALL_WHEN_SAFE) {
     Call.kind[eid] = CallKind.Feet
     Call.x[eid] = Position.x[eid]
     Call.y[eid] = Position.y[eid]
@@ -253,10 +254,14 @@ function runnerFree(world: Match, eid: number): boolean {
   return squad.filter((mate) => mate !== eid && Run.phase[mate] !== RunPhase.None).length < limit
 }
 
-/** Whether the carrier needs a way out: less than `time` seconds before they're closed down, or facing their own goal. */
-function pressured(world: Match, carrier: number, time: number): boolean {
+/**
+ * Whether the carrier needs a way out, as `eid` sees it: less than `time`
+ * seconds before they're closed down, or facing their own goal.
+ */
+function pressured(world: Match, eid: number, time: number): boolean {
+  const carrier = world.carrier
   const forward = attackDir(world.possession) > 0 ? 0 : Math.PI
-  return timeOnBall(world, carrier) < time || Math.abs(angleDelta(Facing.angle[carrier], forward)) > FACING_BACK
+  return timeOnBall(world, carrier, eid) < time || Math.abs(angleDelta(seenFacing(world, eid, carrier), forward)) > FACING_BACK
 }
 
 /**
@@ -278,7 +283,7 @@ function showForIt(world: Match, eid: number): Intent {
     others.push(Math.atan2((showing ? Call.y[mate] : Position.y[mate]) - by, (showing ? Call.x[mate] : Position.x[mate]) - bx))
   }
   const score = (x: number, y: number) => {
-    const { value } = rateFeetPass(world, team, eid, x, y)
+    const { value } = rateFeetPass(world, team, eid, x, y, eid)
     const angle = Math.atan2(y - by, x - bx)
     const overlap = others.reduce((sum, other) => sum + Math.max(0, 1 - Math.abs(angleDelta(angle, other)) / SAME_ANGLE), 0)
     return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y) - SAME_ANGLE_COST * overlap
@@ -319,7 +324,8 @@ function runCue(world: Match, eid: number): boolean {
   const limit = onsideLimit(world, team)
   if (L - limit < SPACE_BEHIND || limit - along(team, Position.x[eid]) > NEAR_LINE) return false
   const forward = attackDir(team) > 0 ? 0 : Math.PI
-  return timeOnBall(world, carrier) >= CARRIER_TIME && Math.abs(angleDelta(Facing.angle[carrier], forward)) <= CARRIER_FACING
+  // As they see it: a carrier they reckon has time and is facing forward.
+  return timeOnBall(world, carrier, eid) >= CARRIER_TIME && Math.abs(angleDelta(seenFacing(world, eid, carrier), forward)) <= CARRIER_FACING
 }
 
 /** Chance, each time the cue is there, that they go: better movers spot the moment more often. */
@@ -342,7 +348,7 @@ function runTarget(world: Match, eid: number) {
     for (const across of RUN_ACROSS) {
       const x = u * attackDir(team)
       const y = clamp(Position.y[eid] + across, -(W - 3), W - 3)
-      const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
+      const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, eid) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
       if (race < MIN_RACE) continue
       const score = threat(team, x, y) * race
       if (score > bestScore) {

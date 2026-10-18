@@ -32,14 +32,25 @@ without it, still on the small pitch for now.
   space ahead of a teammate, weighted so the runner meets it in stride. Each
   option is rated by expected threat: what it's worth if it gets through, less
   the other team's threat from where it would be lost. The space model judges
-  how likely it is to get through. **Vision** decides which teammates outside
-  the carrier's field of view they spot, and **decisions** how far their
-  judgement of each option is off. **Passing** sets how true it goes in line
+  how likely it is to get through, from where the carrier reckons everyone
+  is (see *What players know*), and **decisions** how far their judgement of
+  each option is off. **Passing** sets how true it goes in line
   and weight, worse under pressure, over distance and across the body. The
   receiver goes to meet the ball, then sets it with a directional first touch:
   towards goal and away from pressure. **First touch** sets how fast a ball
   they can take dead and how true the touch goes. A faster ball bounces off
   them. Anyone can cut a pass out.
+- **What players know (vision 1–20)** — players decide from what they've
+  seen, not from where everyone really is. Anyone in the 120° in front of
+  them is kept up to date; outside it, they're remembered where they were
+  last seen, carried on the way they were going. A look over the
+  shoulder takes in everyone at once: **vision** sets how often they scan
+  (every 7 s at 1, under 2 s at 20) and how often they check before a pass
+  reaches them. A teammate calling for it is heard wherever they are. So a
+  carrier who hasn't scanned doesn't count the defender closing in from
+  behind, a receiver who hasn't checked may touch it straight into them, and
+  a teammate out of sight for a few seconds drops out of mind as an option.
+  A white arc behind a player marks a scan.
 - **Off the ball (1–20)** — the carrier's teammates hold their places in the
   shape and call for it when free. When the carrier is closed down or facing
   their own goal, the one or two nearest *show for it*: each goes to the spot

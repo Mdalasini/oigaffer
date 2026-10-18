@@ -4,6 +4,7 @@ import { cleanTakeSpeed, firstTouchError, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { rollDistanceIn, rollStopTime } from '../passing'
 import { playBall } from '../offside'
+import { seenX, seenY } from '../perception'
 import { gaussian } from '../rng'
 import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
@@ -125,6 +126,9 @@ export function receiveSystem(world: Match, _dt: number) {
 /**
  * Where the receiver wants their first touch to take the ball: towards the
  * goal they attack, turned away from the nearest opponent if one is close.
+ * That's the nearest they know of: one coming from behind that they haven't
+ * scanned for is taken where they last saw him, and the touch may go
+ * straight into him.
  */
 function touchDirection(world: Match, eid: number) {
   const goalX = attackedGoalX(world.possession)
@@ -135,18 +139,24 @@ function touchDirection(world: Match, eid: number) {
   y /= length
   let nearest = -1
   let gap = PRESSURE_RANGE
+  let nx = 0
+  let ny = 0
   for (const other of world.teams[opponent(world.possession)].outfielders) {
-    const d = Math.hypot(Position.x[other] - Position.x[eid], Position.y[other] - Position.y[eid])
+    const ox = seenX(world, eid, other)
+    const oy = seenY(world, eid, other)
+    const d = Math.hypot(ox - Position.x[eid], oy - Position.y[eid])
     if (d < gap) {
       nearest = other
       gap = d
+      nx = ox
+      ny = oy
     }
   }
   if (nearest !== -1) {
     // Lean away from them, the more the closer they are.
     const away = 1 - gap / PRESSURE_RANGE
-    x += ((Position.x[eid] - Position.x[nearest]) / gap) * away
-    y += ((Position.y[eid] - Position.y[nearest]) / gap) * away
+    x += ((Position.x[eid] - nx) / gap) * away
+    y += ((Position.y[eid] - ny) / gap) * away
   }
   // Keep it on the pitch.
   if (Math.abs(Position.y[eid]) > PITCH_HALF_WIDTH - 2 && Math.sign(y) === Math.sign(Position.y[eid])) y = 0

@@ -37,6 +37,7 @@ import { createRng, type Rng } from './rng'
 import { clearIntentions } from './attacking'
 import { cue, type Cue } from './cues'
 import { clearOffside, playedBy } from './offside'
+import { createMemory, lookAround, perceptionSystem, type Memory } from './perception'
 import { baseLine, homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
 import type { GoalPoint, Vec3 } from './shooting'
@@ -198,6 +199,8 @@ export interface MatchContext {
   phaseTime: number
   ball: number
   teams: [TeamPlayers, TeamPlayers]
+  /** What each player knows of the others. */
+  memory: Memory
   /** The team on the ball. */
   possession: number
   /**
@@ -280,6 +283,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
       { outfielders: [], keeper: 0 },
       { outfielders: [], keeper: 0 },
     ],
+    memory: createMemory([], 0),
     possession: 0,
     carrier: 0,
     presser: 0,
@@ -314,6 +318,8 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     world.teams[team].outfielders = Array.from({ length: outfielders }, (_, slot) => addOutfielder(world, team, slot))
   }
   for (const team of [0, 1]) world.teams[team].keeper = addKeeper(world, team)
+  const players = [...world.teams[0].outfielders, ...world.teams[1].outfielders, world.teams[0].keeper, world.teams[1].keeper]
+  world.memory = createMemory(players, Math.max(...players) + 1)
 
   TEAM_NAMES.forEach((name, team) => {
     for (const role of ROLES) {
@@ -701,6 +707,8 @@ export function takeRestart(world: Match) {
   world.lastTouchedBy = taker
   world.lastTouchDeliberate = true
   world.restart = null
+  // Before play resumes, everyone has had a look around.
+  lookAround(world)
   setPossession(world, team, taker)
   Defender.mode[world.presser] = DefenderMode.Jockey
   Defender.challengeDelay[world.presser] = 0
@@ -764,6 +772,7 @@ export function setPhase(world: Match, phase: Phase) {
  * Named so a profiler can time each one.
  */
 export const MATCH_SYSTEMS: readonly (readonly [string, (world: Match, dt: number) => void])[] = [
+  ['perception', perceptionSystem],
   ['touchCooldown', touchCooldownSystem],
   ['balance', balanceSystem],
   ['roles', rolesSystem],

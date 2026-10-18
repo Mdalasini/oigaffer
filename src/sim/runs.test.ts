@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
+import { lookAround } from './perception'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { attackingIntent, restDefender } from './attacking'
 import { passOptions } from './playmaking'
@@ -28,6 +29,7 @@ function scene(seed: number, x: number, y: number, mx: number, my: number, blue:
   place(mate, mx, my)
   world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, blue[i][0], blue[i][1], Math.PI))
   place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+  lookAround(world)
   return world
 }
 
@@ -198,6 +200,7 @@ describe('five a side: complementary support', () => {
     place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
     world.phase = 'play'
     world.possession = RED
+    lookAround(world)
     return world
   }
 

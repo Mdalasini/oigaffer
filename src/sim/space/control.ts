@@ -4,7 +4,8 @@ import type { Match } from '../match'
 import { rollTime } from '../passing'
 import { ownGoalX } from '../teams'
 import { FOOT_OFFSET, TOUCH_REACH } from '../touch'
-import { arrivalTime, fastest, isKeeper } from './arrival'
+import { view, type View } from '../perception'
+import { arrivalTime, fastest, isKeeper, REACTION_TIME } from './arrival'
 
 /**
  * How sharply arrival-time gaps turn into certainty (s). A team that is this
@@ -40,12 +41,12 @@ function playersOf(world: Match, team: number): number[] {
   return [...outfielders, keeper]
 }
 
-/** The quickest any player of `team` gets to within `reach` of (x, y), in seconds. */
-export function teamArrival(world: Match, team: number, x: number, y: number, reach = 0): number {
+/** The quickest any player of `team` gets to within `reach` of (x, y), in seconds, as `by` reckons it. */
+export function teamArrival(world: Match, team: number, x: number, y: number, reach = 0, by = -1): number {
   let best = Infinity
-  for (const eid of world.teams[team].outfielders) best = Math.min(best, arrivalTime(world, eid, x, y, reach))
+  for (const eid of world.teams[team].outfielders) best = Math.min(best, arrivalTime(world, eid, x, y, reach, REACTION_TIME, by))
   const keeper = world.teams[team].keeper
-  if (canContest(world, keeper, x, y)) best = Math.min(best, arrivalTime(world, keeper, x, y, reach))
+  if (canContest(world, keeper, x, y)) best = Math.min(best, arrivalTime(world, keeper, x, y, reach, REACTION_TIME, by))
   return best
 }
 
@@ -63,10 +64,10 @@ export function controlAt(world: Match, team: number, x: number, y: number): num
 
 /**
  * Seconds before an opponent can get to `eid`: the time they have on the
- * ball if they get it now.
+ * ball if they get it now, as `by` reckons it.
  */
-export function timeOnBall(world: Match, eid: number): number {
-  return teamArrival(world, 1 - Team.id[eid], Position.x[eid], Position.y[eid], INTERCEPT_REACH)
+export function timeOnBall(world: Match, eid: number, by = -1): number {
+  return teamArrival(world, 1 - Team.id[eid], Position.x[eid], Position.y[eid], INTERCEPT_REACH, by)
 }
 
 /**
@@ -75,8 +76,9 @@ export function timeOnBall(world: Match, eid: number): number {
  * At each step along the ball's path it compares when the ball arrives with
  * when each opponent could. An opponent who could be there first is likely
  * to intercept, and the pass gets through only if every opponent misses it.
+ * Judged by `by`, it's against where they reckon each opponent is.
  */
-export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number): number {
+export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number, by = -1): number {
   const length = Math.hypot(toX - fromX, toY - fromY)
   if (length === 0) return 1
   // A pass that stops short never gets there.
@@ -93,9 +95,10 @@ export function passSafety(world: Match, team: number, fromX: number, fromY: num
   let safety = 1
   for (const eid of playersOf(world, 1 - team)) {
     const reach = isKeeper(world, eid) ? KEEPER_REACH : INTERCEPT_REACH
-    const px = Position.x[eid]
-    const py = Position.y[eid]
-    const top = fastest(world, eid)
+    view(world, by, eid, opponentSeen)
+    const px = opponentSeen.x
+    const py = opponentSeen.y
+    const top = fastest(world, eid, by)
     let lead = -Infinity
     for (let i = 0; i < n; i++) {
       // No one covers ground faster than their top speed, so a spot they couldn't beat the ball to even
@@ -103,12 +106,14 @@ export function passSafety(world: Match, team: number, fromX: number, fromY: num
       const dx = sampleX[i] - px
       const dy = sampleY[i] - py
       if (sampleT[i] - (Math.sqrt(dx * dx + dy * dy) - reach) / top <= lead) continue
-      if (canContest(world, eid, sampleX[i], sampleY[i])) lead = Math.max(lead, sampleT[i] - arrivalTime(world, eid, sampleX[i], sampleY[i], reach))
+      if (canContest(world, eid, sampleX[i], sampleY[i])) lead = Math.max(lead, sampleT[i] - arrivalTime(world, eid, sampleX[i], sampleY[i], reach, REACTION_TIME, by))
     }
     if (lead > -Infinity) safety *= 1 - sigmoid(lead / INTERCEPT_SCALE)
   }
   return safety
 }
+
+const opponentSeen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
 
 /** The ball's path for `passSafety`: a sample a metre, so enough for any pass across the pitch. */
 const MAX_SAMPLES = 200

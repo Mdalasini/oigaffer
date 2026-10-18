@@ -62,9 +62,10 @@ describe('match outcomes', () => {
     let samples = 0
     while (world.time < 5 * 60) {
       stepMatch(world)
+      // Chasing a ball that goes out, players can run on a few metres past the line before play stops them.
       for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
-        expect(Math.abs(Position.x[eid])).toBeLessThan(PITCH_HALF_LENGTH + 2)
-        expect(Math.abs(Position.y[eid])).toBeLessThan(PITCH_HALF_WIDTH + 2)
+        expect(Math.abs(Position.x[eid])).toBeLessThan(PITCH_HALF_LENGTH + 6)
+        expect(Math.abs(Position.y[eid])).toBeLessThan(PITCH_HALF_WIDTH + 6)
       }
       if (world.phase !== 'play') continue
       const ys = world.teams[world.possession].outfielders.map((e) => Position.y[e])

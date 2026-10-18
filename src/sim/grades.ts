@@ -116,9 +116,17 @@ export function firstTouchError(firstTouch: number): number {
   return lerp(0.5, 0.08, gradeT(firstTouch))
 }
 
-/** Chance, each time they look, that a player spots a teammate outside their field of view. */
-export function spotChance(vision: number): number {
-  return lerp(0.15, 0.85, gradeT(vision))
+/**
+ * How often (per second) a player looks over their shoulder. The best
+ * midfielders scan about every other second; the worst hardly ever.
+ */
+export function scanRate(vision: number): number {
+  return lerp(0.15, 0.6, gradeT(vision))
+}
+
+/** Chance a player checks over their shoulder while a pass is on its way to them. */
+export function preReceiveScanChance(vision: number): number {
+  return lerp(0.2, 0.9, gradeT(vision))
 }
 
 /** Relative standard deviation of the error in how a player rates their options. */
