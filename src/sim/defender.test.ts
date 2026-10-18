@@ -6,6 +6,7 @@ import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from 
 import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
+import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
 
 /** Striker with the ball 20 m out, defender `gap` metres goal-side of it. */
@@ -25,21 +26,29 @@ function faceOff(gap: number, grades: GradeOverrides = {}): Match {
 const angleToBall = (world: Match, eid: number) =>
   Math.atan2(Position.y[world.ball] - Position.y[eid], Position.x[world.ball] - Position.x[eid])
 
-/** Share of attacks in which the striker gets the ball goal-side of the defender. */
+/**
+ * Share of Red's spells on the ball, once Red has started to take Blue on, in
+ * which Red gets the ball goal-side of Blue.
+ */
 function beatenRate(grades: GradeOverrides, attacks: number) {
   const world = createMatch({ seed: 7, grades })
   let played = 0
   let beaten = 0
+  let spell = -1
   let engaged = false
   let counted = false
-  world.onOutcome = () => {
-    played++
-    engaged = counted = false
-  }
   while (played < attacks) {
     stepMatch(world)
+    // Each Red spell on the ball is numbered by Red's attack count; Blue's are all -1.
+    const current = world.possession === 0 ? world.stats[0].attacks : -1
+    if (current !== spell) {
+      if (engaged) played++
+      spell = current
+      engaged = counted = false
+    }
+    if (current === -1 || world.phase !== 'play') continue
     engaged ||= TakeOn.side[world.striker] !== 0
-    if (world.phase !== 'approach' || counted || !engaged) continue
+    if (counted || !engaged) continue
     const { ball, defender } = world
     const gx = GOAL_X - Position.x[ball]
     const gy = -Position.y[ball]
@@ -65,14 +74,13 @@ describe('defender', () => {
 
   test('turns and runs once the ball is past', () => {
     const world = faceOff(-3)
-    world.defenderActive = true
     defenderSystem(world, FIXED_DT)
     expect(Defender.mode[world.defender]).toBe(DefenderMode.Run)
   })
 
   test('better marking and agility are harder to get past', () => {
-    const weak = beatenRate({ defender: { marking: 1, agility: 5 } }, 120)
-    const strong = beatenRate({ defender: { marking: 20, agility: 20 } }, 120)
+    const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 300)
+    const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 300)
     expect(strong).toBeLessThan(weak - 0.25)
   })
 
@@ -90,7 +98,7 @@ describe('defender', () => {
   test('a fast shot clipping the edge of the defender is still blocked', () => {
     const world = faceOff(4)
     const { ball, defender } = world
-    world.phase = 'shot'
+    shotUnderway(world)
     // Starts just outside the legs and ends this step inside them, already heading out.
     const dx = Position.x[defender]
     const dy = Position.y[defender]
@@ -98,7 +106,7 @@ describe('defender', () => {
     setVec(Position, ball, dx + 0.028, dy + 0.35, 0.5)
     setVec(Velocity, ball, 25, 0, 0)
     ballBodySystem(world, FIXED_DT)
-    expect(world.outcome).toBe('blocked')
+    expect(world.event?.kind).toBe('blocked')
   })
 
   test('wins a ball that has got away from the carrier', () => {
@@ -106,7 +114,7 @@ describe('defender', () => {
     const { ball, defender } = world
     setVec(Position, ball, Position.x[defender] - FOOT_OFFSET - 0.3, 0, BALL_RADIUS)
     contestSystem(world, FIXED_DT)
-    expect(world.outcome).toBe('intercepted')
+    expect(world.event?.kind).toBe('intercepted')
   })
 
   test('has to tackle for a ball still under the carrier’s control', () => {
@@ -114,15 +122,25 @@ describe('defender', () => {
     // Ball within reach of both players' feet.
     setVec(Position, world.ball, GOAL_X - 20 + 0.8, 0, BALL_RADIUS)
     contestSystem(world, FIXED_DT)
-    expect(world.outcome).toBeNull()
+    expect(world.event).toBeNull()
+  })
+
+  test('a blocked shot is settled, so play goes on without it', () => {
+    const world = faceOff(4)
+    shotUnderway(world)
+    setVec(Position, world.ball, GOAL_X - 16.5, 0, 0.5)
+    setVec(Velocity, world.ball, 25, 0, 0)
+    for (let i = 0; i < 10 && world.phase === 'shot'; i++) stepMatch(world)
+    expect(world.phase).toBe('play')
+    expect(world.shot).toBeNull()
   })
 
   test('a shot into the defender is blocked', () => {
     const world = faceOff(4)
-    world.phase = 'shot'
+    shotUnderway(world)
     setVec(Position, world.ball, GOAL_X - 16.5, 0, 0.5)
     setVec(Velocity, world.ball, 25, 0, 0)
     for (let i = 0; i < 10 && world.phase === 'shot'; i++) stepMatch(world)
-    expect(world.outcome).toBe('blocked')
+    expect(world.event?.kind).toBe('blocked')
   })
 })

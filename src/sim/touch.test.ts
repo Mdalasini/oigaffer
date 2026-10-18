@@ -10,7 +10,7 @@ import { dribble, FOOT_OFFSET } from './touch'
 
 /** A striker in open grass with the ball at its feet, running along +x at `speed`. */
 function setup(seed: number, speed = 0, dribbling = 13): Match {
-  const world = createMatch({ seed, defender: false, grades: { striker: { dribbling, pace: 14 } } })
+  const world = createMatch({ seed, grades: { red: { outfielder: { dribbling, pace: 14 } } } })
   const { striker, ball } = world
   setVec(Position, striker, -20, 0, 0)
   setVec(Velocity, striker, speed, 0, 0)
@@ -103,16 +103,19 @@ describe('touches', () => {
 
   test('the striker never shoots without the ball at its feet', () => {
     // Any shot origin must be within touching distance of the striker's feet.
-    const world = createMatch({ seed: 4, defender: false })
+    const world = createMatch({ seed: 4 })
+    const totalShots = () => world.stats[0].shots + world.stats[1].shots
     let shots = 0
     let lastShots = 0
-    for (let i = 0; i < 120 * 120 && shots < 10; i++) {
+    for (let i = 0; i < 120 * 300 && shots < 10; i++) {
       const before = { x: Position.x[world.ball], y: Position.y[world.ball] }
       const footX = Position.x[world.striker] + Math.cos(Facing.angle[world.striker]) * FOOT_OFFSET
       const footY = Position.y[world.striker] + Math.sin(Facing.angle[world.striker]) * FOOT_OFFSET
       stepMatch(world)
-      if (world.stats.shots !== lastShots) {
-        lastShots = world.stats.shots
+      if (totalShots() !== lastShots) {
+        lastShots = totalShots()
+        // A ball rolled into the net counts as a shot too, but nobody struck it.
+        if (world.phase !== 'shot') continue
         shots++
         expect(Math.hypot(before.x - footX, before.y - footY)).toBeLessThanOrEqual(0.6 + 1e-6)
       }

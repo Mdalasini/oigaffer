@@ -3,8 +3,10 @@ import { BALL_RADIUS, GOAL_X, GRAVITY } from './constants'
 import { reactionDelay, shotSpreadRadius } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
-import { createMatch, stepMatch } from './match'
-import { simulateAttacks } from './simulate'
+import { hasComponent } from 'bitecs'
+import { Attacking, Defending } from './components'
+import { createMatch, winBall, type TeamStats } from './match'
+import { simulateMatch } from './simulate'
 
 describe('grades', () => {
   test('better shooters have a tighter spread circle', () => {
@@ -29,7 +31,7 @@ describe('shooting', () => {
   test('launch velocity carries the ball through the target', () => {
     const from = { x: GOAL_X - 16, y: -4, z: BALL_RADIUS }
     const target = { y: 2.5, z: 1.8 }
-    const v = launchVelocity(from, target, 25)
+    const v = launchVelocity(from, target, 25, GOAL_X)
     const t = (GOAL_X - from.x) / v.x
     expect(from.y + v.y * t).toBeCloseTo(target.y, 6)
     expect(from.z + v.z * t - 0.5 * GRAVITY * t * t).toBeCloseTo(target.z, 6)
@@ -37,41 +39,45 @@ describe('shooting', () => {
 })
 
 describe('match outcomes', () => {
-  const ATTACKS = 300
-  /** Goal rate for a striker against a keeper alone, so only these two grades matter. */
-  const rate = (shooting: number, reaction: number) => {
-    const s = simulateAttacks(ATTACKS, { seed: 11, defender: false, grades: { striker: { shooting }, keeper: { reaction } } })
-    return s.goals / s.shots
-  }
+  const MINUTES = 30
+  const conversion = (s: TeamStats) => s.goals / s.shots
 
-  test('a better shooter scores more against the same keeper', () => {
-    expect(rate(18, 12)).toBeGreaterThan(rate(4, 12) + 0.15)
+  test('a better shooter scores more of their shots', () => {
+    const [red, blue] = simulateMatch(MINUTES, { seed: 11, grades: { red: { outfielder: { shooting: 18 } }, blue: { outfielder: { shooting: 4 } } } })
+    expect(conversion(red)).toBeGreaterThan(conversion(blue) + 0.15)
   })
 
-  test('a quicker keeper concedes less to the same shooter', () => {
-    expect(rate(14, 18)).toBeLessThan(rate(14, 4) - 0.15)
+  test('a quicker keeper concedes less of what is shot at them', () => {
+    // Red's keeper faces Blue's shots.
+    const [red, blue] = simulateMatch(MINUTES, { seed: 11, grades: { red: { keeper: { reaction: 18 } }, blue: { keeper: { reaction: 4 } } } })
+    expect(conversion(blue)).toBeLessThan(conversion(red) - 0.15)
   })
 
-  test('every attack is accounted for', () => {
-    const s = simulateAttacks(ATTACKS, { seed: 5 })
-    expect(s.shots + s.lost + s.setPieces).toBe(ATTACKS)
-    expect(s.goals + s.saves + s.misses).toBe(s.shots)
+  test('every shot is accounted for, and both sides attack and win the ball back', () => {
+    for (const s of simulateMatch(10, { seed: 5 })) {
+      expect(s.goals + s.saved + s.missed).toBe(s.shots)
+      expect(s.shots).toBeGreaterThan(5)
+      expect(s.won).toBeGreaterThan(3)
+    }
   })
 
-  test('a stalled attack ends through the result phase and respects auto-replay', () => {
-    const match = createMatch({ seed: 2 })
-    match.autoReset = false
-    // Pretend open play has already run for the full timeout.
-    match.phaseTime = 25
-    stepMatch(match)
-    expect(match.phase).toBe('result')
-    expect(match.outcome).toBe('abandoned')
-    for (let i = 0; i < 120 * 5; i++) stepMatch(match)
-    expect(match.phase).toBe('result')
+  test('winning the ball back turns defence into attack', () => {
+    const world = createMatch({ seed: 3 })
+    const red = world.teams[0].outfielder
+    const blue = world.teams[1].outfielder
+    winBall(world, 1, 'tackled')
+    expect(world.possession).toBe(1)
+    expect(world.striker).toBe(blue)
+    expect(world.defender).toBe(red)
+    expect(hasComponent(world, blue, Attacking) && !hasComponent(world, blue, Defending)).toBe(true)
+    expect(hasComponent(world, red, Defending) && !hasComponent(world, red, Attacking)).toBe(true)
+    // Blue now attacks the goal at -x, defended by Red's keeper.
+    expect(world.keeper).toBe(world.teams[0].keeper)
+    expect(world.stats[1].won).toBe(1)
   })
 
   test('the same seed replays the same match', () => {
-    const options = { seed: 42, grades: { striker: { shooting: 12 }, keeper: { reaction: 9 } } }
-    expect(simulateAttacks(50, options)).toEqual(simulateAttacks(50, options))
+    const options = { seed: 42, grades: { red: { outfielder: { shooting: 12 } }, blue: { keeper: { reaction: 9 } } } }
+    expect(simulateMatch(5, options)).toEqual(simulateMatch(5, options))
   })
 })

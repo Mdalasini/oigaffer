@@ -1,4 +1,4 @@
-import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_X, GRAVITY } from './constants'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GRAVITY } from './constants'
 import type { Rng } from './rng'
 
 export interface Vec3 {
@@ -7,7 +7,7 @@ export interface Vec3 {
   z: number
 }
 
-/** A point on the goal plane (x = GOAL_X). */
+/** A point on a goal plane: across the goal (y) and up (z). */
 export interface GoalPoint {
   y: number
   z: number
@@ -40,11 +40,12 @@ export function sampleShotTarget(rng: Rng, aim: GoalPoint, radius: number): Goal
 }
 
 /**
- * Velocity that carries a ball from `from` through `target` on the goal plane,
- * travelling at `speed` along the ground, under gravity and without drag.
+ * Velocity that carries a ball from `from` through `target` on the goal plane
+ * x = `goalX`, travelling at `speed` along the ground, under gravity and
+ * without drag.
  */
-export function launchVelocity(from: Vec3, target: GoalPoint, speed: number): Vec3 {
-  const dx = GOAL_X - from.x
+export function launchVelocity(from: Vec3, target: GoalPoint, speed: number, goalX: number): Vec3 {
+  const dx = goalX - from.x
   const dy = target.y - from.y
   const ground = Math.hypot(dx, dy)
   const t = ground / speed

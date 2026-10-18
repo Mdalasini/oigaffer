@@ -1,8 +1,8 @@
 import { removeComponent } from 'bitecs'
 import { angleDelta } from './angles'
-import { Body, Defender, DefenderMode, Dribbler, Facing, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Velocity } from './components'
+import { Body, Defender, DefenderMode, Dribbler, Facing, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from './components'
 import { bargeWinChance, tackleSkill } from './grades'
-import { endAttack, type Match } from './match'
+import { winBall, type Match } from './match'
 import { gaussian } from './rng'
 import { footDistance } from './touch'
 
@@ -116,7 +116,7 @@ function settle(world: Match, defender: number, kind: ChallengeKind, chance: num
     Velocity.x[world.ball] = Velocity.x[defender]
     Velocity.y[world.ball] = Velocity.y[defender]
     record(world, kind, 'won')
-    endAttack(world, 'tackled', null)
+    winBall(world, Team.id[defender], 'tackled')
   } else if (roll < chance) {
     pokeAway(world, defender)
     record(world, kind, 'poked')

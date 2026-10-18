@@ -1,10 +1,10 @@
 import { addComponent, query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { bodyBetween, EXPOSED_DISTANCE, STAND_CONE, STAND_REACH } from '../challenge'
-import { Defender, DefenderMode, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Velocity } from '../components'
-import { GOAL_X } from '../constants'
+import { Defender, DefenderMode, Defending, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from '../components'
 import { gradeT, readLag, topSpeed } from '../grades'
 import type { Match } from '../match'
+import { attackedGoalX } from '../teams'
 import { CONTROL_RADIUS, footDistance } from '../touch'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
@@ -47,13 +47,16 @@ const BARGE_DRIVE = 1.5
  * Running is fast but reads late and turns wide.
  */
 export function defenderSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
+  for (const eid of query(world, [Defending, Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
     const ball = world.ball
-    if (!world.defenderActive || world.phase !== 'approach') {
+    if (world.phase !== 'play') {
       stand(eid, ball)
       continue
     }
 
+    // The goal being attacked, which this defender is protecting.
+    const goalX = attackedGoalX(Team.id[world.striker])
+    Defender.challengeDelay[eid] = Math.max(0, Defender.challengeDelay[eid] - dt)
     updateRead(world, eid, dt)
     const mode = Defender.mode[eid] as DefenderMode
     // Mid-challenge the challenge system is in charge; off balance, they just stagger.
@@ -67,11 +70,11 @@ export function defenderSystem(world: Match, dt: number) {
       goForBall(eid)
       continue
     }
-    const next = chooseMode(eid)
+    const next = chooseMode(eid, goalX)
     Defender.mode[eid] = next
-    if (next === DefenderMode.Jockey) jockey(eid)
-    else run(eid)
-    maybeChallenge(world, eid, dt)
+    if (next === DefenderMode.Jockey) jockey(eid, goalX)
+    else run(eid, goalX)
+    if (Defender.challengeDelay[eid] === 0) maybeChallenge(world, eid, dt)
   }
 }
 
@@ -168,19 +171,19 @@ function updateRead(world: Match, eid: number, dt: number) {
   Defender.readVy[eid] += (Velocity.y[ball] - Defender.readVy[eid]) * k
 }
 
-function chooseMode(eid: number): DefenderMode {
+function chooseMode(eid: number, goalX: number): DefenderMode {
   const bx = Defender.readX[eid]
   const by = Defender.readY[eid]
   const distance = Math.hypot(bx - Position.x[eid], by - Position.y[eid])
-  const goalSide = distanceToGoal(Position.x[eid], Position.y[eid]) + 0.5 < distanceToGoal(bx, by)
+  const goalSide = distanceToGoal(Position.x[eid], Position.y[eid], goalX) + 0.5 < distanceToGoal(bx, by, goalX)
   if (!goalSide || distance > RUN_DISTANCE) return DefenderMode.Run
   if (distance < JOCKEY_DISTANCE) return DefenderMode.Jockey
   return Defender.mode[eid] as DefenderMode
 }
 
 /** Hold a spot just goal-side of where the ball is read to be going, facing it. */
-function jockey(eid: number) {
-  const { x, y } = goalSideOfRead(eid, JOCKEY_LOOKAHEAD, STANDOFF)
+function jockey(eid: number, goalX: number) {
+  const { x, y } = goalSideOfRead(eid, goalX, JOCKEY_LOOKAHEAD, STANDOFF)
   MoveIntent.vx[eid] = Defender.readVx[eid] + (x - Position.x[eid]) * POSITION_GAIN
   MoveIntent.vy[eid] = Defender.readVy[eid] + (y - Position.y[eid]) * POSITION_GAIN
   MoveIntent.faceX[eid] = Defender.readX[eid] - Position.x[eid]
@@ -188,8 +191,8 @@ function jockey(eid: number) {
 }
 
 /** Sprint to get back goal-side of the ball. */
-function run(eid: number) {
-  const { x, y } = goalSideOfRead(eid, RUN_LOOKAHEAD, RECOVERY_DEPTH)
+function run(eid: number, goalX: number) {
+  const { x, y } = goalSideOfRead(eid, goalX, RUN_LOOKAHEAD, RECOVERY_DEPTH)
   const dx = x - Position.x[eid]
   const dy = y - Position.y[eid]
   const distance = Math.hypot(dx, dy) || 1
@@ -226,13 +229,13 @@ function stand(eid: number, ball: number) {
 }
 
 /** A point `depth` metres towards goal from where the defender reads the ball to be in `lookahead` seconds. */
-function goalSideOfRead(eid: number, lookahead: number, depth: number) {
+function goalSideOfRead(eid: number, goalX: number, lookahead: number, depth: number) {
   const bx = Defender.readX[eid] + Defender.readVx[eid] * lookahead
   const by = Defender.readY[eid] + Defender.readVy[eid] * lookahead
-  const gx = GOAL_X - bx
+  const gx = goalX - bx
   const gy = -by
   const len = Math.hypot(gx, gy) || 1
   return { x: bx + (gx / len) * depth, y: by + (gy / len) * depth }
 }
 
-export const distanceToGoal = (x: number, y: number) => Math.hypot(GOAL_X - x, y)
+const distanceToGoal = (x: number, y: number, goalX: number) => Math.hypot(goalX - x, y)

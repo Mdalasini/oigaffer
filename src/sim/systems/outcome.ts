@@ -1,96 +1,99 @@
-import { Body, Position, Velocity } from '../components'
-import { ballAtFeet } from '../touch'
+import { query } from 'bitecs'
+import { Body, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
-import { endAttack, resetPlay, type Match, type Restart } from '../match'
+import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
 import type { GoalPoint } from '../shooting'
+import { attackDir, opponent } from '../teams'
+import { ballAtFeet } from '../touch'
 
 /** Reach beyond the keeper's body when stretching out. */
 const ARM_REACH = 0.7
 const KEEPER_MAX_HEIGHT = 2.5
-const RESULT_PAUSE = 2.2
+/** Seconds the ball stays dead before the restart is taken. */
+const STOP_PAUSE = 2.2
+/** A shot that hasn't been settled by now has run its course; count it as off target. */
 const SHOT_TIMEOUT = 4
-/** An attack that never gets a shot away is abandoned and restarted. */
-const PLAY_TIMEOUT = 25
 
 export function outcomeSystem(world: Match, _dt: number) {
-  if (world.phase === 'result') {
-    if (world.autoReset && world.phaseTime >= RESULT_PAUSE) resetPlay(world)
+  if (world.phase === 'stopped') {
+    if (world.phaseTime >= STOP_PAUSE) takeRestart(world)
     return
   }
-  if (world.phase === 'approach') {
-    if (keeperCanClaim(world)) {
+  if (world.phase === 'play') {
+    const keeper = claimingKeeper(world)
+    if (keeper !== null) {
       Velocity.x[world.ball] = Velocity.y[world.ball] = Velocity.z[world.ball] = 0
-      endAttack(world, 'claimed', null)
-    } else if (!leftThePitch(world) && world.phaseTime > PLAY_TIMEOUT) endAttack(world, 'abandoned', null)
+      keeperClaims(world, keeper)
+    } else leftThePitch(world)
     return
   }
 
-  const { ball, keeper, prevBall } = world
-  const keeperX = Position.x[keeper]
-  const crossing = crossPlane(world, keeperX)
+  const shot = world.shot
+  if (!shot) return
+  const { ball, keeper } = world
+  const dir = Math.sign(shot.goalX)
+  const crossing = crossPlane(world, Position.x[keeper], dir)
   if (crossing) {
     const reach = Body.radius[keeper] + ARM_REACH
     if (Math.abs(crossing.y - Position.y[keeper]) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
-      parry(ball, crossing.y - Position.y[keeper])
-      endAttack(world, 'save', crossing)
+      parry(ball, dir, crossing.y - Position.y[keeper])
+      endShot(world, 'save', crossing)
       return
     }
   }
 
-  const atLine = prevBall.x < GOAL_X ? crossPlane(world, GOAL_X) : null
+  const atLine = crossPlane(world, shot.goalX, dir)
   if (atLine) {
     const inside = Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS
     const under = atLine.z <= GOAL_HEIGHT - BALL_RADIUS
-    endAttack(world, inside && under ? 'goal' : inside ? 'over' : 'wide', atLine)
+    endShot(world, inside && under ? 'goal' : inside ? 'over' : 'wide', atLine)
     return
   }
 
-  if (world.phaseTime > SHOT_TIMEOUT) endAttack(world, 'wide', null)
+  if (world.phaseTime > SHOT_TIMEOUT) endShot(world, 'wide', null)
 }
 
 /**
- * Ends open play once the whole ball is over a line. Over the goal line
- * between the posts it's a goal however it got there; elsewhere the restart
- * goes against whoever touched it last. Shots have their own goal-line check.
+ * Stops open play once the whole ball is over a line. Over a goal line
+ * between the posts it's a goal however it got there, own goals included;
+ * elsewhere the restart goes against whoever touched it last. Shots have
+ * their own goal-line check.
  */
-function leftThePitch(world: Match): boolean {
-  const { ball, prevBall } = world
-  const lineX = GOAL_X + BALL_RADIUS
-  const atLine = prevBall.x < lineX ? crossPlane(world, lineX) : null
-  if (atLine) {
-    if (Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS && atLine.z <= GOAL_HEIGHT - BALL_RADIUS) {
-      // It went in without a shot being struck; count it as one so goals stay a share of shots.
-      world.stats.shots++
-      endAttack(world, 'goal', atLine)
-    } else restartPlay(world, world.lastTouchedBy === world.defender ? 'corner' : 'goal-kick')
-    return true
+function leftThePitch(world: Match) {
+  const { ball } = world
+  const lastTeam = Team.id[world.lastTouchedBy]
+  for (const end of [-1, 1]) {
+    const atLine = crossPlane(world, end * (GOAL_X + BALL_RADIUS), end)
+    if (!atLine) continue
+    // The team attacking this end, and the one defending it.
+    const attackers = attackDir(0) === end ? 0 : 1
+    const defenders = opponent(attackers)
+    if (Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS && atLine.z <= GOAL_HEIGHT - BALL_RADIUS) scoreFromPlay(world, attackers)
+    else if (lastTeam === defenders) ballOut(world, 'corner', attackers, end * GOAL_X, atLine.y)
+    else ballOut(world, 'goal-kick', defenders, end * GOAL_X, atLine.y)
+    return
   }
   if (Math.abs(Position.y[ball]) > PITCH_HALF_WIDTH + BALL_RADIUS) {
-    restartPlay(world, 'throw-in')
-    return true
+    ballOut(world, 'throw-in', opponent(lastTeam), Position.x[ball], Position.y[ball])
   }
-  return false
 }
 
-function restartPlay(world: Match, restart: Restart) {
-  Velocity.x[world.ball] = Velocity.y[world.ball] = 0
-  world.restart = restart
-  endAttack(world, world.lastTouchedBy === world.defender ? 'setPiece' : 'outOfPlay', null)
+/** A keeper who can gather the loose ball: within reach, and not at an outfielder's feet. */
+function claimingKeeper(world: Match): number | null {
+  const { ball, striker, defender } = world
+  if (ballAtFeet(striker, ball) || ballAtFeet(defender, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return null
+  for (const keeper of query(world, [Goalkeeper, Position, Body])) {
+    const reach = Body.radius[keeper] + ARM_REACH
+    if (Math.hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
+  }
+  return null
 }
 
-/** A loose ball that runs within the keeper's reach is gathered. */
-function keeperCanClaim(world: Match) {
-  const { ball, keeper, striker } = world
-  if (ballAtFeet(striker, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return false
-  const reach = Body.radius[keeper] + ARM_REACH
-  return Math.hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach
-}
-
-/** Where the ball passed through the plane x = planeX during the last step. */
-function crossPlane(world: Match, planeX: number): GoalPoint | null {
+/** Where the ball passed through the plane x = planeX, moving in direction `dir` (±1 along x), during the last step. */
+function crossPlane(world: Match, planeX: number, dir: number): GoalPoint | null {
   const { ball, prevBall } = world
   const x = Position.x[ball]
-  if (!(prevBall.x < planeX && x >= planeX)) return null
+  if (!((prevBall.x - planeX) * dir < 0 && (x - planeX) * dir >= 0)) return null
   const f = (planeX - prevBall.x) / (x - prevBall.x)
   return {
     y: prevBall.y + (Position.y[ball] - prevBall.y) * f,
@@ -98,8 +101,8 @@ function crossPlane(world: Match, planeX: number): GoalPoint | null {
   }
 }
 
-function parry(ball: number, offset: number) {
-  Velocity.x[ball] = -Math.abs(Velocity.x[ball]) * 0.25
+function parry(ball: number, dir: number, offset: number) {
+  Velocity.x[ball] = -dir * Math.abs(Velocity.x[ball]) * 0.25
   Velocity.y[ball] = Math.sign(offset || 1) * 4
   Velocity.z[ball] = 2
 }
