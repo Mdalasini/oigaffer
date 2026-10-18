@@ -1,4 +1,3 @@
-import { query } from 'bitecs'
 import { Position, Slot, Team } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { formationFor } from './formation'
@@ -41,12 +40,18 @@ export const along = (team: number, x: number) => x * attackDir(team)
  * ball if it is further forward, and never short of the halfway line.
  */
 export function onsideLimit(world: Match, team: number): number {
-  const depths: number[] = []
-  for (const eid of query(world, [Team, Position])) {
-    if (Team.id[eid] === opponent(team)) depths.push(along(team, Position.x[eid]))
+  // The two opponents nearest their own goal line, keeper included.
+  const { outfielders, keeper } = world.teams[opponent(team)]
+  let last = along(team, Position.x[keeper])
+  let secondLast = -Infinity
+  for (const eid of outfielders) {
+    const u = along(team, Position.x[eid])
+    if (u > last) {
+      secondLast = last
+      last = u
+    } else if (u > secondLast) secondLast = u
   }
-  depths.sort((a, b) => b - a)
-  const secondLast = depths.length >= 2 ? depths[1] : L
+  if (secondLast === -Infinity) secondLast = L
   return Math.max(secondLast, along(team, Position.x[world.ball]), 0)
 }
 
