@@ -4,7 +4,7 @@ import { BALL_RADIUS, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './cons
 import { gradeT, judgementError, passAngleError, passWeightError, spotChance } from './grades'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
-import { inOffsidePosition, playedBy } from './offside'
+import { inOffsidePosition, playBall } from './offside'
 import { gaussian } from './rng'
 import { arrivalTime } from './space/arrival'
 import { passSafety, teamArrival, timeOnBall } from './space/control'
@@ -217,6 +217,7 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
  * passer is hurried. The receiver takes over as the carrier while it travels.
  */
 export function strikePass(world: Match, carrier: number, option: PassOption) {
+  if (!playBall(world, carrier)) return
   const { ball, rng } = world
   const bx = Position.x[ball]
   const by = Position.y[ball]
@@ -237,7 +238,6 @@ export function strikePass(world: Match, carrier: number, option: PassOption) {
   world.lastTouch = null
   world.lastTouchedBy = carrier
   world.lastTouchDeliberate = true
-  playedBy(world, carrier)
   const team = Team.id[carrier]
   world.stats[team].passes++
   world.pass = { from: carrier, to: option.receiver, kind: option.kind, x: option.x, y: option.y, time: world.time }

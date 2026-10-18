@@ -29,7 +29,7 @@ import {
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
-import { clearOffside } from './offside'
+import { clearOffside, playedBy } from './offside'
 import { homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
 import type { GoalPoint, Vec3 } from './shooting'
@@ -205,6 +205,11 @@ export interface MatchContext {
   pass: PassInfo | null
   /** The restart just taken can't produce an offside, so the next touch takes no offside snapshot. */
   offsideExempt: boolean
+  /**
+   * The taker of an indirect free kick, until someone else touches the ball;
+   * -1 otherwise. A goal can't be scored straight from one.
+   */
+  indirectTaker: number
   /** The latest notable moment. */
   event: MatchEvent | null
   /** How play will restart, while the ball is dead. */
@@ -265,6 +270,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     shot: null,
     pass: null,
     offsideExempt: false,
+    indirectTaker: -1,
     event: null,
     restart: null,
     stats: [emptyStats(), emptyStats()],
@@ -476,6 +482,8 @@ export function winBall(world: Match, player: number, kind: 'tackled' | 'interce
   world.lastTouchedBy = player
   world.lastTouchDeliberate = kind === 'intercepted'
   setPossession(world, team, player)
+  // Winning it is their team playing the ball: offside is judged for them from here.
+  playedBy(world, player)
   record(world, kind, team)
 }
 
@@ -483,6 +491,8 @@ export function winBall(world: Match, player: number, kind: 'tackled' | 'interce
 export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint | null) {
   const shot = world.shot
   if (!shot) return
+  // A shot straight in from an indirect free kick doesn't count: it's as good as wide.
+  if (outcome === 'goal' && world.indirectTaker !== -1) outcome = 'wide'
   shot.crossing = crossing
   const stats = world.stats[shot.team]
   if (outcome === 'goal') stats.goals++
@@ -503,6 +513,8 @@ export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint 
 
 /** A goal that went in without a shot being struck: counted as one, so goals stay a share of shots. */
 export function scoreFromPlay(world: Match, team: number) {
+  // Straight in from an indirect free kick, nobody else touching it: a goal kick, not a goal.
+  if (world.indirectTaker !== -1) return ballOut(world, 'goal-kick', opponent(team), attackedGoalX(team), 0)
   world.stats[team].shots++
   world.stats[team].goals++
   stopPlay(world, 'kick-off', opponent(team), 0, 0)
@@ -656,6 +668,7 @@ export function takeRestart(world: Match) {
   // Nobody can be offside from a throw-in, a corner or a goal kick.
   clearOffside(world)
   world.offsideExempt = kind === 'throw-in' || kind === 'corner' || kind === 'goal-kick'
+  world.indirectTaker = kind === 'free-kick' ? taker : -1
   world.lastTouch = null
   world.lastChallenge = null
   world.lastTouchedBy = taker
@@ -722,6 +735,8 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   ballBodySystem(world, dt)
   contestSystem(world, dt)
   outcomeSystem(world, dt)
+  // Anyone else touching the ball makes an indirect free kick live.
+  if (world.indirectTaker !== -1 && world.lastTouchedBy !== world.indirectTaker) world.indirectTaker = -1
 }
 
 export function setVec(store: typeof Position, eid: number, x: number, y: number, z: number) {

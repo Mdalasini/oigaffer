@@ -14,7 +14,19 @@ export function inOffsidePosition(world: Match, eid: number): boolean {
 }
 
 /**
- * `toucher` has just played the ball on purpose (a touch, pass, shot or
+ * The one way to play the ball on purpose, called before the ball is touched:
+ * if `eid` was flagged it's an offence and play stops (returns false, so the
+ * caller doesn't play it). Otherwise offside is judged for this play
+ * (returns true).
+ */
+export function playBall(world: Match, eid: number): boolean {
+  if (offsideOffence(world, eid)) return false
+  playedBy(world, eid)
+  return true
+}
+
+/**
+ * `toucher` plays the ball on purpose (a touch, pass, shot or
  * first touch). Offside is judged now: each teammate in an offside position
  * is flagged until the team next plays it. The toucher themselves is
  * involved by playing it, so they are never flagged. The first touch of a

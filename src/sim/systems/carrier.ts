@@ -5,7 +5,7 @@ import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
-import { playedBy } from '../offside'
+import { playBall } from '../offside'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
 import { attackedGoalX } from '../teams'
 import { choosePass, strikePass } from '../playmaking'
@@ -115,6 +115,8 @@ export function carrierSystem(world: Match, dt: number) {
 }
 
 function wantsToShoot(world: Match, eid: number, goalX: number, distance: number, shootDistance: number) {
+  // Nobody shoots straight from an indirect free kick.
+  if (world.indirectTaker === eid && !world.shootRequested) return false
   if (!world.shootRequested && distance > shootDistance) return false
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
   if (Math.abs(angleDelta(Facing.angle[eid], facingGoal)) > MAX_SHOT_TURN) return false
@@ -263,6 +265,7 @@ const rotate = (x: number, y: number, a: number): [number, number] => [
 ]
 
 function shoot(world: Match, carrier: number, goalX: number) {
+  if (!playBall(world, carrier)) return
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
   const aim = chooseAim(from.y, Position.y[keeper], world.aimHigh)
@@ -280,7 +283,6 @@ function shoot(world: Match, carrier: number, goalX: number) {
   world.lastTouch = null
   world.lastTouchedBy = carrier
   world.lastTouchDeliberate = true
-  playedBy(world, carrier)
   world.stats[team].shots++
   setPhase(world, 'shot')
 }

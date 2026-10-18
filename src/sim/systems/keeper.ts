@@ -3,7 +3,7 @@ import { Facing, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH } from '../constants'
 import { handOver, setPhase, setVec, type Match } from '../match'
 import { rollSpeedFor } from '../passing'
-import { playedBy } from '../offside'
+import { playBall } from '../offside'
 import { gaussian } from '../rng'
 import { passSafety } from '../space/control'
 import { ownGoalX } from '../teams'
@@ -149,6 +149,8 @@ function passTarget(receiver: number) {
  * Used for rolling it out of the hands and for kicking a back-pass first time.
  */
 export function passToOutfielder(world: Match, keeper: number, receiver: number, fromX: number, fromY: number) {
+  // Keepers are never offside, so this only judges their teammates.
+  playBall(world, keeper)
   const { ball, rng } = world
   const { x, y } = passTarget(receiver)
   const angle = Math.atan2(y - fromY, x - fromX) + gaussian(rng) * PASS_ERROR
@@ -161,7 +163,6 @@ export function passToOutfielder(world: Match, keeper: number, receiver: number,
   Goalkeeper.recover[keeper] = RELEASE_RECOVER
   world.lastTouchedBy = keeper
   world.lastTouchDeliberate = true
-  playedBy(world, keeper)
   world.lastTouch = null
   world.shot = null
   // A new ball from the keeper, even to the player an earlier pass was meant for.

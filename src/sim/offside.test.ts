@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, Offside, Position, Velocity } from './components'
+import { Dribbler, Facing, Offside, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
-import { createMatch, setVec, stepMatch, type Match } from './match'
+import { createMatch, endShot, handOver, requestShot, scoreFromPlay, setVec, stepMatch, winBall, type Match } from './match'
 import { inOffsidePosition } from './offside'
 import { passOptions, strikePass, type PassOption } from './playmaking'
+import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
 
 const RED = 0
@@ -121,6 +122,90 @@ describe('the offence', () => {
     play(world, 1)
     expect(world.possession).toBe(BLUE)
     expect(Offside.flagged[mate]).toBe(0)
+  })
+})
+
+describe('involvement, however it happens', () => {
+  test('a flagged player handed the ball can’t shoot or pass their way out of it', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    Offside.flagged[mate] = 1
+    handOver(world, mate)
+    setVec(Position, world.ball, Position.x[mate] + FOOT_OFFSET, Position.y[mate], BALL_RADIUS)
+    Facing.angle[mate] = 0
+    requestShot(world)
+    stepMatch(world)
+    expect(world.stats[RED].shots).toBe(0)
+    expect(world.stats[RED].offsides).toBe(1)
+    expect(world.restart?.kind).toBe('free-kick')
+  })
+
+  test('a flagged player the ball hits is involved: offside, not a deflection', () => {
+    const world = scene(-5, 12, 0, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    Offside.flagged[mate] = 1
+    world.lastTouchedBy = world.carrier
+    // The ball about to run into them.
+    setVec(Position, world.ball, 11, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 12, 0, 0)
+    // Not a touch they chose to play: the ball just hits them.
+    Dribbler.cooldown[mate] = 1
+    let deflected = false
+    for (let i = 0; i < 20 && world.phase === 'play'; i++) {
+      stepMatch(world)
+      deflected ||= world.lastTouchedBy === mate
+    }
+    expect(world.stats[RED].offsides).toBe(1)
+    expect(deflected).toBe(false)
+  })
+
+  test('winning the ball judges offside for the team that won it', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    const [blueA, blueB] = world.teams[BLUE].outfielders
+    // Blue's other outfielder is beyond Red's last outfielder, deep in Red's half.
+    place(world.teams[RED].outfielders[1], -2, 5)
+    place(blueB, -15, 6, Math.PI)
+    place(world.teams[RED].keeper, -GOAL_X + 0.5, 0)
+    winBall(world, blueA, 'intercepted')
+    expect(Offside.flagged[blueB]).toBe(1)
+  })
+})
+
+describe('the free kick for offside', () => {
+  test('is indirect: straight in without anyone else touching it is no goal', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    world.restart = { kind: 'free-kick', team: RED, x: GOAL_X - 8, y: 0 }
+    world.phase = 'stopped'
+    world.phaseTime = 10
+    stepMatch(world)
+    expect(world.indirectTaker).toBe(world.carrier)
+    // Rolled in: a goal kick.
+    scoreFromPlay(world, RED)
+    expect(world.stats[RED].goals).toBe(0)
+    expect(world.restart?.kind).toBe('goal-kick')
+  })
+
+  test('is indirect: a shot straight in from it counts as missed', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    world.indirectTaker = world.carrier
+    shotUnderway(world)
+    endShot(world, 'goal', { y: 0, z: 1 })
+    expect(world.stats[RED].goals).toBe(0)
+    expect(world.stats[RED].missed).toBe(1)
+  })
+
+  test('once another player has touched it, it’s a normal ball', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    world.restart = { kind: 'free-kick', team: RED, x: 0, y: 0 }
+    world.phase = 'stopped'
+    world.phaseTime = 10
+    stepMatch(world)
+    const taker = world.carrier
+    // The taker can't play it again this step; their teammate just has.
+    Dribbler.cooldown[taker] = 1
+    world.lastTouchedBy = world.teams[RED].outfielders[1]
+    stepMatch(world)
+    expect(world.indirectTaker).toBe(-1)
   })
 })
 
