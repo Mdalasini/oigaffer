@@ -3,6 +3,7 @@ import { angleDelta } from './angles'
 import { Dribbler, Facing, Position, TouchStyle, Velocity } from './components'
 import { FIXED_DT } from './constants'
 import { createMatch, setVec, stepMatch, type Match } from './match'
+import { attackedGoalX } from './teams'
 import { ballSystem } from './systems/ball'
 import { locomotionSystem } from './systems/locomotion'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
@@ -54,11 +55,12 @@ function touchHeading(style: TouchStyle, dir: number, seed: number, dribbling = 
 }
 
 describe('touches', () => {
-  test('small touches keep the ball closer; large touches cover more ground', () => {
+  test('small touches keep the ball closer; large touches cover more ground, but are a longer stride, not a kick', () => {
     const small = run(TouchStyle.Small, 6)
     const large = run(TouchStyle.Large, 6)
     expect(small.maxGap).toBeLessThan(2)
-    expect(large.maxGap).toBeGreaterThan(small.maxGap * 1.5)
+    expect(large.maxGap).toBeGreaterThan(small.maxGap)
+    expect(large.maxGap).toBeLessThan(3)
     expect(large.distance).toBeGreaterThan(small.distance + 5)
   })
 
@@ -122,5 +124,32 @@ describe('touches', () => {
       }
     }
     expect(shots).toBe(10)
+  })
+
+  test('through on goal with a defender chasing, the carrier runs the ball in, never knocks it out of reach for the keeper', () => {
+    let keeperFirst = 0
+    let widest = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      const world = createMatch({ outfielders: 1, seed })
+      const { carrier, presser, ball } = world
+      const dir = Math.sign(attackedGoalX(world.pitch, 0))
+      const start = dir * (world.pitch.halfLength - 28)
+      setVec(Position, carrier, start, 2, 0)
+      setVec(Velocity, carrier, dir * 7, 0, 0)
+      Facing.angle[carrier] = dir > 0 ? 0 : Math.PI
+      setVec(Position, ball, start + dir * (FOOT_OFFSET + 0.1), 2, Position.z[ball])
+      setVec(Velocity, ball, dir * 7, 0, 0)
+      setVec(Position, presser, start - dir * 4, 4, 0)
+      for (let i = 0; i < 6 * 120 && world.phase === 'play' && world.carrier === carrier; i++) {
+        stepMatch(world)
+        widest = Math.max(widest, Math.hypot(Position.x[ball] - Position.x[carrier], Position.y[ball] - Position.y[carrier]))
+      }
+      // Straight into the keeper's hands, before any shot.
+      if (world.phase === 'held') keeperFirst++
+    }
+    // Measured: knocking it 5.5 m/s faster than running, the keeper got there first 11 times in 40 and the ball got 6.9 m
+    // away; at a stride's length, twice, and 3.5 m.
+    expect(keeperFirst).toBeLessThanOrEqual(5)
+    expect(widest).toBeLessThan(4.5)
   })
 })
