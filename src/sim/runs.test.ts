@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
-import { SMALL_SIDED_PITCH } from './pitch'
+import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { lookAround } from './perception'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { attackingIntent, restDefender } from './attacking'
@@ -347,6 +347,44 @@ describe('opening a lane', () => {
     expect(safety(spot.x, spot.y)).toBeGreaterThan(0.6)
     // Across or forward of their place, not dropping towards the ball.
     expect(along(RED, spot.x)).toBeGreaterThan(along(RED, home.x) - 0.5)
+  })
+
+  test('who looks for a lane goes by where they reckon their teammates are, not where those teammates have since gone unseen', () => {
+    const world = createMatch({ outfielders: 10, seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
+    const reds = world.teams[RED].outfielders
+    const carrier = reds[4]
+    const seeker = reds[9]
+    const others = reds.filter((eid) => eid !== carrier && eid !== seeker)
+    handOver(world, carrier)
+    world.phase = 'play'
+    world.possession = RED
+    place(carrier, -20, 0)
+    setVec(Position, world.ball, -20 + FOOT_OFFSET, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    // Everyone else well away from the ball: deep, or wide and far up.
+    others.forEach((eid, i) => place(eid, i < 4 ? -40 : 15, i < 4 ? -25 + 16 * i : (i % 2 ? -30 : 30)))
+    const blues = world.teams[BLUE].outfielders
+    // Blue's line is two wide defenders at x = 5; the rest are out of play behind the ball.
+    blues.forEach((eid, i) => place(eid, i < 3 ? 5 : -45, i < 3 ? (i % 2 ? -30 : 30) : -30 + 8 * i, Math.PI))
+    place(world.teams[BLUE].keeper, FULL_PITCH.halfLength - 0.5, 0, Math.PI)
+    place(seeker, 0, 0)
+    const home = homePosition(world, seeker)
+    place(seeker, home.x, home.y)
+    Run.rest[seeker] = 5
+    // One Blue defender in the lane to the seeker's place.
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    place(blues[0], bx + (home.x - bx) * 0.5, by + (home.y - by) * 0.5, Math.PI)
+    lookAround(world)
+    attackingIntent(world, seeker)
+    const lane = [OffBall.laneX[seeker], OffBall.laneY[seeker]]
+    expect(Math.hypot(lane[0], lane[1])).toBeGreaterThan(1)
+    // Three teammates slip in nearer the ball, ahead of it, while the seeker isn't looking.
+    place(others[4], bx + 6, by - 5)
+    place(others[5], bx + 6, by + 5)
+    place(others[6], bx + 8, by)
+    attackingIntent(world, seeker)
+    expect([OffBall.laneX[seeker], OffBall.laneY[seeker]]).toEqual(lane)
   })
 
   test('the rest defence and players behind the ball keep their places', () => {

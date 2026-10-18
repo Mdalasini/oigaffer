@@ -4,7 +4,7 @@ import { cue } from './cues'
 import { gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
-import { seenFacing } from './perception'
+import { seenFacing, seenX, seenY } from './perception'
 import { rateFeetPass } from './playmaking'
 import { gaussian } from './rng'
 import { along, homePosition, onsideLimit } from './shape'
@@ -389,9 +389,9 @@ function showForIt(world: Match, eid: number): Intent {
 }
 
 /**
- * Whether `eid` is among the LANE_SEEKERS teammates nearest (ox, oy) whose
- * places are ahead of it, leaving out the carrier, the rest defence and
- * anyone showing or running.
+ * Whether `eid` is among the LANE_SEEKERS teammates nearest (ox, oy) who are
+ * ahead of it, leaving out the carrier, the rest defence and anyone showing
+ * or running; with teammates where `eid` reckons they are.
  */
 function amongNextOptions(world: Match, eid: number, ox: number, oy: number): boolean {
   const team = world.possession
@@ -400,8 +400,10 @@ function amongNextOptions(world: Match, eid: number, ox: number, oy: number): bo
   let nearer = 0
   for (const mate of world.teams[team].outfielders) {
     if (mate === eid || mate === world.carrier || mate === rest || OffBall.showing[mate] || Run.phase[mate] !== RunPhase.None) continue
-    if (along(team, Position.x[mate]) < along(team, ox) + LANE_AHEAD) continue
-    if (Math.hypot(Position.x[mate] - ox, Position.y[mate] - oy) < own && ++nearer >= LANE_SEEKERS) return false
+    const mx = seenX(world, eid, mate)
+    const my = seenY(world, eid, mate)
+    if (along(team, mx) < along(team, ox) + LANE_AHEAD) continue
+    if (Math.hypot(mx - ox, my - oy) < own && ++nearer >= LANE_SEEKERS) return false
   }
   return true
 }
