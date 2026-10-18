@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Game, GameSnapshot } from '../game/Game'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
-import { reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, tackleSkill, topSpeed, touchAngleError } from '../sim/grades'
+import { catchChance, reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, tackleSkill, topSpeed, touchAngleError } from '../sim/grades'
 import type { GradeKey, Role } from '../sim/match'
 import { TEAM_NAMES, type TeamName } from '../sim/teams'
 import { TEAM_STYLE } from './teamStyle'
@@ -35,7 +35,10 @@ const ROLE_CONTROLS: RoleControls[] = [
   {
     role: 'keeper',
     name: 'Keeper',
-    grades: [{ key: 'reaction', label: 'Reaction', detail: (g) => `delay ${Math.round(reactionDelay(g) * 1000)} ms` }],
+    grades: [
+      { key: 'reaction', label: 'Reaction', detail: (g) => `delay ${Math.round(reactionDelay(g) * 1000)} ms` },
+      { key: 'handling', label: 'Handling', detail: (g) => `holds ${Math.round(catchChance(g) * 100)}% of shots at the body` },
+    ],
   },
 ]
 

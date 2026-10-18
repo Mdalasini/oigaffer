@@ -39,10 +39,10 @@ import { strikerSystem } from './systems/striker'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { attackDir, attackedGoalX, opponent, ownGoalX, TEAM_NAMES, type TeamName } from './teams'
 
-/** Open play, a shot on its way, or the ball dead before a restart. */
-export type Phase = 'play' | 'shot' | 'stopped'
-/** How a shot ended. A blocked shot stays in play. */
-export type ShotOutcome = 'goal' | 'save' | 'wide' | 'over' | 'blocked'
+/** Open play, a shot on its way, a keeper with the ball in their hands, or the ball dead before a restart. */
+export type Phase = 'play' | 'shot' | 'held' | 'stopped'
+/** How a shot ended. A parried or blocked shot stays in play. */
+export type ShotOutcome = 'goal' | 'caught' | 'parried' | 'wide' | 'over' | 'blocked'
 /**
  * Moments worth telling the viewer about. `claimed`: a keeper gathered a loose
  * ball. `tackled` / `intercepted`: the defending team won the ball back.
@@ -83,7 +83,7 @@ export interface ShotInfo {
 export interface TeamStats {
   goals: number
   shots: number
-  /** Shots kept out by the other keeper. */
+  /** Shots kept out by the other keeper, caught or parried. */
   saved: number
   /** Shots wide, over or blocked. */
   missed: number
@@ -118,7 +118,7 @@ export const GRADE_FIELDS = {
     agility: Physical.agility,
     strength: Physical.strength,
   },
-  keeper: { reaction: Goalkeeper.reaction },
+  keeper: { reaction: Goalkeeper.reaction, handling: Goalkeeper.handling },
 } as const
 export type Role = keyof typeof GRADE_FIELDS
 export type GradeKey<R extends Role> = keyof (typeof GRADE_FIELDS)[R] & string
@@ -128,7 +128,7 @@ export type GradeOverrides = { [T in TeamName]?: { [R in Role]?: Partial<RoleGra
 
 export const DEFAULT_GRADES: RoleGrades = {
   outfielder: { shooting: 14, dribbling: 13, marking: 12, tackling: 12, pace: 14, agility: 13, strength: 12 },
-  keeper: { reaction: 12 },
+  keeper: { reaction: 12, handling: 12 },
 }
 export const ROLES = Object.keys(GRADE_FIELDS) as Role[]
 export const gradeKeys = <R extends Role>(role: R) => Object.keys(GRADE_FIELDS[role]) as GradeKey<R>[]
@@ -163,6 +163,12 @@ export interface MatchContext {
   lastChallenge: LastChallenge | null
   /** Who last played the ball, to decide restarts when it goes out. */
   lastTouchedBy: number
+  /**
+   * Whether that was a deliberate kick (a touch, shot or pass) rather than a
+   * deflection or a tackle. A keeper can't pick up a ball their own outfielder
+   * deliberately played to them.
+   */
+  lastTouchDeliberate: boolean
   onEvent?: (event: MatchEvent) => void
 }
 
@@ -204,6 +210,7 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
     lastTouch: null,
     lastChallenge: null,
     lastTouchedBy: -1,
+    lastTouchDeliberate: false,
   })
 
   world.ball = addEntity(world)
@@ -320,6 +327,7 @@ export function winBall(world: Match, team: number, kind: 'tackled' | 'intercept
   world.stats[team].won++
   // The winner played it last, so a ball that runs out straight away goes against them.
   world.lastTouchedBy = world.teams[team].outfielder
+  world.lastTouchDeliberate = kind === 'intercepted'
   setPossession(world, team)
   record(world, kind, team)
 }
@@ -331,12 +339,13 @@ export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint 
   shot.crossing = crossing
   const stats = world.stats[shot.team]
   if (outcome === 'goal') stats.goals++
-  else if (outcome === 'save') stats.saved++
+  else if (outcome === 'caught' || outcome === 'parried') stats.saved++
   else stats.missed++
 
   const defending = opponent(shot.team)
   if (outcome === 'goal') stopPlay(world, 'kick-off', defending, 0, 0)
-  else if (outcome === 'blocked') {
+  else if (outcome === 'caught') takeInHands(world, world.keeper)
+  else if (outcome === 'parried' || outcome === 'blocked') {
     // Play goes on, so the shot is history: guides and the goal view follow the live attack again.
     world.shot = null
     setPhase(world, 'play')
@@ -353,12 +362,20 @@ export function scoreFromPlay(world: Match, team: number) {
   record(world, 'goal', team)
 }
 
-/** A keeper gathers a loose ball; their team restarts with it. */
+/** A keeper gathers a loose ball. */
 export function keeperClaims(world: Match, keeper: number) {
   const team = Team.id[keeper]
   if (team !== world.possession) world.stats[team].won++
-  stopPlay(world, 'goal-kick', team, 0, 0)
+  takeInHands(world, keeper)
   record(world, 'claimed', team)
+}
+
+/** The ball is in the keeper's hands: their team has it, and play waits on them to roll it out. */
+function takeInHands(world: Match, keeper: number) {
+  const team = Team.id[keeper]
+  setVec(Velocity, world.ball, 0, 0, 0)
+  if (team !== world.possession) setPossession(world, team)
+  setPhase(world, 'held')
 }
 
 /** The ball has gone out: play stops, and `team` restarts from about (x, y). */
@@ -433,6 +450,7 @@ export function takeRestart(world: Match) {
     setVec(Position, keeper, ownGoalX(t) + attackDir(t) * 0.5, 0, 0)
     setVec(Velocity, keeper, 0, 0, 0)
     Goalkeeper.reactTimer[keeper] = 0
+    Goalkeeper.recover[keeper] = 0
   }
 
   setVec(Position, ball, bx, by, BALL_RADIUS)
@@ -457,6 +475,7 @@ export function takeRestart(world: Match) {
   world.lastTouch = null
   world.lastChallenge = null
   world.lastTouchedBy = taker
+  world.lastTouchDeliberate = true
   world.restart = null
   setPossession(world, team)
   Defender.mode[other] = DefenderMode.Jockey

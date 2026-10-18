@@ -152,6 +152,10 @@ export const TakeOn = {
 
 export const Goalkeeper = {
   reaction: new Uint8Array(MAX_ENTITIES),
+  /** How often a shot within reach is held rather than parried. */
+  handling: new Uint8Array(MAX_ENTITIES),
   /** Seconds left before the keeper may react to the current shot. */
   reactTimer: new Float32Array(MAX_ENTITIES),
+  /** Seconds before the keeper can gather the ball again, after parrying it or rolling it out. */
+  recover: new Float32Array(MAX_ENTITIES),
 }

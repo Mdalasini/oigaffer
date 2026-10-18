@@ -17,6 +17,14 @@ goal at +x, Blue the one at -x.
   shooters have a tighter circle (2.4 m radius at 1, 0.35 m at 20).
 - **Reaction grade (1–20)** — after the strike the keeper stands frozen for a
   delay (400 ms at 1, 80 ms at 20), then dives towards where the ball will cross.
+- **Handling grade (1–20)** — a shot the keeper gets to is either caught or
+  parried. Shots at the body stick most often (30% at 1, 90% at 20), ones at
+  full stretch less, and anything above head height is punched. A parry pushes
+  the ball away from goal and wide, still in play. A catch, or a loose ball the
+  keeper gathers, gives their team the ball: the keeper holds it while their
+  outfielder runs wide to get open and the opponent drops off to mark, then
+  rolls it out to them. A keeper can't pick up a ball their own outfielder
+  played to them; they kick it straight back out instead.
 
 - **Movement** — players have a facing and physical grades (pace, acceleration,
   agility, strength). They accelerate hardest the way they face, sidestep and
@@ -52,8 +60,7 @@ goal at +x, Blue the one at -x.
   a throw-in, a corner, or a goal kick. After a goal the other team kicks off.
   Restarts are taken by the outfielder starting with the ball at their feet,
   with the opponent standing off goal-side. A ball that rolls into a net is a
-  goal, own goals included. A save or a keeper gathering a loose ball also
-  gives the keeper's team the restart. The carrier only knocks the ball long
+  goal, own goals included. The carrier only knocks the ball long
   when there's room on the pitch for it, and takes defenders on the infield
   side near a touchline.
 

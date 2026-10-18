@@ -21,6 +21,14 @@ export function reactionDelay(reaction: number): number {
   return lerp(0.4, 0.08, gradeT(reaction))
 }
 
+/**
+ * Chance (0–1) that a keeper with `handling` holds a shot that comes straight
+ * at them, rather than parrying it. Stretching for it makes holding harder.
+ */
+export function catchChance(handling: number): number {
+  return lerp(0.3, 0.9, gradeT(handling))
+}
+
 /** Standard deviation (rad) of where a touch goes versus where it was meant to. */
 export function touchAngleError(dribbling: number): number {
   return lerp(0.2, 0.03, gradeT(dribbling))

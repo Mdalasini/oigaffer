@@ -46,4 +46,5 @@ function playTouch(world: Match, eid: number, style: Exclude<TouchStyle, 0>) {
   Dribbler.cooldown[eid] = spec.cooldown
   world.lastTouch = { by: eid, style, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
+  world.lastTouchDeliberate = true
 }

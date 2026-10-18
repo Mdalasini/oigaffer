@@ -1,7 +1,10 @@
 import { query } from 'bitecs'
 import { Body, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
+import { catchChance } from '../grades'
 import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
+import { passToOutfielder } from './keeper'
+import { gaussian } from '../rng'
 import type { GoalPoint } from '../shooting'
 import { attackDir, opponent } from '../teams'
 import { ballAtFeet } from '../touch'
@@ -9,6 +12,12 @@ import { ballAtFeet } from '../touch'
 /** Reach beyond the keeper's body when stretching out. */
 const ARM_REACH = 0.7
 const KEEPER_MAX_HEIGHT = 2.5
+/** Above this height (m) a shot can only be punched away, not held. */
+const PUNCH_HEIGHT = 2.1
+/** At full stretch the chance of holding a shot falls to this share of the keeper's best. */
+const STRETCHED_CATCH = 0.6
+/** Seconds after a parry before the keeper can go down on the loose ball. */
+const PARRY_RECOVER = 0.6
 /** Seconds the ball stays dead before the restart is taken. */
 const STOP_PAUSE = 2.2
 /** A shot that hasn't been settled by now has run its course; count it as off target. */
@@ -20,24 +29,31 @@ export function outcomeSystem(world: Match, _dt: number) {
     return
   }
   if (world.phase === 'play') {
-    const keeper = claimingKeeper(world)
-    if (keeper !== null) {
-      Velocity.x[world.ball] = Velocity.y[world.ball] = Velocity.z[world.ball] = 0
-      keeperClaims(world, keeper)
-    } else leftThePitch(world)
+    const keeper = keeperWithinReach(world)
+    if (keeper === null) leftThePitch(world)
+    // Their own outfielder played it to them, so it's feet only: knock it straight back out to them.
+    else if (isBackPass(world, keeper)) passToOutfielder(world, keeper, Position.x[world.ball], Position.y[world.ball])
+    else keeperClaims(world, keeper)
     return
   }
 
   const shot = world.shot
   if (!shot) return
-  const { ball, keeper } = world
+  const { keeper } = world
   const dir = Math.sign(shot.goalX)
   const crossing = crossPlane(world, Position.x[keeper], dir)
   if (crossing) {
     const reach = Body.radius[keeper] + ARM_REACH
-    if (Math.abs(crossing.y - Position.y[keeper]) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
-      parry(ball, dir, crossing.y - Position.y[keeper])
-      endShot(world, 'save', crossing)
+    const offset = crossing.y - Position.y[keeper]
+    if (Math.abs(offset) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
+      // Shots at the body stick; ones at full stretch or over the head get pushed away.
+      const stretch = Math.abs(offset) / reach
+      const chance = crossing.z > PUNCH_HEIGHT ? 0 : catchChance(Goalkeeper.handling[keeper]) * (1 - (1 - STRETCHED_CATCH) * stretch)
+      if (world.rng() < chance) endShot(world, 'caught', crossing)
+      else {
+        parry(world, keeper, dir, offset, crossing.z)
+        endShot(world, 'parried', crossing)
+      }
       return
     }
   }
@@ -78,11 +94,15 @@ function leftThePitch(world: Match) {
   }
 }
 
-/** A keeper who can gather the loose ball: within reach, and not at an outfielder's feet. */
-function claimingKeeper(world: Match): number | null {
+/**
+ * A keeper who can get to the loose ball: within reach, not at an
+ * outfielder's feet, and not just after parrying it or playing it out.
+ */
+function keeperWithinReach(world: Match): number | null {
   const { ball, striker, defender } = world
   if (ballAtFeet(striker, ball) || ballAtFeet(defender, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return null
   for (const keeper of query(world, [Goalkeeper, Position, Body])) {
+    if (Goalkeeper.recover[keeper] > 0) continue
     const reach = Body.radius[keeper] + ARM_REACH
     if (Math.hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
   }
@@ -101,8 +121,25 @@ function crossPlane(world: Match, planeX: number, dir: number): GoalPoint | null
   }
 }
 
-function parry(ball: number, dir: number, offset: number) {
-  Velocity.x[ball] = -dir * Math.abs(Velocity.x[ball]) * 0.25
-  Velocity.y[ball] = Math.sign(offset || 1) * 4
-  Velocity.z[ball] = 2
+/** Whether the ball was last played deliberately by `keeper`'s own outfielder: a back-pass they can't pick up. */
+export function isBackPass(world: Match, keeper: number) {
+  const by = world.lastTouchedBy
+  return world.lastTouchDeliberate && by !== keeper && Team.id[by] === Team.id[keeper]
+}
+
+/**
+ * Pushes the ball away from goal, out to the side the keeper met it on; a
+ * high ball is punched up and over. It stays in play for whoever gets there.
+ */
+function parry(world: Match, keeper: number, dir: number, offset: number, height: number) {
+  const ball = world.ball
+  const { rng } = world
+  const out = 2 + rng() * 4
+  const wide = Math.sign(offset || gaussian(rng)) * (3 + rng() * 4)
+  Velocity.x[ball] = -dir * out
+  Velocity.y[ball] = wide
+  Velocity.z[ball] = height > PUNCH_HEIGHT ? 4 + rng() * 2 : 1 + rng() * 2
+  world.lastTouchedBy = keeper
+  world.lastTouchDeliberate = false
+  Goalkeeper.recover[keeper] = PARRY_RECOVER
 }

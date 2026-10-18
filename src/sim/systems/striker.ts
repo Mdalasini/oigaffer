@@ -2,10 +2,11 @@ import { query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { Attacking, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
-import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
+import { distanceToSegment } from '../geometry'
+import { closeControlSpeed, reactionDelay, shotSpreadRadius, topSpeed } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { attackedGoalX } from '../teams'
+import { attackDir, attackedGoalX, ownGoalX } from '../teams'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
 const SHOT_SPEED = 25
@@ -53,12 +54,20 @@ const SHIELD_SPREAD = 0.8
 const SHIELD_REST = 1.5
 /** Barely move while shielding (m/s). */
 const SHIELD_PACE = 1.2
+/** With their keeper holding the ball, get open this far (m) up from their own goal line and this far out wide. */
+const RECEIVE_DEPTH = 11
+const RECEIVE_WIDTH = 7
+const POSITION_GAIN = 2
 
 /** The striker's decisions: dribble at goal with touches, then shoot. */
 export function strikerSystem(world: Match, dt: number) {
   for (const eid of query(world, [Attacking, Outfielder, MoveIntent, Dribbler])) {
     MoveIntent.faceX[eid] = 0
     MoveIntent.faceY[eid] = 0
+    if (world.phase === 'held') {
+      getOpen(world, eid)
+      continue
+    }
     if (world.phase !== 'play') {
       MoveIntent.vx[eid] = 0
       MoveIntent.vy[eid] = 0
@@ -92,6 +101,23 @@ export function strikerSystem(world: Match, dt: number) {
     const style = roomToRun || chased ? TouchStyle.Large : TouchStyle.Small
     carry(eid, ball, style, dirX, dirY)
   }
+}
+
+/** Runs wide of their own keeper, who has the ball, to take it from them, facing them. */
+function getOpen(world: Match, eid: number) {
+  const team = Team.id[eid]
+  const keeper = world.teams[team].keeper
+  // Stay on the side already on, so the run doesn't dither across the middle.
+  const side = Position.y[eid] >= 0 ? 1 : -1
+  const dx = ownGoalX(team) + attackDir(team) * RECEIVE_DEPTH - Position.x[eid]
+  const dy = side * RECEIVE_WIDTH - Position.y[eid]
+  const distance = Math.hypot(dx, dy) || 1
+  const speed = Math.min(topSpeed(Physical.pace[eid]), distance * POSITION_GAIN)
+  MoveIntent.vx[eid] = (dx / distance) * speed
+  MoveIntent.vy[eid] = (dy / distance) * speed
+  MoveIntent.faceX[eid] = Position.x[keeper] - Position.x[eid]
+  MoveIntent.faceY[eid] = Position.y[keeper] - Position.y[eid]
+  Dribbler.style[eid] = TouchStyle.None
 }
 
 function wantsToShoot(world: Match, eid: number, goalX: number, distance: number, shootDistance: number) {
@@ -246,13 +272,6 @@ const rotate = (x: number, y: number, a: number): [number, number] => [
   x * Math.sin(a) + y * Math.cos(a),
 ]
 
-function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
-  const dx = bx - ax
-  const dy = by - ay
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t))
-}
-
 function shoot(world: Match, striker: number, goalX: number) {
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
@@ -269,6 +288,7 @@ function shoot(world: Match, striker: number, goalX: number) {
   world.shootRequested = false
   world.lastTouch = null
   world.lastTouchedBy = striker
+  world.lastTouchDeliberate = true
   world.stats[team].shots++
   setPhase(world, 'shot')
 }

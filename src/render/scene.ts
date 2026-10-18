@@ -58,7 +58,8 @@ const KITS: { outfield: Kit; keeper: Kit }[] = [
 
 const SHOT_COLOR: Record<ShotOutcome, Color> = {
   goal: [0.25, 0.9, 0.4, 1],
-  save: [0.35, 0.65, 1, 1],
+  caught: [0.35, 0.65, 1, 1],
+  parried: [0.35, 0.65, 1, 1],
   blocked: [1, 0.35, 0.3, 1],
   wide: [1, 0.35, 0.3, 1],
   over: [1, 0.35, 0.3, 1],
