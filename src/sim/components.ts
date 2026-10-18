@@ -62,6 +62,19 @@ export const Outfielder = {
   marking: new Uint8Array(MAX_ENTITIES),
   /** How often a tackle comes away with the ball. */
   tackling: new Uint8Array(MAX_ENTITIES),
+  /** How true a pass goes, in direction and weight. */
+  passing: new Uint8Array(MAX_ENTITIES),
+  /** How cleanly a pass is brought under control, and how fast a ball can be taken. */
+  firstTouch: new Uint8Array(MAX_ENTITIES),
+  /** How much of the pitch a player takes in: teammates they spot outside their field of view. */
+  vision: new Uint8Array(MAX_ENTITIES),
+  /** How reliably a player picks the best option they've seen. */
+  decisions: new Uint8Array(MAX_ENTITIES),
+}
+
+/** A player on the ball looking for a pass: the match time at which they next weigh their options. */
+export const Passer = {
+  nextLook: new Float32Array(MAX_ENTITIES),
 }
 
 /** Knocked off balance: can't play the ball and barely accelerates until the timer runs out. */

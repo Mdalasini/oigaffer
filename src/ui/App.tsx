@@ -162,6 +162,7 @@ function Scoreboard({ stats, possession }: { stats: [TeamStats, TeamStats]; poss
         <thead>
           <tr className="text-[10px] tracking-wide uppercase">
             <th />
+            <th className="px-1.5 font-medium">Passes</th>
             <th className="px-1.5 font-medium">Shots</th>
             <th className="px-1.5 font-medium">Saved</th>
             <th className="px-1.5 font-medium">Won back</th>
@@ -171,6 +172,9 @@ function Scoreboard({ stats, possession }: { stats: [TeamStats, TeamStats]; poss
           {TEAM_STYLE.map((team, i) => (
             <tr key={team.name} className="text-center">
               <td className={`pr-1.5 text-left font-semibold ${team.text}`}>{team.name}</td>
+              <td>
+                {stats[i].completed}/{stats[i].passes}
+              </td>
               <td>{stats[i].shots}</td>
               <td>{stats[i].saved}</td>
               <td>{stats[i].won}</td>

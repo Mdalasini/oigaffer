@@ -45,3 +45,22 @@ export function rollTime(from: number, distance: number): number {
   }
   return (lo + hi) / 2
 }
+
+/** Speed (m/s) of a ball rolled at `from` m/s after `t` seconds. */
+export function rollSpeedAfter(from: number, t: number): number {
+  if (t >= rollStopTime(from)) return 0
+  return (from + K) * Math.exp(-BALL_ROLL_DRAG * t) - K
+}
+
+/** Speed (m/s) to roll a ball so it covers `distance` metres in `time` seconds; Infinity if no speed is quick enough. */
+export function rollSpeedToArrive(distance: number, time: number): number {
+  let lo = 0
+  let hi = 60
+  if (rollTime(hi, distance) > time) return Infinity
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    if (rollTime(mid, distance) > time) lo = mid
+    else hi = mid
+  }
+  return hi
+}

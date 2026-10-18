@@ -87,3 +87,36 @@ export function turnRate(agility: number): number {
 export function sideStepSpeed(agility: number): number {
   return lerp(2.4, 3.6, gradeT(agility))
 }
+
+/** Standard deviation (rad) of a pass's direction from where it was aimed, before distance and pressure. */
+export function passAngleError(passing: number): number {
+  return lerp(0.09, 0.015, gradeT(passing))
+}
+
+/** Relative standard deviation of how hard a pass is struck. */
+export function passWeightError(passing: number): number {
+  return lerp(0.14, 0.03, gradeT(passing))
+}
+
+/**
+ * The fastest a ball can come at a player (m/s, relative to them) and still
+ * be cushioned dead. Anything quicker bounces off further.
+ */
+export function cleanTakeSpeed(firstTouch: number): number {
+  return lerp(6, 14, gradeT(firstTouch))
+}
+
+/** Standard deviation (rad) of where a first touch sends the ball from where it was meant to go. */
+export function firstTouchError(firstTouch: number): number {
+  return lerp(0.5, 0.08, gradeT(firstTouch))
+}
+
+/** Chance, each time they look, that a player spots a teammate outside their field of view. */
+export function spotChance(vision: number): number {
+  return lerp(0.15, 0.85, gradeT(vision))
+}
+
+/** Relative standard deviation of the error in how a player rates their options. */
+export function judgementError(decisions: number): number {
+  return lerp(0.4, 0.05, gradeT(decisions))
+}

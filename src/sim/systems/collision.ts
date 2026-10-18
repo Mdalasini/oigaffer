@@ -9,6 +9,8 @@ const BODY_RESTITUTION = 0.3
 const LEG_WIDTH = 0.8
 /** Height (m) of a player lying on the ground, sliding or getting up. */
 const PRONE_HEIGHT = 0.4
+/** Seconds a pass takes to get clear of the passer's body. */
+const PASSER_CLEARANCE = 0.3
 /** Separating one pair can push a body into another, so repeat until settled. */
 const MAX_PASSES = 8
 const TOLERANCE = 1e-4
@@ -32,8 +34,11 @@ export function collisionSystem(world: Match, _dt: number) {
  */
 export function ballBodySystem(world: Match, _dt: number) {
   if (world.phase !== 'play' && world.phase !== 'shot') return
+  const pass = world.pass
+  // A pass doesn't bounce off the passer on its way out, whichever way they're facing.
+  const passer = pass && world.time - pass.time < PASSER_CLEARANCE ? pass.from : -1
   for (const eid of query(world, [Outfielder, Body, Position])) {
-    if (eid !== world.carrier && ballOffBody(world, eid)) return
+    if (eid !== world.carrier && eid !== passer && ballOffBody(world, eid)) return
   }
 }
 
@@ -81,6 +86,7 @@ function ballOffBody(world: Match, eid: number): boolean {
   Position.z[ball] = z
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = false
+  world.pass = null
   if (world.phase === 'shot') endShot(world, 'blocked', null)
   return true
 }
