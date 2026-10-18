@@ -20,7 +20,7 @@ function place(eid: number, x: number, y: number, facing = 0, vx = 0, vy = 0) {
 
 describe('squads', () => {
   test('two outfielders a side, and everyone starts in their own half with the opponents outside the circle', () => {
-    const world = createMatch({ seed: 2 })
+    const world = createMatch({ outfielders: 2, seed: 2 })
     expect(world.teams[RED].outfielders).toHaveLength(2)
     expect(world.teams[BLUE].outfielders).toHaveLength(2)
     for (const eid of allOutfielders(world)) {
@@ -34,10 +34,10 @@ describe('squads', () => {
 
 describe('sharing the work', () => {
   test('once the presser is beaten, the covering defender steps in', () => {
-    const world = createMatch({ seed: 3 })
-    const [red, redMate] = world.teams[RED].outfielders
+    const world = createMatch({ outfielders: 2, seed: 3 })
+    const red = world.carrier
+    const redMate = world.teams[RED].outfielders.find((eid) => eid !== red)!
     const [blueA, blueB] = world.teams[BLUE].outfielders
-    world.carrier = red
     // Red is through, running at goal; one Blue defender is left behind, the other is ahead.
     place(red, 5, 0, 0, 6, 0)
     setVec(Position, world.ball, 5 + FOOT_OFFSET, 0, BALL_RADIUS)
@@ -52,7 +52,7 @@ describe('sharing the work', () => {
   })
 
   test('a loose ball that runs to a teammate stays with the team', () => {
-    const world = createMatch({ seed: 4 })
+    const world = createMatch({ outfielders: 2, seed: 4 })
     const [red, redMate] = world.teams[RED].outfielders
     const [blueA, blueB] = world.teams[BLUE].outfielders
     place(red, -10, 0)
@@ -71,7 +71,7 @@ describe('sharing the work', () => {
   })
 
   test('the keeper picks out whichever teammate is free, not the one being marked', () => {
-    const world = createMatch({ seed: 5 })
+    const world = createMatch({ outfielders: 2, seed: 5 })
     const keeper = world.teams[BLUE].keeper
     const [blueA, blueB] = world.teams[BLUE].outfielders
     const [redA, redB] = world.teams[RED].outfielders
@@ -88,7 +88,7 @@ describe('sharing the work', () => {
 
 describe('review fixes', () => {
   test('a ball the keeper rolls out stays with the teammate it was meant for', () => {
-    const world = createMatch({ seed: 6 })
+    const world = createMatch({ outfielders: 2, seed: 6 })
     const keeper = world.teams[BLUE].keeper
     const [near, far] = world.teams[BLUE].outfielders
     const [redA, redB] = world.teams[RED].outfielders
@@ -107,10 +107,10 @@ describe('review fixes', () => {
   })
 
   test('kept clear of the carrier, the attacker without the ball still aims to stay onside', () => {
-    const world = createMatch({ seed: 7 })
+    const world = createMatch({ outfielders: 2, seed: 7 })
     const [carrier, mate] = world.teams[RED].outfielders
     const [blueA, blueB] = world.teams[BLUE].outfielders
-    world.carrier = carrier
+    handOver(world, carrier)
     place(carrier, 8, 4.5)
     setVec(Position, world.ball, 8.35, 4.5, BALL_RADIUS)
     place(mate, 9, 6)
@@ -125,10 +125,10 @@ describe('review fixes', () => {
   })
 
   test('a player leaving the ball holds where they are rather than resuming an old plan', () => {
-    const world = createMatch({ seed: 8 })
-    const [carrier, mate] = world.teams[RED].outfielders
+    const world = createMatch({ outfielders: 2, seed: 8 })
+    const carrier = world.carrier
+    const mate = world.teams[RED].outfielders.find((eid) => eid !== carrier)!
     place(carrier, 10, 5)
-    world.carrier = carrier
     handOver(world, mate)
     expect(OffBall.targetX[carrier]).toBeCloseTo(10, 4)
     expect(OffBall.targetY[carrier]).toBeCloseTo(5, 4)
@@ -137,7 +137,7 @@ describe('review fixes', () => {
 
 describe('moving like footballers', () => {
   // Ten minutes of play, sampled ten times a second, for the outfielders without a job on the ball.
-  const world = createMatch({ seed: 9 })
+  const world = createMatch({ outfielders: 2, seed: 9 })
   const speeds = { walk: 0, jog: 0, run: 0, sprint: 0 }
   let samples = 0
   let bunched = 0

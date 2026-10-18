@@ -19,9 +19,9 @@ function place(eid: number, x: number, y: number, facing = 0) {
 
 /** Red on the ball at (x, y) facing `facing`, Red's teammate at (mx, my), Blue's outfielders at the given spots. */
 function scene(x: number, y: number, facing: number, mx: number, my: number, blue: [number, number][], grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed: 1, grades })
+  const world = createMatch({ outfielders: 2, seed: 1, grades })
   const [carrier, mate] = world.teams[RED].outfielders
-  world.carrier = carrier
+  handOver(world, carrier)
   place(carrier, x, y, facing)
   setVec(Position, world.ball, x + Math.cos(facing) * FOOT_OFFSET, y + Math.sin(facing) * FOOT_OFFSET, BALL_RADIUS)
   setVec(Velocity, world.ball, 0, 0, 0)

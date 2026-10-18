@@ -13,7 +13,7 @@ const BLUE = 1
 
 /** Red shoots at Blue's keeper, who stands centrally on the line; the ball is struck 3 m out at `offset` across and `height` up. */
 function shotAtKeeper(seed: number, offset: number, height: number, grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed, grades })
+  const world = createMatch({ outfielders: 2, seed, grades })
   setVec(Position, world.carrier, 0, 10, 0)
   setVec(Position, world.presser, 0, -10, 0)
   setVec(Position, world.keeper, GOAL_X - 0.5, 0, 0)
@@ -105,7 +105,7 @@ describe('a keeper with the ball in their hands', () => {
 describe('back-passes', () => {
   /** A ball rolling gently into Blue's keeper's arms, last played by `by`. */
   function rollToKeeper(by: 'own' | 'opponent', deliberate: boolean): Match {
-    const world = createMatch({ seed: 1 })
+    const world = createMatch({ outfielders: 2, seed: 1 })
     setVec(Position, world.carrier, 0, 10, 0)
     setVec(Position, world.presser, 0, -10, 0)
     const keeper = world.teams[BLUE].keeper

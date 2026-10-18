@@ -13,7 +13,7 @@ const BLUE = 1
  * at (vx, vy), last touched by Red's or Blue's outfielder.
  */
 function rolling(x: number, y: number, vx: number, vy: number, toucher: 'carrier' | 'presser'): Match {
-  const world = createMatch({ seed: 1 })
+  const world = createMatch({ outfielders: 2, seed: 1 })
   // Keep the players well away so nobody can play the ball.
   setVec(Position, world.carrier, -15, 0, 0)
   setVec(Position, world.presser, -15, 4, 0)

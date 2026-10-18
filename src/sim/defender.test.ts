@@ -11,7 +11,7 @@ import { FOOT_OFFSET } from './touch'
 
 /** Carrier with the ball 20 m out, defender `gap` metres goal-side of it. */
 function faceOff(gap: number, grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed: 1, grades })
+  const world = createMatch({ outfielders: 2, seed: 1, grades })
   const { carrier, presser: defender, ball } = world
   setVec(Position, carrier, GOAL_X - 20, 0, 0)
   Facing.angle[carrier] = 0
