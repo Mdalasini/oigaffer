@@ -78,32 +78,35 @@ function scored(n: number, distance: number, wide: number, grades: GradeOverride
 }
 
 describe('finishing against a set keeper', () => {
-  const near = scored(SHOTS, 10, 0)
-  const far = scored(SHOTS, 18, 0)
+  const curve = [6, 10, 14, 18, 22].map((distance) => ({ distance, rate: scored(SHOTS, distance, 0) }))
+  const near = curve[1].rate
 
   test('an average finisher scores about as often as real shots from there do', () => {
-    // Measured over 3000 shots at 34% from 10 m and 17% from 18 m (15–19% between seed blocks), against 32% and 11% for real shots.
-    expect(Math.abs(near - shotChance(GOAL_X - 10, 0))).toBeLessThan(0.1)
-    expect(Math.abs(far - shotChance(GOAL_X - 18, 0))).toBeLessThan(0.08)
+    // Measured over 9000 shots a spot, three seed blocks pooled: 60/33/19/13/6% from 6/10/14/18/22 m,
+    // against 58/32/18/11/7% for real shots. These 1000 come to 61/35/19/13/7%.
+    for (const { distance, rate } of curve) expect(Math.abs(rate - shotChance(GOAL_X - distance, 0))).toBeLessThan(0.04)
   })
 
   test('the further out, the fewer go in', () => {
-    expect(far).toBeLessThan(near - 0.1)
+    for (let i = 1; i < curve.length; i++) expect(curve[i].rate).toBeLessThan(curve[i - 1].rate - 0.03)
   })
 
   test('a better finisher scores more', () => {
+    // Measured at 44% for a grade 18 and 21% for a grade 4 from 10 m.
     const grades = (shooting: number): GradeOverrides => ({ red: { outfielder: { shooting } } })
-    expect(scored(SHOTS, 10, 0, grades(18))).toBeGreaterThan(scored(SHOTS, 10, 0, grades(4)) + 0.15)
-  })
+    expect(scored(SHOTS, 10, 0, grades(18))).toBeGreaterThan(scored(SHOTS, 10, 0, grades(4)) + 0.2)
+  }, 20_000)
 
   test('a quicker keeper keeps more out', () => {
+    // Measured at 8% against a grade 18 and 25% against a grade 4 from 14 m.
     const grades = (reaction: number): GradeOverrides => ({ blue: { keeper: { reaction } } })
-    expect(scored(SHOTS, 14, 0, grades(18))).toBeLessThan(scored(SHOTS, 14, 0, grades(4)) - 0.1)
-  })
+    expect(scored(SHOTS, 14, 0, grades(18))).toBeLessThan(scored(SHOTS, 14, 0, grades(4)) - 0.15)
+  }, 20_000)
 
   test('a shot hurried by a defender goes in less often', () => {
-    expect(scored(SHOTS, 10, 0, {}, 1)).toBeLessThan(near - 0.1)
-  })
+    // Measured at 16% with a defender a metre off, against 35% free.
+    expect(scored(SHOTS, 10, 0, {}, 1)).toBeLessThan(near - 0.15)
+  }, 20_000)
 })
 
 describe('the shooter’s judgement', () => {
@@ -113,8 +116,8 @@ describe('the shooter’s judgement', () => {
       const world = chance(100 + i, 10, 0)
       reckoned += shotValue(world, world.carrier)
     }
-    // Measured at 27% reckoned against 33% scored: a little cautious.
-    expect(Math.abs(reckoned / 100 - scored(100, 10, 0))).toBeLessThan(0.1)
+    // Measured at 32% reckoned against 35% scored: a little cautious.
+    expect(Math.abs(reckoned / 100 - scored(100, 10, 0))).toBeLessThan(0.06)
   })
 
   test('closed down near goal, a shot is worth more than holding on; free 20 m out, carrying on is', () => {

@@ -18,14 +18,14 @@ import { ownGoalX } from '../teams'
 const ADVANCE_SHARE = 0.15
 const ADVANCE_MIN = 1.2
 const ADVANCE_MAX = 3
-const ONE_ON_ONE_SHARE = 0.4
-const ONE_ON_ONE_MAX = 5
+const ONE_ON_ONE_SHARE = 0.45
+const ONE_ON_ONE_MAX = 7
 /** Within this distance (m) of goal, a shooter with nobody else in the way is through on goal. */
 const ONE_ON_ONE_RANGE = 20
 const SET_SPEED = 4
 const RUSH_SPEED = 6
 const DIVE_SPEED = 5
-const DIVE_ACCEL = 12
+const DIVE_ACCEL = 16
 /** Furthest the keeper's centre goes beyond a post. */
 const POST_OVERRUN = 0.4
 /** Reach (m) beyond the keeper's body when stretching out. */
@@ -34,7 +34,7 @@ export const ARM_REACH = 0.9
  * A keeper close to the shooter spreads themselves, arms and legs out, to
  * block: up to this much more reach (m), fading out by SPREAD_RANGE metres.
  */
-const SPREAD = 0.6
+const SPREAD = 0.3
 const SPREAD_RANGE = 10
 
 /** With the ball in hand, look around for who to roll it to every LOOK_EVERY seconds, plus up to LOOK_SPREAD. */
