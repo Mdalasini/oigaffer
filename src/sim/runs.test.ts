@@ -220,6 +220,27 @@ describe('five a side: complementary support', () => {
     expect(restDefender(world)).toBe(deepest(world.carrier))
   })
 
+  test('a player who becomes the rest defence mid-run gives the run up', () => {
+    const world = closedDown(-10, 0, [[-8, -12], [0, 12], [8, 0]], [[-30, 15], [-28, -15], [20, 15], [22, -15]])
+    const rest = restDefender(world)
+    Run.phase[rest] = RunPhase.Go
+    Run.timer[rest] = 1.5
+    Run.targetX[rest] = 20
+    Run.targetY[rest] = -10
+    const intent = attackingIntent(world, rest)
+    expect(Run.phase[rest]).toBe(RunPhase.None)
+    expect(intent.x).toBeLessThan(Position.x[world.ball])
+  })
+
+  test('the rest defence holds behind the ball even when the deepest place left is ahead of it', () => {
+    // The base player has it deep; the next deepest place in the diamond is a wide one, level with or ahead of the ball.
+    const world = closedDown(-10, 0, [[-6, -15], [-6, 15], [8, 0]], [[-30, 15], [-28, -15], [20, 15], [22, -15]])
+    const rest = restDefender(world)
+    expect(along(RED, homePosition(world, rest).x)).toBeGreaterThan(along(RED, Position.x[world.ball]) - 1)
+    const intent = attackingIntent(world, rest)
+    expect(along(RED, intent.x)).toBeLessThan(along(RED, Position.x[world.ball]) - 3)
+  })
+
   test('two or fewer outfielders a side spare nobody for rest defence', () => {
     expect(restDefender(createMatch({ outfielders: 2, seed: 1 }))).toBe(-1)
   })

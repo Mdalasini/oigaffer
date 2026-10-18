@@ -54,6 +54,8 @@ const SAME_ANGLE = 0.5
 const SAME_ANGLE_COST = 0.03
 /** With at least this many outfielders, one stays behind the ball to stop the counter. */
 const REST_DEFENCE_FROM = 3
+/** The rest defence holds at least this far (m) behind the ball. */
+const REST_BEHIND = 6
 /** One runner in behind at a time for every this many outfielders. */
 const PLAYERS_PER_RUNNER = 4
 /** A teammate calls for it to feet when a pass to them would get through at least this often. */
@@ -112,6 +114,13 @@ export function attackingIntent(world: Match, eid: number): Intent {
     return hold(world, eid, false)
   }
 
+  // The rest defence gives up any run they were on: someone has to stay back.
+  const rest = restDefender(world) === eid
+  if (rest) {
+    endRun(world, eid)
+    return hold(world, eid, true)
+  }
+
   if (Run.phase[eid] === RunPhase.Prepare) {
     if (Run.timer[eid] > 0) return checkAway(world, eid)
     Run.phase[eid] = RunPhase.Go
@@ -128,10 +137,9 @@ export function attackingIntent(world: Match, eid: number): Intent {
     endRun(world, eid)
   }
 
-  const rest = restDefender(world) === eid
-  if (!rest && pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
+  if (pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
   OffBall.showing[eid] = 0
-  if (!rest && runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
+  if (runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
     const target = runTarget(world, eid)
     if (target) {
       Run.phase[eid] = RunPhase.Prepare
@@ -177,11 +185,19 @@ export function clearIntentions(eid: number) {
   OffBall.showing[eid] = 0
 }
 
-/** Their place in the shape, kept clear of the carrier, calling for it if they're free. */
+/**
+ * Their place in the shape, kept clear of the carrier, calling for it if
+ * they're free. The rest defence holds it behind the ball, however far
+ * forward their place would be.
+ */
 function hold(world: Match, eid: number, mayCall: boolean): Intent {
   let { x, y } = homePosition(world, eid)
   const carrier = world.carrier
-  if (world.phase !== 'held' && carrier !== eid) {
+  if (world.phase === 'play' && restDefender(world) === eid) {
+    const team = world.possession
+    x = Math.min(along(team, x), along(team, Position.x[world.ball]) - REST_BEHIND, L - 1) * attackDir(team)
+    x = clamp(x, -(L - 1), L - 1)
+  } else if (world.phase !== 'held' && carrier !== eid) {
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = Math.hypot(dx, dy)
