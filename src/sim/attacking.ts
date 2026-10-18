@@ -39,6 +39,25 @@ const KEEP_SPOT = 0.2
 const KEEP_SPOT_MIN = 0.01
 /** Value lost for every second it takes to get to a spot, so nearer spots win ties. */
 const TRAVEL_COST = 0.01
+/**
+ * At most this many show for it at once: two give the carrier a triangle,
+ * while the rest keep the width and depth that stretch the defence.
+ */
+const MAX_SHOWING = 2
+/** A teammate already showing keeps the job unless another is this much (s) nearer the ball. */
+const KEEP_SHOWING = 0.5
+/**
+ * A spot within this angle (rad) of another teammate, seen from the ball,
+ * offers the carrier the same pass, and is worth this much less.
+ */
+const SAME_ANGLE = 0.5
+const SAME_ANGLE_COST = 0.03
+/** With at least this many outfielders, one stays behind the ball to stop the counter. */
+const REST_DEFENCE_FROM = 3
+/** The rest defence holds at least this far (m) behind the ball. */
+const REST_BEHIND = 6
+/** One runner in behind at a time for every this many outfielders. */
+const PLAYERS_PER_RUNNER = 4
 /** A teammate calls for it to feet when a pass to them would get through at least this often. */
 const CALL_WHEN_SAFE = 0.85
 
@@ -74,12 +93,18 @@ const RUN_REST = 2.5
  * - **Run in behind** when the carrier can play forward: check towards the
  *   ball, then sprint for the space beyond the line, staying onside until the
  *   pass and calling for it in behind. A run that isn't found within a couple
- *   of seconds is given up, and they rejoin the shape.
+ *   of seconds is given up, and they rejoin the shape. Only one runs at a
+ *   time in a small side, so the others stay to support.
  * - **Show for it** when the carrier is under pressure or facing their own
  *   goal: go to the spot where a pass to them would be worth most, and call
- *   for it to feet.
+ *   for it to feet. The one or two nearest the ball do this, each offering a
+ *   different angle from the other; the rest keep the shape.
  * - Otherwise **hold** their place in the shape, kept clear of the carrier,
  *   calling for it when they're free.
+ *
+ * In a side of three or more, whoever plays deepest in the shape stays back
+ * as **rest defence**: they hold, behind the ball, ready for the counter and
+ * as the outlet to play back to, and never run or show ahead of it.
  */
 export function attackingIntent(world: Match, eid: number): Intent {
   const carrier = world.carrier
@@ -87,6 +112,13 @@ export function attackingIntent(world: Match, eid: number): Intent {
   if (world.phase !== 'play' || world.pass || carrier === eid) {
     endRun(world, eid)
     return hold(world, eid, false)
+  }
+
+  // The rest defence gives up any run they were on: someone has to stay back.
+  const rest = restDefender(world) === eid
+  if (rest) {
+    endRun(world, eid)
+    return hold(world, eid, true)
   }
 
   if (Run.phase[eid] === RunPhase.Prepare) {
@@ -105,9 +137,9 @@ export function attackingIntent(world: Match, eid: number): Intent {
     endRun(world, eid)
   }
 
-  if (pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED)) return showForIt(world, eid)
+  if (pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
   OffBall.showing[eid] = 0
-  if (runCue(world, eid) && world.rng() < runChance(eid)) {
+  if (runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
     const target = runTarget(world, eid)
     if (target) {
       Run.phase[eid] = RunPhase.Prepare
@@ -153,11 +185,19 @@ export function clearIntentions(eid: number) {
   OffBall.showing[eid] = 0
 }
 
-/** Their place in the shape, kept clear of the carrier, calling for it if they're free. */
+/**
+ * Their place in the shape, kept clear of the carrier, calling for it if
+ * they're free. The rest defence holds it behind the ball, however far
+ * forward their place would be.
+ */
 function hold(world: Match, eid: number, mayCall: boolean): Intent {
   let { x, y } = homePosition(world, eid)
   const carrier = world.carrier
-  if (world.phase !== 'held' && carrier !== eid) {
+  if (world.phase === 'play' && restDefender(world) === eid) {
+    const team = world.possession
+    x = Math.min(along(team, x), along(team, Position.x[world.ball]) - REST_BEHIND, L - 1) * attackDir(team)
+    x = clamp(x, -(L - 1), L - 1)
+  } else if (world.phase !== 'held' && carrier !== eid) {
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = Math.hypot(dx, dy)
@@ -179,6 +219,54 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
   return { x, y, effort: distance > 10 ? Effort.Run : distance > 3 ? Effort.Jog : Effort.Walk }
 }
 
+/**
+ * The carrier's teammate who stays back as rest defence: whoever's place in
+ * the shape is deepest. When that player has the ball, the next deepest
+ * takes over. -1 in a side too small to spare one.
+ */
+export function restDefender(world: Match): number {
+  const team = world.possession
+  const squad = world.teams[team].outfielders
+  if (squad.length < REST_DEFENCE_FROM) return -1
+  let deepest = -1
+  let depth = Infinity
+  for (const eid of squad) {
+    if (eid === world.carrier) continue
+    const u = along(team, homePosition(world, eid).x)
+    if (u < depth) {
+      deepest = eid
+      depth = u
+    }
+  }
+  return deepest
+}
+
+/**
+ * Whether `eid` is one of the teammates who should show for it: the ones
+ * nearest the ball, not running and not the rest defence. Those already
+ * showing keep at it unless someone else is clearly nearer.
+ */
+function amongShowing(world: Match, eid: number): boolean {
+  const rest = restDefender(world)
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const time = (m: number) => arrivalTime(world, m, bx, by) - (OffBall.showing[m] ? KEEP_SHOWING : 0)
+  const own = time(eid)
+  let nearer = 0
+  for (const mate of world.teams[world.possession].outfielders) {
+    if (mate === eid || mate === world.carrier || mate === rest || Run.phase[mate] !== RunPhase.None) continue
+    if (time(mate) < own) nearer++
+  }
+  return nearer < MAX_SHOWING
+}
+
+/** Whether there's room for `eid` to run in behind: not too many teammates running already. */
+function runnerFree(world: Match, eid: number): boolean {
+  const squad = world.teams[world.possession].outfielders
+  const limit = Math.max(1, Math.floor(squad.length / PLAYERS_PER_RUNNER))
+  return squad.filter((mate) => mate !== eid && Run.phase[mate] !== RunPhase.None).length < limit
+}
+
 /** Whether the carrier needs a way out: less than `time` seconds before they're closed down, or facing their own goal. */
 function pressured(world: Match, carrier: number, time: number): boolean {
   const forward = attackDir(world.possession) > 0 ? 0 : Math.PI
@@ -196,9 +284,18 @@ function showForIt(world: Match, eid: number): Intent {
   const by = Position.y[world.ball]
   const limit = onsideLimit(world, team) - 1
   const error = 0.4 * (1 - gradeT(Outfielder.offTheBall[eid]))
+  // Where the carrier's other options are, as angles from the ball: where teammates are showing, or standing.
+  const others: number[] = []
+  for (const mate of world.teams[team].outfielders) {
+    if (mate === eid || mate === world.carrier) continue
+    const showing = OffBall.showing[mate]
+    others.push(Math.atan2((showing ? Call.y[mate] : Position.y[mate]) - by, (showing ? Call.x[mate] : Position.x[mate]) - bx))
+  }
   const score = (x: number, y: number) => {
     const { value } = rateFeetPass(world, team, eid, x, y)
-    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y)
+    const angle = Math.atan2(y - by, x - bx)
+    const overlap = others.reduce((sum, other) => sum + Math.max(0, 1 - Math.abs(angleDelta(angle, other)) / SAME_ANGLE), 0)
+    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y) - SAME_ANGLE_COST * overlap
   }
   // The spot they're already showing in keeps them unless another is clearly better.
   let best = { x: Position.x[eid], y: Position.y[eid] }
