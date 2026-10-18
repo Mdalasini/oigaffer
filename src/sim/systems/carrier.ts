@@ -15,6 +15,7 @@ import { teamArrival, timeOnBall } from '../space/control'
 import { chooseAction, strikePass } from '../playmaking'
 import { chooseCarry } from '../carrying'
 import { meetTheBall } from './receive'
+import { seenX, seenY } from '../perception'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
 
 /** Seconds after shooting before the shooter can play the ball again. */
@@ -208,7 +209,7 @@ export function playFirstTime(world: Match, eid: number): boolean {
 function shotOn(world: Match, eid: number, goalX: number) {
   if (world.indirectTaker === eid) return false
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
-  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX)
+  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX, eid)
 }
 
 /** Whoever has the ball shoots on request, if they're facing near enough to goal. */
@@ -240,13 +241,16 @@ function isChased(world: Match, gx: number, gy: number) {
   return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
 }
 
-/** Whether every other outfielder, either side's, is out of the way of a shot at this attack's aim point. */
-function laneClear(world: Match, goalX: number) {
+/**
+ * Whether every other outfielder, either side's, is out of the way of a shot
+ * at this attack's aim point, as `by` reckons where they and the keeper are.
+ */
+export function laneClear(world: Match, goalX: number, by: number) {
   const { ball, keeper, carrier } = world
-  const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
+  const aim = chooseAim(Position.y[ball], seenY(world, by, keeper), world.aimHigh)
   const outfielders = [...world.teams[0].outfielders, ...world.teams[1].outfielders]
   return outfielders.every(
-    (eid) => eid === carrier || distanceToSegment(Position.x[eid], Position.y[eid], Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
+    (eid) => eid === carrier || distanceToSegment(seenX(world, by, eid), seenY(world, by, eid), Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
   )
 }
 

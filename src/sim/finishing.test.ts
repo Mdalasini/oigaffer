@@ -9,6 +9,9 @@ import { createRng } from './rng'
 import { sampleShotTarget } from './shooting'
 import { shotChance } from './space/threat'
 import { FOOT_OFFSET } from './touch'
+import { laneClear } from './systems/carrier'
+import { lookAround } from './perception'
+import { attackedGoalX } from './teams'
 
 // These scenes play on the default five-a-side pitch.
 const GOAL_X = SMALL_SIDED_PITCH.halfLength
@@ -189,5 +192,18 @@ describe('review fixes', () => {
     const { miss } = planShot(world, world.carrier)
     expect(miss).toBeGreaterThan(0)
     expect(miss).toBeLessThan(25)
+  })
+
+  test('a shooter judges the lane clear from where they last saw everyone, not where they are', () => {
+    const world = chance(1, 14, 0)
+    const shooter = world.carrier
+    const goalX = attackedGoalX(world.pitch, RED)
+    expect(laneClear(world, goalX, shooter)).toBe(true)
+    // Defenders step into the lanes to either corner after the shooter's last look: not as far as they know.
+    place(world.teams[BLUE].outfielders[0], GOAL_X - 7, 1.5, Math.PI)
+    place(world.teams[BLUE].outfielders[1], GOAL_X - 7, -1.5, Math.PI)
+    expect(laneClear(world, goalX, shooter)).toBe(true)
+    lookAround(world)
+    expect(laneClear(world, goalX, shooter)).toBe(false)
   })
 })
