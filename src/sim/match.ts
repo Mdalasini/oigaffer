@@ -440,6 +440,8 @@ export function handOver(world: Match, eid: number) {
   TakeOn.feintTimer[eid] = 0
   TakeOn.checkBackTimer[eid] = 0
   Carry.nextLook[eid] = 0
+  // Taking a pass, they learn who from once it reaches them.
+  Passer.receivedFrom[eid] = -1
   Shield.active[eid] = 0
   Shield.timer[eid] = 0
 }

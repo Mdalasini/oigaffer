@@ -80,6 +80,11 @@ const PREPARE_QUICK = 0.3
 const CHECK_AWAY = 2
 /** Seconds the run stays on without a pass before they give it up. */
 const GO_WINDOW = 1.8
+/** Moving on after a pass: to a spot this far (m) further forward, and this far across, from where they played it. */
+const MOVE_ON_AHEAD = [6, 10]
+const MOVE_ON_ACROSS = [-6, 0, 6]
+/** Only worth moving on to a spot worth at least this share of the threat where they are, once how open it is counts. */
+const MOVE_ON_WORTH = 0.8
 /** Seconds before making another run, plus up to as long again. */
 const RUN_REST = 2.5
 
@@ -104,8 +109,8 @@ const RUN_REST = 2.5
  */
 export function attackingIntent(world: Match, eid: number): Intent {
   const carrier = world.carrier
-  // While the keeper has it, or a pass is on its way to someone else, they keep the shape.
-  if (world.phase !== 'play' || world.pass || carrier === eid) {
+  // While the keeper has it, or a pass is on its way to someone else, they keep the shape; a run already going goes on.
+  if (world.phase !== 'play' || carrier === eid || (world.pass && Run.phase[eid] !== RunPhase.Go)) {
     endRun(world, eid)
     return hold(world, eid, false)
   }
@@ -146,6 +151,43 @@ export function attackingIntent(world: Match, eid: number): Intent {
     }
   }
   return hold(world, eid, true)
+}
+
+/**
+ * Having passed it, `passer` moves on into space ahead rather than standing
+ * where they played it: the open, onside spot a few metres on worth most,
+ * calling for it there, so the receiver can give it straight back into
+ * their path. The rest defence stays back, and so does anyone with nowhere
+ * open to go, or whose team has as many running as it can spare.
+ */
+export function moveOn(world: Match, passer: number) {
+  const team = world.possession
+  if (world.phase !== 'play' || passer === world.teams[team].keeper || restDefender(world) === passer || Run.rest[passer] > 0) return
+  // It's a run of its own: not while the team already has as many going as it can spare.
+  if (!runnerFree(world, passer)) return
+  const { halfLength: L, halfWidth: W } = world.pitch
+  const limit = onsideLimit(world, team, passer) - 1
+  const dir = attackDir(team)
+  let best: { x: number; y: number } | null = null
+  let bestScore = 0
+  for (const ahead of MOVE_ON_AHEAD) {
+    for (const across of MOVE_ON_ACROSS) {
+      const u = Math.min(along(team, Position.x[passer]) + ahead, limit, L - 3)
+      const x = u * dir
+      const y = clamp(Position.y[passer] + across, -(W - 3), W - 3)
+      const open = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, passer) - arrivalTime(world, passer, x, y, 0.5)) / RACE_SCALE))
+      const score = threat(world.pitch, team, x, y) * open
+      if (score > bestScore) {
+        best = { x, y }
+        bestScore = score
+      }
+    }
+  }
+  if (!best || bestScore < MOVE_ON_WORTH * threat(world.pitch, team, Position.x[passer], Position.y[passer])) return
+  Run.phase[passer] = RunPhase.Go
+  Run.timer[passer] = GO_WINDOW
+  Run.targetX[passer] = best.x
+  Run.targetY[passer] = best.y
 }
 
 /** Counts down the run's clock and the rest before the next one. Called every tick. */

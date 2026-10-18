@@ -24,6 +24,17 @@ const CELL = 1
  * worth a discounted share of the best shot it can be carried or passed to.
  */
 const KEEP_PER_METRE = 0.9
+/**
+ * Having the ball anywhere in the middle is worth at least this, rising in
+ * a straight line from OWN_GOAL_VALUE at a team's own goal line to
+ * HALFWAY_VALUE at halfway and on: about what a possession there goes on to score in real
+ * matches (expected threat, as Karun Singh measured it), where the chance
+ * of a shot it leads to straight away is next to nothing.
+ */
+const OWN_GOAL_VALUE = 0.005
+const HALFWAY_VALUE = 0.012
+/** Out on a touchline, that floor is this share lower than in the middle. */
+const WIDE_FLOOR_DISCOUNT = 0.2
 
 /** Each pitch's threat map, built the first time it's needed. */
 const threatMap = perPitch(buildMap)
@@ -89,6 +100,13 @@ function buildMap(pitch: Pitch): ThreatMap {
       }
     }
     if (!changed) break
+  }
+  for (let i = 0; i < NX; i++) {
+    const floor = OWN_GOAL_VALUE + (HALFWAY_VALUE - OWN_GOAL_VALUE) * (i * CELL) / pitch.halfLength
+    for (let j = 0; j < NY; j++) {
+      const wide = Math.abs(-pitch.halfWidth + j * CELL) / pitch.halfWidth
+      g[i * NY + j] = Math.max(g[i * NY + j], floor * (1 - WIDE_FLOOR_DISCOUNT * wide))
+    }
   }
   return { g, nx: NX, ny: NY }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { Dribbler, Facing, Position, Velocity } from './components'
+import { Dribbler, Facing, Passer, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
-import { SMALL_SIDED_PITCH } from './pitch'
+import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollStopTime, rollTime } from './passing'
 import { lookAround } from './perception'
@@ -223,6 +223,56 @@ describe('first touch', () => {
 })
 
 describe('choosing a pass', () => {
+  test('a pass straight back to whoever just played it is a last resort, when another teammate is as free', () => {
+    let back = 0
+    let passes = 0
+    for (let seed = 1; seed <= 100; seed++) {
+      const world = createMatch({ outfielders: 4, seed, grades: { red: { outfielder: { decisions: 20 } } } })
+      const [carrier, from, other, away] = world.teams[RED].outfielders
+      handOver(world, carrier)
+      place(carrier, 0, 0)
+      setVec(Position, world.ball, FOOT_OFFSET, 0, BALL_RADIUS)
+      setVec(Velocity, world.ball, 0, 0, 0)
+      place(from, -6, 9, 0)
+      place(other, -6, -9, 0)
+      place(away, -25, 15, 0)
+      const [presser, ...rest] = world.teams[BLUE].outfielders
+      place(presser, 1.5, 0, Math.PI)
+      rest.forEach((eid, i) => place(eid, 25, 15 - 30 * i, Math.PI))
+      lookAround(world)
+      Passer.receivedFrom[carrier] = from
+      Passer.receivedAt[carrier] = world.time
+      const pass = choosePass(world, carrier)
+      if (!pass) continue
+      passes++
+      if (pass.receiver === from) back++
+    }
+    expect(passes).toBeGreaterThan(50)
+    expect(back / passes).toBeLessThan(0.2)
+  })
+
+  test('on a full-size pitch, a free teammate 45 m away is an option', () => {
+    const world = createMatch({ outfielders: 2, seed: 1, pitch: FULL_PITCH })
+    const [carrier, mate] = world.teams[RED].outfielders
+    handOver(world, carrier)
+    place(carrier, -30, 0)
+    setVec(Position, world.ball, -30 + FOOT_OFFSET, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    place(mate, 15, 0, Math.PI)
+    world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, 40, 25 - 50 * i, Math.PI))
+    lookAround(world)
+    expect(passOptions(world, carrier).some((o) => o.receiver === mate && o.kind === 'feet')).toBe(true)
+  })
+
+  test('having passed it, a player moves on into the space ahead rather than standing where they played it', () => {
+    const world = scene(1, -10, 0, -2, 8)
+    const [carrier, mate] = world.teams[RED].outfielders
+    const option = passOptions(world, carrier).find((o) => o.receiver === mate && o.kind === 'feet')!
+    strikePass(world, carrier, option)
+    expect(Run.phase[carrier]).toBe(RunPhase.Go)
+    expect(Run.targetX[carrier]).toBeGreaterThan(-10 + 5)
+  })
+
   test('a carrier hemmed in near their own goal finds a free teammate', () => {
     const grades = { red: { outfielder: { decisions: 20, vision: 20 } } }
     const world = scene(4, -GOAL_X + 6, 8, -4, -6, [[-GOAL_X + 7.2, 8.4], [-GOAL_X + 4.5, 6]], grades)

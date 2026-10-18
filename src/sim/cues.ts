@@ -1,4 +1,4 @@
-import { clearIntentions } from './attacking'
+import { clearIntentions, moveOn } from './attacking'
 import { Goalkeeper, Mark, OffBall, Outfielder, Position, Run } from './components'
 import { runTimingError } from './grades'
 import type { Match } from './match'
@@ -75,6 +75,7 @@ export function cue(world: Match, c: Cue) {
         for (const eid of world.teams[t].outfielders) OffBall.decideIn[eid] = BALL_MOVED_REACTION + world.rng() * BALL_MOVED_REACTION
       }
       maybeScanBeforeReceiving(world, c.receiver)
+      moveOn(world, c.passer)
       return
     case 'run':
       seeRunGo(world, c.runner)
