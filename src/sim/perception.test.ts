@@ -3,7 +3,7 @@ import { attackingIntent } from './attacking'
 import { Call, CallKind, Facing, OffBall, Outfielder, Position, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { createMatch, handOver, setVec, type Match } from './match'
-import { knows, lookAround, maybeScanBeforeReceiving, perceptionSystem, seenX, sinceScan } from './perception'
+import { knows, lookAround, maybeScanBeforeReceiving, perceptionSystem, seenX, sinceScan, teamView } from './perception'
 import { keepValue, passOptions } from './playmaking'
 import { timeOnBall } from './space/control'
 import { FOOT_OFFSET } from './touch'
@@ -101,7 +101,8 @@ describe('what players know', () => {
   })
 
   test('a carrier who hasn’t seen a defender closing in from behind thinks they have more time than they do', () => {
-    const world = scene(3, [[0, 0, 0], [-15, 10, 0]], [[-12, 0, 0]])
+    // Their teammate faces away too, so nobody shouts a warning.
+    const world = scene(3, [[0, 0, 0], [-15, 10, Math.PI]], [[-12, 0, 0]])
     const [carrier] = world.teams[RED].outfielders
     const [presser] = world.teams[BLUE].outfielders
     world.memory.nextScan[world.memory.index[carrier]] = Infinity
@@ -153,5 +154,50 @@ describe('deciding from what they know, not the truth', () => {
     lookAround(world)
     attackingIntent(world, mate)
     expect(OffBall.showing[mate]).toBe(1)
+  })
+})
+
+describe('what a team knows', () => {
+  test('"man on": a teammate who sees an opponent closing in on the carrier unseen warns them', () => {
+    const world = scene(4, [[0, 0, 0], [10, 0, Math.PI]], [[-12, 0, 0]])
+    const [carrier, mate] = world.teams[RED].outfielders
+    const [presser] = world.teams[BLUE].outfielders
+    world.memory.nextScan[world.memory.index[carrier]] = Infinity
+    world.memory.nextScan[world.memory.index[mate]] = Infinity
+    world.phase = 'play'
+    // The presser closes in behind the carrier, in full view of the teammate facing them.
+    place(presser, -3, 0.5, 0)
+    watch(world, 0.8)
+    expect(Math.abs(seenX(world, carrier, presser) - -3)).toBeLessThan(1e-9)
+    expect(world.manOnShouts).toBeGreaterThan(0)
+  })
+
+  test('nobody shouts about an opponent no teammate can see either', () => {
+    const world = scene(5, [[0, 0, 0], [10, 0, 0]], [[-12, 0, 0]])
+    const [carrier, mate] = world.teams[RED].outfielders
+    const [presser] = world.teams[BLUE].outfielders
+    world.memory.nextScan[world.memory.index[carrier]] = Infinity
+    world.memory.nextScan[world.memory.index[mate]] = Infinity
+    world.phase = 'play'
+    // The teammate faces away too.
+    place(presser, -3, 0.5, 0)
+    watch(world, 0.8)
+    expect(seenX(world, carrier, presser)).toBeLessThan(-10)
+    expect(world.manOnShouts).toBe(0)
+  })
+
+  test('the defence reckons an attacker from whichever of them saw him last', () => {
+    const world = scene(6, [[0, 0, 0], [5, 8, 0]], [[8, 0, Math.PI], [3, 8, 0]])
+    const [, attacker] = world.teams[RED].outfielders
+    const [front, back] = world.teams[BLUE].outfielders
+    for (const d of [front, back]) world.memory.nextScan[world.memory.index[d]] = Infinity
+    // The attacker slips off: in front of one defender, behind the other.
+    place(attacker, 14, 6)
+    Facing.angle[back] = Math.PI
+    place(front, 8, 0, 0)
+    watch(world, 0.2)
+    const view = teamView(world, BLUE, attacker, { x: 0, y: 0, vx: 0, vy: 0, facing: 0 })
+    expect(view.x).toBeCloseTo(14, 6)
+    expect(seenX(world, back, attacker)).toBeCloseTo(5, 6)
   })
 })

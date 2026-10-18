@@ -2,6 +2,7 @@ import { angleDelta } from '../angles'
 import { Facing, Mark, Outfielder, Position } from '../components'
 import { assign } from '../assignment'
 import { cue } from '../cues'
+import { teamView, type View } from '../perception'
 import { trapChance } from '../grades'
 import type { Match } from '../match'
 import { along, baseLine, homePosition, LINE_LIMITS, onsideLimit } from '../shape'
@@ -10,6 +11,9 @@ import { timeOnBall } from '../space/control'
 import { threat } from '../space/threat'
 import { attackDir, opponent, ownGoalX } from '../teams'
 import { PITCH_HALF_WIDTH } from '../constants'
+
+/** Scratch for where the defence reckons an attacker is. */
+const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
 
 /** Share out marking jobs this often (s): several times a second, like defenders talking. */
 const MARKING_EVERY = 0.3
@@ -166,6 +170,8 @@ export function coverSpot(world: Match, team: number) {
  * behind the presser covers and marks at once. A defender keeps
  * their job unless another is clearly better placed. While the keeper holds
  * the ball there's no presser to cover, and every attacker is picked up.
+ * They share the jobs out from what they've seen between them: an attacker
+ * none of them has had in view lately is reckoned where he was last seen.
  */
 function shareMarking(world: Match, team: number) {
   const defenders = world.teams[team].outfielders
@@ -185,8 +191,10 @@ function shareMarking(world: Match, team: number) {
   const cost = free.map((d) => {
     const home = homePosition(world, d)
     const men = attackers.map((a) => {
-      const ax = Position.x[a]
-      const ay = Position.y[a]
+      // Where the defence reckons each attacker is, between them all.
+      teamView(world, team, a, seen)
+      const ax = seen.x
+      const ay = seen.y
       const length = Math.hypot(goalX - ax, ay) || 1
       const x = ax + ((goalX - ax) / length) * MARK_GAP
       const y = ay + (-ay / length) * MARK_GAP

@@ -14,7 +14,11 @@ import type { Match } from './match'
  *   kept up to date. Outside it, and behind them, it goes stale.
  * - **Scans**: a look over the shoulder takes in everyone at once. Players
  *   with more vision scan more often, and before a pass reaches them.
- * - **Hearing**: a teammate calling for it is heard wherever they are.
+ * - **Hearing**: a teammate calling for it is heard wherever they are, and
+ *   so is one shouting "man on" about an opponent closing in unseen.
+ *
+ * A team also pools what its players have seen, as defenders talking to each
+ * other do, to share out its marking (see `teamView`).
  *
  * The ball is always known: everyone follows it.
  */
@@ -48,6 +52,10 @@ const GLANCES_PER_SECOND = 10
 const PROJECT_FOR = 1
 /** Someone not seen for this long (s) has slipped their mind as an option. */
 const FORGET_AFTER = 4
+/** A teammate shouts "man on" about an opponent within this distance (m) of the player on the ball or about to get it... */
+const MAN_ON_RANGE = 5
+/** ...whom that player hasn't seen for this long (s). */
+const MAN_ON_UNSEEN = 0.5
 /** Before a pass reaches them, a player who scans does it this long (s) after it's struck. */
 const SCAN_BEFORE_RECEIVING = 0.15
 
@@ -87,6 +95,29 @@ export function perceptionSystem(world: Match, _dt: number) {
       const i = memory.index[eid]
       if (world.time >= memory.nextScan[i]) scan(world, eid)
       else if ((tick + i) % GLANCE_TICKS === 0) glance(world, eid)
+    }
+  }
+  if (world.phase === 'play') manOn(world, world.carrier)
+}
+
+/**
+ * "Man on!": an opponent closing in on `player` that they haven't seen, but
+ * a teammate has, is shouted about, and they know he's there.
+ */
+function manOn(world: Match, player: number) {
+  const memory = world.memory
+  const n = memory.players.length
+  const team = Team.id[player]
+  const i = memory.index[player]
+  for (const opponent of world.teams[1 - team].outfielders) {
+    const k = i * n + memory.index[opponent]
+    if (world.time - memory.at[k] < MAN_ON_UNSEEN) continue
+    if (Math.hypot(Position.x[opponent] - Position.x[player], Position.y[opponent] - Position.y[player]) > MAN_ON_RANGE) continue
+    // A teammate who has just seen him, and so has him in view, shouts.
+    const shouted = world.teams[team].outfielders.some((mate) => mate !== player && world.time - memory.at[memory.index[mate] * n + memory.index[opponent]] < FIXED_DT * GLANCE_TICKS)
+    if (shouted) {
+      see(world, player, opponent)
+      world.manOnShouts++
     }
   }
 }
@@ -223,6 +254,27 @@ export function seenFacing(world: Match, by: number, eid: number): number {
 export function knows(world: Match, by: number, eid: number): boolean {
   const k = slot(world, by, eid)
   return k === -1 || world.time - world.memory.at[k] < FORGET_AFTER
+}
+
+/**
+ * Fills `out` with how `team` sees `eid` between them: from whichever of its
+ * outfielders saw them most recently. Its own players it knows exactly.
+ */
+export function teamView(world: Match, team: number, eid: number, out: View): View {
+  if (Team.id[eid] === team) return view(world, -1, eid, out)
+  const memory = world.memory
+  const n = memory.players.length
+  const j = memory.index[eid]
+  let freshest = -1
+  let at = -Infinity
+  for (const mate of world.teams[team].outfielders) {
+    const seen = memory.at[memory.index[mate] * n + j]
+    if (seen > at) {
+      at = seen
+      freshest = mate
+    }
+  }
+  return view(world, freshest, eid, out)
 }
 
 /** Seconds since `eid` last looked over their shoulder. */

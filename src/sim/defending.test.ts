@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Mark, OffBall, Outfielder, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
+import { lookAround } from './perception'
 import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { strikePass } from './playmaking'
 import { along, baseLine, homePosition } from './shape'
@@ -235,6 +236,7 @@ describe('five-a-side: defending as a unit', () => {
     world.nextMarking = [0, 0]
     // Everyone decides on this step.
     for (const eid of [...reds, ...world.teams[BLUE].outfielders]) OffBall.decideIn[eid] = 0
+    lookAround(world)
     return world
   }
 
