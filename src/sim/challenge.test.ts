@@ -11,6 +11,7 @@ import { contestSystem } from './systems/contest'
 import { defenderSystem, startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
+import { lookAround } from './perception'
 import { FOOT_OFFSET } from './touch'
 
 // These scenes play on the default five-a-side pitch.
@@ -115,7 +116,7 @@ describe('sliding tackles', () => {
    * the side of the carrier at `speed`, goes to ground within a second,
    * with the ball `ballAhead` m in front of the carrier.
    */
-  function slides(speed: number, ballAhead: number) {
+  function slides(speed: number, ballAhead: number, readAhead = ballAhead) {
     let n = 0
     for (let seed = 1; seed <= 100; seed++) {
       const world = setup(seed, 0, ballAhead)
@@ -125,10 +126,15 @@ describe('sliding tackles', () => {
       setVec(Velocity, defender, Math.cos(angle) * speed, Math.sin(angle) * speed, 0)
       Facing.angle[defender] = angle
       Defender.mode[defender] = DefenderMode.Run
-      Defender.readX[defender] = Position.x[ball]
-      Defender.readY[defender] = Position.y[ball]
+      lookAround(world)
       Defender.challengeDelay[defender] = 0
-      for (let i = 0; i < 120 && !hasComponent(world, defender, Sliding); i++) defenderSystem(world, FIXED_DT)
+      for (let i = 0; i < 120 && !hasComponent(world, defender, Sliding); i++) {
+        // Where the defender reads the ball to be, which may not be where it is.
+        Defender.readX[defender] = Position.x[carrier] + readAhead
+        Defender.readY[defender] = Position.y[ball]
+        Defender.readVx[defender] = Defender.readVy[defender] = 0
+        defenderSystem(world, FIXED_DT)
+      }
       if (hasComponent(world, defender, Sliding)) n++
     }
     return n / 100
@@ -142,6 +148,11 @@ describe('sliding tackles', () => {
     const share = slides(7, 1.3)
     expect(share).toBeGreaterThan(0)
     expect(share).toBeLessThan(0.6)
+  })
+
+  test('whether to go to ground is judged on the defender’s read of the ball, not where it really is', () => {
+    expect(slides(7, 1.3, FOOT_OFFSET + 0.1)).toBe(0)
+    expect(slides(7, FOOT_OFFSET + 0.1, 1.3)).toBeGreaterThan(0)
   })
 
   test('nobody slides in from a standstill', () => {
