@@ -165,9 +165,9 @@ describe('what a team knows', () => {
     world.memory.nextScan[world.memory.index[carrier]] = Infinity
     world.memory.nextScan[world.memory.index[mate]] = Infinity
     world.phase = 'play'
-    // The presser closes in behind the carrier, in full view of the teammate facing them.
+    // The presser closes in behind the carrier, in full view of the teammate facing them; the shout comes within a few seconds.
     place(presser, -3, 0.5, 0)
-    watch(world, 0.8)
+    watch(world, 4)
     expect(Math.abs(seenX(world, carrier, presser) - -3)).toBeLessThan(1e-9)
     expect(world.manOnShouts).toBeGreaterThan(0)
   })
@@ -181,7 +181,7 @@ describe('what a team knows', () => {
     world.phase = 'play'
     // The teammate faces away too.
     place(presser, -3, 0.5, 0)
-    watch(world, 0.8)
+    watch(world, 4)
     expect(seenX(world, carrier, presser)).toBeLessThan(-10)
     expect(world.manOnShouts).toBe(0)
   })

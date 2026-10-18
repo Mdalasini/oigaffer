@@ -54,8 +54,13 @@ const PROJECT_FOR = 1
 const FORGET_AFTER = 4
 /** A teammate shouts "man on" about an opponent within this distance (m) of the player on the ball or about to get it... */
 const MAN_ON_RANGE = 5
-/** ...whom that player hasn't seen for this long (s). */
+/** ...whom that player hasn't seen for this long (s)... */
 const MAN_ON_UNSEEN = 0.5
+/**
+ * ...at this rate (per second) while it lasts: it takes a teammate a moment
+ * to notice and shout, and the shout doesn't always come before the tackle.
+ */
+const MAN_ON_RATE = 1.5
 /** Before a pass reaches them, a player who scans does it this long (s) after it's struck. */
 const SCAN_BEFORE_RECEIVING = 0.15
 
@@ -113,9 +118,12 @@ function manOn(world: Match, player: number) {
     const k = i * n + memory.index[opponent]
     if (world.time - memory.at[k] < MAN_ON_UNSEEN) continue
     if (Math.hypot(Position.x[opponent] - Position.x[player], Position.y[opponent] - Position.y[player]) > MAN_ON_RANGE) continue
-    // A teammate who has just seen him, and so has him in view, shouts.
-    const shouted = world.teams[team].outfielders.some((mate) => mate !== player && world.time - memory.at[memory.index[mate] * n + memory.index[opponent]] < FIXED_DT * GLANCE_TICKS)
-    if (shouted) {
+    // A teammate who has just seen him, and so has him in view, may shout.
+    let spotted = false
+    for (const mate of world.teams[team].outfielders) {
+      if (mate !== player && world.time - memory.at[memory.index[mate] * n + memory.index[opponent]] < FIXED_DT * GLANCE_TICKS) spotted = true
+    }
+    if (spotted && world.rng() < MAN_ON_RATE * FIXED_DT) {
       see(world, player, opponent)
       world.manOnShouts++
     }
