@@ -108,7 +108,7 @@ describe('touches', () => {
     const totalShots = () => world.stats[0].shots + world.stats[1].shots
     let shots = 0
     let lastShots = 0
-    for (let i = 0; i < 120 * 300 && shots < 10; i++) {
+    for (let i = 0; i < 120 * 900 && shots < 10; i++) {
       const before = { x: Position.x[world.ball], y: Position.y[world.ball] }
       const footX = Position.x[world.carrier] + Math.cos(Facing.angle[world.carrier]) * FOOT_OFFSET
       const footY = Position.y[world.carrier] + Math.sin(Facing.angle[world.carrier]) * FOOT_OFFSET

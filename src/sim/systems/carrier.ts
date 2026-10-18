@@ -3,18 +3,18 @@ import { angleDelta } from '../angles'
 import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OffBall, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
-import { closeControlSpeed, passWindup, reactionDelay, runTimingError, shotSpreadRadius } from '../grades'
+import { closeControlSpeed, passWindup, reactionDelay, runTimingError } from '../grades'
 import { gaussian } from '../rng'
 import { maybeSpringTrap } from './defending'
 import { setPhase, setVec, type Match } from '../match'
 import { playBall } from '../offside'
+import { planShot, shotValue } from '../finishing'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
 import { attackedGoalX } from '../teams'
-import { choosePass, strikePass } from '../playmaking'
+import { chooseAction, strikePass } from '../playmaking'
 import { meetTheBall } from './receive'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
-const SHOT_SPEED = 25
 /** Seconds after shooting before the shooter can play the ball again. */
 const SHOT_RECOVER = 0.4
 /**
@@ -26,6 +26,8 @@ const largeTouchTravel = (speed: number) => 3 + speed * 2.2
 const LARGE_TOUCH_MARGIN = 3
 /** Within this distance (m) of a touchline, take defenders on the infield side. */
 const TOUCHLINE_MARGIN = 5
+/** Nobody shoots with less than this chance of scoring: from further out it's a clearance, not a shot. */
+const MIN_CHANCE = 0.02
 /** Only shoot when facing within this angle (rad) of goal. */
 const MAX_SHOT_TURN = 1.3
 /** Don't shoot if the defender is within this distance (m) of the line to the aim point. */
@@ -96,7 +98,7 @@ export function carrierSystem(world: Match, dt: number) {
 
     const chased = isChased(world, dirX, dirY)
     const shootDistance = world.shootDistance + (chased ? CHASED_SHOOT_EARLIER : 0)
-    if (canPlayBall(world, eid) && wantsToShoot(world, eid, goalX, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+    if (canPlayBall(world, eid) && wantsToShoot(world, eid, goalX) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
       shoot(world, eid, goalX)
       continue
     }
@@ -117,7 +119,13 @@ export function carrierSystem(world: Match, dt: number) {
     }
 
     if (canPlayBall(world, eid) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
-      const pass = choosePass(world, eid)
+      const chance = shotOn(world, eid, goalX) ? shotValue(world, eid) : 0
+      const choice = chooseAction(world, eid, chance >= MIN_CHANCE ? chance : null)
+      if (choice === 'shoot') {
+        shoot(world, eid, goalX)
+        continue
+      }
+      const pass = choice
       if (pass) {
         const windup = passWindup(Outfielder.passing[eid])
         world.windup = { carrier: eid, option: pass, at: world.time + windup }
@@ -148,13 +156,18 @@ export function carrierSystem(world: Match, dt: number) {
   }
 }
 
-function wantsToShoot(world: Match, eid: number, goalX: number, distance: number, shootDistance: number) {
-  // Nobody shoots straight from an indirect free kick.
-  if (world.indirectTaker === eid && !world.shootRequested) return false
-  if (!world.shootRequested && distance > shootDistance) return false
+/** Whether a shot is on at all: facing near enough to goal, with a clear sight of it, and not straight from an indirect free kick. */
+function shotOn(world: Match, eid: number, goalX: number) {
+  if (world.indirectTaker === eid) return false
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
-  if (Math.abs(angleDelta(Facing.angle[eid], facingGoal)) > MAX_SHOT_TURN) return false
-  return world.shootRequested || laneClear(world, goalX)
+  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX)
+}
+
+/** Whoever has the ball shoots on request, if they're facing near enough to goal. */
+function wantsToShoot(world: Match, eid: number, goalX: number) {
+  if (!world.shootRequested) return false
+  const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
+  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN
 }
 
 /** Calls off a pass being wound up; a runner waiting to burst for it stays put. */
@@ -317,10 +330,11 @@ function shoot(world: Match, carrier: number, goalX: number) {
   if (!playBall(world, carrier)) return
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
-  const aim = chooseAim(from.y, Position.y[keeper], world.aimHigh)
-  const radius = shotSpreadRadius(Outfielder.shooting[carrier])
-  const target = sampleShotTarget(world.rng, aim, radius)
-  const v = launchVelocity(from, target, SHOT_SPEED, goalX)
+  const { aim, miss, speed } = planShot(world, carrier)
+  // Drawn as a circle that takes in most of where the shot could go.
+  const radius = 2 * miss
+  const target = sampleShotTarget(world.rng, aim, miss)
+  const v = launchVelocity(from, target, speed, goalX)
   setVec(Velocity, ball, v.x, v.y, v.z)
 
   Goalkeeper.reactTimer[keeper] = reactionDelay(Goalkeeper.reaction[keeper])

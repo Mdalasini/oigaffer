@@ -1,0 +1,145 @@
+import { describe, expect, test } from 'bun:test'
+import { Facing, Passer, Position, Velocity } from './components'
+import { BALL_RADIUS, GOAL_X } from './constants'
+import { shotValue } from './finishing'
+import { createMatch, handOver, requestShot, setVec, stepMatch, type GradeOverrides, type Match } from './match'
+import { keepValue } from './playmaking'
+import { shotChance } from './space/threat'
+import { FOOT_OFFSET } from './touch'
+
+const RED = 0
+const BLUE = 1
+
+function place(eid: number, x: number, y: number, facing = 0) {
+  setVec(Position, eid, x, y, 0)
+  setVec(Velocity, eid, 0, 0, 0)
+  Facing.angle[eid] = facing
+}
+
+/**
+ * Red's first outfielder `distance` metres out and `wide` metres across,
+ * standing facing goal with the ball, everyone else far away unless a
+ * Blue defender is put `pressure` metres off them or goal-side of them
+ * (`covered`), and Blue's keeper given a second to set themselves.
+ */
+function chance(seed: number, distance: number, wide: number, grades: GradeOverrides = {}, pressure = Infinity, covered = false): Match {
+  const world = createMatch({ seed, grades })
+  const [shooter, ...mates] = world.teams[RED].outfielders
+  const [defender, ...others] = world.teams[BLUE].outfielders
+  const x = GOAL_X - distance
+  const face = Math.atan2(-wide, GOAL_X - x)
+  const hold = () => {
+    // Not deciding anything until the keeper has set.
+    Passer.nextLook[shooter] = Infinity
+    place(shooter, x, wide, face)
+    setVec(Position, world.ball, x + Math.cos(face) * FOOT_OFFSET, wide + Math.sin(face) * FOOT_OFFSET, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    mates.forEach((eid, i) => place(eid, -20, -10 + i * 5))
+    others.forEach((eid, i) => place(eid, -25, -10 + i * 5))
+    // A defender closing them down from the side, or out of the way.
+    if (pressure !== Infinity) place(defender, x, wide + pressure, -Math.PI / 2)
+    // Goal-side of them, off to one side, so they're not through on their own.
+    else if (covered) place(defender, x + 4, wide > 0 ? wide - 4 : 4, Math.PI)
+    else place(defender, -25, 12)
+  }
+  handOver(world, shooter)
+  place(world.teams[BLUE].keeper, GOAL_X - 1, 0, Math.PI)
+  for (let i = 0; i < 120; i++) {
+    hold()
+    stepMatch(world)
+  }
+  hold()
+  Passer.nextLook[shooter] = 0
+  return world
+}
+
+/** Share of `n` shots from the spot that go in. */
+function scored(n: number, distance: number, wide: number, grades: GradeOverrides = {}, pressure = Infinity): number {
+  let goals = 0
+  for (let i = 0; i < n; i++) {
+    const world = chance(100 + i, distance, wide, grades, pressure)
+    let outcome = ''
+    world.onEvent = (e) => {
+      if (!outcome && ['goal', 'caught', 'parried', 'wide', 'over', 'blocked'].includes(e.kind)) outcome = e.kind
+    }
+    requestShot(world)
+    for (let t = 0; t < 600 && !outcome; t++) stepMatch(world)
+    if (outcome === 'goal') goals++
+  }
+  return goals / n
+}
+
+describe('finishing against a set keeper', () => {
+  const near = scored(200, 10, 0)
+  const far = scored(200, 18, 0)
+
+  test('an average finisher scores about as often as real shots from there do', () => {
+    // Measured at 34% from 10 m and 12% from 18 m, against 32% and 11% for real shots.
+    expect(Math.abs(near - shotChance(GOAL_X - 10, 0))).toBeLessThan(0.1)
+    expect(Math.abs(far - shotChance(GOAL_X - 18, 0))).toBeLessThan(0.07)
+  })
+
+  test('the further out, the fewer go in', () => {
+    expect(far).toBeLessThan(near - 0.1)
+  })
+
+  test('a better finisher scores more', () => {
+    const grades = (shooting: number): GradeOverrides => ({ red: { outfielder: { shooting } } })
+    expect(scored(200, 10, 0, grades(18))).toBeGreaterThan(scored(200, 10, 0, grades(4)) + 0.15)
+  })
+
+  test('a quicker keeper keeps more out', () => {
+    const grades = (reaction: number): GradeOverrides => ({ blue: { keeper: { reaction } } })
+    expect(scored(200, 14, 0, grades(18))).toBeLessThan(scored(200, 14, 0, grades(4)) - 0.1)
+  })
+
+  test('a shot hurried by a defender goes in less often', () => {
+    expect(scored(200, 10, 0, {}, 1)).toBeLessThan(near - 0.1)
+  })
+})
+
+describe('the shooter’s judgement', () => {
+  test('they reckon a shot about as likely to go in as it is', () => {
+    let reckoned = 0
+    for (let i = 0; i < 100; i++) {
+      const world = chance(100 + i, 10, 0)
+      reckoned += shotValue(world, world.carrier)
+    }
+    // Measured at 27% reckoned against 33% scored: a little cautious.
+    expect(Math.abs(reckoned / 100 - scored(100, 10, 0))).toBeLessThan(0.1)
+  })
+
+  test('closed down near goal, a shot is worth more than holding on; free 20 m out, carrying on is', () => {
+    const closed = chance(1, 9, 0, {}, 1)
+    expect(shotValue(closed, closed.carrier)).toBeGreaterThan(keepValue(closed, closed.carrier))
+    const free = chance(1, 20, 0)
+    expect(keepValue(free, free.carrier)).toBeGreaterThan(shotValue(free, free.carrier))
+  })
+})
+
+describe('the keeper narrows the angle', () => {
+  const keeperAt = (world: Match) => ({ x: Position.x[world.teams[BLUE].keeper], y: Position.y[world.teams[BLUE].keeper] })
+
+  test('they stand further off their line the further away the ball is, and nearer it close in', () => {
+    const far = keeperAt(chance(1, 20, 0, {}, Infinity, true))
+    const near = keeperAt(chance(1, 10, 0, {}, Infinity, true))
+    expect(GOAL_X - far.x).toBeGreaterThan(GOAL_X - near.x + 1)
+  })
+
+  test('from out wide they cover the near post, on the line splitting the angle', () => {
+    const keeper = keeperAt(chance(1, 10, 8, {}, Infinity, true))
+    expect(keeper.y).toBeGreaterThan(0.5)
+    // On the bisector of the angle between the ball and the posts: equal angles to each post.
+    const ball = { x: GOAL_X - 10, y: 8 }
+    const toKeeper = Math.atan2(keeper.y - ball.y, keeper.x - ball.x)
+    const toNear = Math.atan2(3.66 - ball.y, GOAL_X - ball.x)
+    const toFar = Math.atan2(-3.66 - ball.y, GOAL_X - ball.x)
+    expect(Math.abs(toNear - toKeeper - (toKeeper - toFar))).toBeLessThan(0.1)
+  })
+
+  test('with the shooter through on their own, they come out to close them down', () => {
+    const through = keeperAt(chance(1, 12, 0))
+    const covered = keeperAt(chance(1, 12, 0, {}, Infinity, true))
+    expect(GOAL_X - through.x).toBeGreaterThan(GOAL_X - covered.x + 1.5)
+  })
+})

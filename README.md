@@ -88,11 +88,27 @@ two outfielders a side.
   interception and the roles swap on the spot: the new attacker turns and goes the
   other way, while the player who lost it needs a moment before challenging again.
 
-- **Shooting grade (1–20)** — the striker aims at a corner, and the ball lands
-  uniformly inside a circle around that aim point on the goal plane. Better
-  shooters have a tighter circle (2.4 m radius at 1, 0.35 m at 20).
+- **When to shoot** — the carrier weighs shooting against keeping the ball and
+  passing, all as expected goals. They reckon a shot by the gap the keeper
+  leaves: the chance it lands between the post and as far as the keeper can
+  reach in the time it takes to arrive, and under the bar. Keeping it is
+  worth the better shot it could lead to, but only if they have a moment on
+  the ball to carry it on; closed down, a shot now beats holding on. Nobody
+  shoots with less than a 2% chance.
+- **Shooting grade (1–20)** — the striker aims at the corner away from the
+  keeper, and the shot goes off line by a normal error in angle (about 10° at
+  1, 4° at 20), so a long shot misses by more. An opponent within 3 m hurries
+  it, up to 2.2 times the error, and so does shooting across the body. Close
+  in a shot is placed; further out it's driven harder, and less true. An
+  average finisher against a set keeper scores about as often as real shots
+  do: roughly a half from 6 m, a third from 10 m, a tenth from 18 m.
+- **Keeper positioning** — the keeper stands on the line splitting the angle
+  between the ball and the posts, further off their line the further away the
+  ball is (1.2–3 m), and comes out up to 5 m to close down a shooter who is
+  through on their own. Close to the shooter they spread themselves to block.
 - **Reaction grade (1–20)** — after the strike the keeper stands frozen for a
-  delay (400 ms at 1, 80 ms at 20), then dives towards where the ball will cross.
+  delay (400 ms at 1, 80 ms at 20), then dives towards where the ball will
+  cross, at up to 5 m/s.
 - **Handling grade (1–20)** — a shot the keeper gets to is either caught or
   parried. Shots at the body stick most often (30% at 1, 90% at 20), ones at
   full stretch less, and anything above head height is punched. A parry pushes

@@ -17,7 +17,8 @@ import {
   POST_WIDTH,
 } from '../sim/constants'
 import { currentSpread, type Match, type ShotOutcome } from '../sim/match'
-import { chooseAim, type GoalPoint, type Vec3 } from '../sim/shooting'
+import { planShot } from '../sim/finishing'
+import type { GoalPoint, Vec3 } from '../sim/shooting'
 import { attackedGoalX } from '../sim/teams'
 import type { Batch, Color } from './batch'
 import type { Camera } from './cameras'
@@ -341,7 +342,7 @@ function drawShotGuide(b: Batch, world: Match) {
     if (world.phase !== 'play') return
     const ball = world.ball
     origin = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
-    aim = chooseAim(origin.y, Position.y[world.keeper], world.aimHigh)
+    aim = planShot(world, world.carrier).aim
     radius = currentSpread(world)
     goalX = attackedGoalX(Team.id[world.carrier])
   }

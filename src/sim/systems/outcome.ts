@@ -3,14 +3,12 @@ import { Body, Goalkeeper, Outfielder, Position, Team, Velocity } from '../compo
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
 import { catchChance } from '../grades'
 import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
-import { bestReceiver, passToOutfielder } from './keeper'
+import { ARM_REACH, bestReceiver, keeperReach, passToOutfielder } from './keeper'
 import { gaussian } from '../rng'
 import type { GoalPoint } from '../shooting'
 import { attackDir, opponent } from '../teams'
 import { ballAtFeet } from '../touch'
 
-/** Reach beyond the keeper's body when stretching out. */
-const ARM_REACH = 0.7
 const KEEPER_MAX_HEIGHT = 2.5
 /** Above this height (m) a shot can only be punched away, not held. */
 const PUNCH_HEIGHT = 2.1
@@ -47,7 +45,7 @@ export function outcomeSystem(world: Match, _dt: number) {
   const dir = Math.sign(shot.goalX)
   const crossing = crossPlane(world, Position.x[keeper], dir)
   if (crossing) {
-    const reach = Body.radius[keeper] + ARM_REACH
+    const reach = keeperReach(keeper, Math.hypot(shot.origin.x - Position.x[keeper], shot.origin.y - Position.y[keeper]))
     const offset = crossing.y - Position.y[keeper]
     if (Math.abs(offset) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
       // Shots at the body stick; ones at full stretch or over the head get pushed away.

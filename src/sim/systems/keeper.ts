@@ -1,5 +1,5 @@
 import { query } from 'bitecs'
-import { Facing, Goalkeeper, Position, Team, Velocity } from '../components'
+import { Body, Facing, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH } from '../constants'
 import { handOver, setPhase, setVec, type Match } from '../match'
 import { rollSpeedFor } from '../passing'
@@ -8,13 +8,33 @@ import { gaussian } from '../rng'
 import { passSafety } from '../space/control'
 import { ownGoalX } from '../teams'
 
-/** How far off the line the keeper comes to narrow the angle. */
-const ADVANCE = 1.5
+// How far off the line (m) the keeper stands, along the bisector of the
+// angle the ball makes with the posts: a share of the ball's distance,
+// between these limits. Far out they're off their line to sweep behind the
+// defence and narrow the angle on a long shot; close in they stay nearer it,
+// to have time to react. With nobody else between the ball and goal, they
+// come off their line further to close the shooter down.
+const ADVANCE_SHARE = 0.15
+const ADVANCE_MIN = 1.2
+const ADVANCE_MAX = 3
+const ONE_ON_ONE_SHARE = 0.4
+const ONE_ON_ONE_MAX = 5
+/** Within this distance (m) of goal, a shooter with nobody else in the way is through on goal. */
+const ONE_ON_ONE_RANGE = 20
 const SET_SPEED = 4
-const DIVE_SPEED = 7.5
-const DIVE_ACCEL = 26
+const RUSH_SPEED = 6
+const DIVE_SPEED = 5
+const DIVE_ACCEL = 12
 /** Furthest the keeper's centre goes beyond a post. */
 const POST_OVERRUN = 0.4
+/** Reach (m) beyond the keeper's body when stretching out. */
+export const ARM_REACH = 0.9
+/**
+ * A keeper close to the shooter spreads themselves, arms and legs out, to
+ * block: up to this much more reach (m), fading out by SPREAD_RANGE metres.
+ */
+const SPREAD = 0.6
+const SPREAD_RANGE = 10
 
 /** Hold the ball at least this long (s), and roll it out by HOLD_MAX whatever happens. */
 const HOLD_MIN = 1
@@ -63,21 +83,59 @@ export function keeperSystem(world: Match, dt: number) {
   }
 }
 
-/** Stand just off the line, between the ball and the centre of goal. */
+/**
+ * Narrows the angle: stands on the line that splits the angle between the
+ * ball and the two posts, further off the goal line the further away the
+ * ball is, and further still when the shooter is through on their own.
+ */
 function setPosition(world: Match, eid: number, dt: number) {
   const ball = world.ball
-  const lineX = ownGoalX(Team.id[eid])
-  const bx = Position.x[ball] - lineX
+  const team = Team.id[eid]
+  const lineX = ownGoalX(team)
+  const bx = Position.x[ball]
   const by = Position.y[ball]
-  const len = Math.hypot(bx, by) || 1
-  const tx = lineX + (bx / len) * ADVANCE
-  const ty = clamp((by / len) * ADVANCE * 2, -(GOAL_HALF_WIDTH - 0.5), GOAL_HALF_WIDTH - 0.5)
+  const distance = Math.hypot(bx - lineX, by)
+  // Where the bisector meets the goal line: it splits the goal mouth in the ratio of the distances to the posts.
+  const near = Math.hypot(bx - lineX, by - GOAL_HALF_WIDTH)
+  const far = Math.hypot(bx - lineX, by + GOAL_HALF_WIDTH)
+  const footY = GOAL_HALF_WIDTH - (2 * GOAL_HALF_WIDTH * near) / (near + far)
+  const through = distance < ONE_ON_ONE_RANGE && team !== world.possession && !defenderGoalSide(world, team, distance)
+  const advance = through
+    ? clamp(ONE_ON_ONE_SHARE * distance, ADVANCE_MIN, ONE_ON_ONE_MAX)
+    : clamp(ADVANCE_SHARE * distance, ADVANCE_MIN, ADVANCE_MAX)
+  const toBall = Math.hypot(bx - lineX, by - footY) || 1
+  const step = Math.min(advance, toBall * 0.8)
+  const tx = lineX + ((bx - lineX) / toBall) * step
+  const ty = clamp(footY + ((by - footY) / toBall) * step, -(GOAL_HALF_WIDTH - 0.3), GOAL_HALF_WIDTH - 0.3)
   const dx = tx - Position.x[eid]
   const dy = ty - Position.y[eid]
   const dist = Math.hypot(dx, dy)
-  const speed = Math.min(SET_SPEED, dist / dt)
+  const speed = Math.min(through ? RUSH_SPEED : SET_SPEED, dist / dt)
   Velocity.x[eid] = dist > 1e-4 ? (dx / dist) * speed : 0
   Velocity.y[eid] = dist > 1e-4 ? (dy / dist) * speed : 0
+}
+
+/** Whether any of `team`'s outfielders is nearer their own goal than the ball, `distance` from it, is. */
+function defenderGoalSide(world: Match, team: number, distance: number) {
+  const lineX = ownGoalX(team)
+  return world.teams[team].outfielders.some((eid) => Math.hypot(Position.x[eid] - lineX, Position.y[eid]) < distance - 1)
+}
+
+/** How far from their centre (m) `keeper` can stop a shot struck from `shotDistance` metres away from them. */
+export function keeperReach(keeper: number, shotDistance: number): number {
+  return Body.radius[keeper] + ARM_REACH + SPREAD * Math.max(0, 1 - shotDistance / SPREAD_RANGE)
+}
+
+/**
+ * How far across (m) `keeper` can get a hand to, `seconds` after they start
+ * to dive from standing, against a shot struck `shotDistance` metres away:
+ * the ground they cover, plus their reach.
+ */
+export function diveReach(keeper: number, seconds: number, shotDistance: number): number {
+  const t = Math.max(0, seconds)
+  const flatOut = DIVE_SPEED / DIVE_ACCEL
+  const covered = t < flatOut ? 0.5 * DIVE_ACCEL * t * t : 0.5 * DIVE_SPEED * flatOut + DIVE_SPEED * (t - flatOut)
+  return covered + keeperReach(keeper, shotDistance)
 }
 
 /** Frozen until the reaction delay runs out, then dive across the line. */
