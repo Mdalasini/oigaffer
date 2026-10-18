@@ -112,13 +112,13 @@ describe('finishing against a set keeper', () => {
 describe('the shooter’s judgement', () => {
   test('they reckon a shot about as likely to go in as it is', () => {
     let reckoned = 0
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < SHOTS; i++) {
       const world = chance(100 + i, 10, 0)
       reckoned += shotValue(world, world.carrier)
     }
-    // Measured at 32% reckoned against 35% scored: a little cautious.
-    expect(Math.abs(reckoned / 100 - scored(100, 10, 0))).toBeLessThan(0.06)
-  })
+    // Measured at 32.4% reckoned against 35.2% scored over 1000 shots: a little cautious.
+    expect(Math.abs(reckoned / SHOTS - scored(SHOTS, 10, 0))).toBeLessThan(0.06)
+  }, 20_000)
 
   test('closed down near goal, a shot is worth more than holding on; free 20 m out, carrying on is', () => {
     const closed = chance(1, 9, 0, {}, 1)
