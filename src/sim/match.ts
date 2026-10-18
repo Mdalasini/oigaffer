@@ -382,7 +382,11 @@ export function quickestTo(world: Match, team: number, x: number, y: number, exc
 
 /** Moves the OnBall tag to `eid`. */
 function setCarrier(world: Match, eid: number) {
-  for (const other of query(world, [OnBall])) if (other !== eid) removeComponent(world, other, OnBall)
+  for (const other of query(world, [OnBall])) {
+    if (other === eid) continue
+    removeComponent(world, other, OnBall)
+    stepOffBall(world, other)
+  }
   if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
   addComponent(world, eid, OnBall)
   world.carrier = eid
@@ -390,10 +394,26 @@ function setCarrier(world: Match, eid: number) {
 
 /** Moves the Pressing tag to `eid`. */
 function setPresser(world: Match, eid: number) {
-  for (const other of query(world, [Pressing])) if (other !== eid) removeComponent(world, other, Pressing)
+  for (const other of query(world, [Pressing])) {
+    if (other === eid) continue
+    removeComponent(world, other, Pressing)
+    stepOffBall(world, other)
+  }
   if (hasComponent(world, eid, OnBall)) removeComponent(world, eid, OnBall)
   addComponent(world, eid, Pressing)
   world.presser = eid
+}
+
+/**
+ * A player leaving the ball or the press: they hold where they are while they
+ * take stock, rather than picking up an off-ball plan from before.
+ */
+function stepOffBall(world: Match, eid: number) {
+  OffBall.targetX[eid] = Position.x[eid]
+  OffBall.targetY[eid] = Position.y[eid]
+  OffBall.radius[eid] = 1
+  OffBall.settled[eid] = 0
+  OffBall.decideIn[eid] = Math.min(OffBall.decideIn[eid], TURNOVER_REACTION + world.rng() * TURNOVER_REACTION)
 }
 
 /** `player` wins the ball for their team in open play, and they go the other way. */

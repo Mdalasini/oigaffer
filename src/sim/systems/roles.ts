@@ -14,6 +14,17 @@ const ENGAGE_DELAY = 0.15
 /** Judge a moving ball by where it will be this far ahead (s). */
 const BALL_LOOKAHEAD = 0.3
 const REACH = 0.9
+/** A ball moving this fast (m/s) towards a player is coming to them. */
+const COMING_SPEED = 1
+
+/** Whether the ball is rolling towards `eid`. */
+function comingTo(world: Match, eid: number) {
+  const ball = world.ball
+  const dx = Position.x[eid] - Position.x[ball]
+  const dy = Position.y[eid] - Position.y[ball]
+  const distance = Math.hypot(dx, dy) || 1
+  return (Velocity.x[ball] * dx + Velocity.y[ball] * dy) / distance > COMING_SPEED
+}
 
 /**
  * Who does what around the ball, in open play. The defender clearly quickest
@@ -36,7 +47,8 @@ export function rolesSystem(world: Match, _dt: number) {
     if (time(candidate) < time(presser) - PRESS_HANDOVER) engage(world, candidate, ENGAGE_DELAY)
   }
 
-  if (footDistance(carrier, ball) > CONTROL_RADIUS) {
+  // A ball rolling to the carrier, such as the keeper's roll-out, stays theirs.
+  if (footDistance(carrier, ball) > CONTROL_RADIUS && !comingTo(world, carrier)) {
     const mate = quickestTo(world, world.possession, bx, by, carrier)
     if (time(mate) < time(carrier) - LOOSE_HANDOVER) handOver(world, mate)
   }

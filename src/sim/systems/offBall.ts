@@ -3,7 +3,7 @@ import { Defender, DefenderMode, Effort, MoveIntent, OffBall, Outfielder, Positi
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
 import type { Match } from '../match'
 import { setTarget, steer } from '../movement'
-import { homePosition } from '../shape'
+import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
 
 /** Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so the team doesn't move in lockstep. */
@@ -19,6 +19,8 @@ const RADIUS_PER_METRE = 0.06
 /** The covering defender sits this far (m) behind the ball, towards goal, and this far across towards the free attacker. */
 const COVER_DEPTH = 5.5
 const COVER_SHADE = 3
+/** Attackers aim to stay this far (m) onside of the opposition's line. */
+const ONSIDE_MARGIN = 1
 /** Teammates' targets stay at least this far (m) apart, so two players never do one job. */
 const TEAMMATE_GAP = 4
 /** A marker stands between MARK_TIGHT and MARK_LOOSE metres goal-side of their man, tighter the nearer the ball. */
@@ -179,6 +181,12 @@ function effortFor(world: Match, eid: number, x: number, y: number, defending: b
 
 function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   ;({ x, y } = apart(world, eid, x, y))
+  // Whatever moved it, an attacker's target stays onside.
+  const team = Team.id[eid]
+  if (team === world.possession) {
+    const limit = onsideLimit(world, team) - ONSIDE_MARGIN
+    if (along(team, x) > limit) x = limit * attackDir(team)
+  }
   const ball = world.ball
   const radius = BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
   setTarget(eid, x, y, radius, effort)
