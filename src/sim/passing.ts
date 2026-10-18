@@ -17,10 +17,15 @@ const ARRIVES_AT_ALL = 1e-6
 
 /** Speed (m/s) to roll a ball so it arrives `distance` metres away still moving at `arrival` m/s. */
 export function rollSpeedFor(distance: number, arrival: number): number {
+  return speedToReach(distance, arrival, FASTEST_ROLL)
+}
+
+/** As `rollSpeedFor`, but never faster than `limit`: a ball that can't get there at that speed is struck at it. */
+function speedToReach(distance: number, arrival: number, limit: number): number {
   if (distance <= 0) return arrival
-  if (rollDistance(FASTEST_ROLL, arrival) <= distance) return FASTEST_ROLL
+  if (rollDistance(limit, arrival) <= distance) return limit
   // The distance grows faster and faster with the speed, so Newton's method from above closes in without overshooting.
-  let from = FASTEST_ROLL
+  let from = limit
   for (let i = 0; i < 50; i++) {
     const step = ((rollDistance(from, arrival) - distance) * BALL_ROLL_DRAG * (from + K)) / from
     from = Math.max(arrival, from - step)
@@ -70,9 +75,11 @@ export function rollSpeedToArrive(distance: number, time: number): number {
   if (time <= 0) return Infinity
   // Still rolling at `time`, the distance covered is linear in the starting speed.
   const from = ((distance + K * time) * BALL_ROLL_DRAG) / (1 - Math.exp(-BALL_ROLL_DRAG * time)) - K
-  if (from > ROLL_LIMIT) return Infinity
-  // A ball that slow would stop first: the slowest one that gets there at all arrives sooner.
-  // It's given a hair of pace at the end, so rounding can't leave it stopping just short.
-  if (rollStopTime(from) < time) return rollSpeedFor(distance, ARRIVES_AT_ALL)
-  return from
+  if (rollStopTime(from) < time) {
+    // A ball that slow would stop first: the slowest one that gets there at all arrives sooner.
+    // It's given a hair of pace at the end, so rounding can't leave it stopping just short.
+    if (rollDistance(ROLL_LIMIT, ARRIVES_AT_ALL) < distance) return Infinity
+    return speedToReach(distance, ARRIVES_AT_ALL, ROLL_LIMIT)
+  }
+  return from > ROLL_LIMIT ? Infinity : from
 }

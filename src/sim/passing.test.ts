@@ -61,6 +61,15 @@ describe('the rolling ball, worked backwards', () => {
     }
   })
 
+  test('however long there is, a pass that can get there at all is given a speed that does', () => {
+    // Plenty of time for 10 m; and 120 m, which needs more than the 40 m/s cap on paced passes but not the 60 m/s limit.
+    for (const [distance, time] of [[10, 100], [120, 20]]) {
+      const speed = rollSpeedToArrive(distance, time)
+      expect(speed).toBeLessThan(Infinity)
+      expect(rollTime(speed, distance)).toBeLessThanOrEqual(time)
+    }
+  })
+
   test('a ball that would have to stop first is struck just hard enough to get there', () => {
     // Twenty seconds for 10 m: any ball that slow stops sooner, so it's the gentlest that reaches at all.
     const speed = rollSpeedToArrive(10, 20)
