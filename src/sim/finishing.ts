@@ -24,6 +24,8 @@ const FULL_PRESSURE = 2.2
 const CLEAN_TURN = 0.5
 /** Each radian further round adds this much to the error. */
 const ACROSS_BODY = 1.2
+/** However hurried and twisted, a shot goes no further off line than this (rad), about 40°. */
+const WILDEST = 0.7
 
 /** The shot `carrier` would take from where the ball is now: where they'd aim, and how far off they'd expect to be. */
 export interface ShotPlan {
@@ -63,7 +65,7 @@ export function planShot(world: Match, carrier: number): ShotPlan {
   const rough = chooseAim(by, keeperY, world.aimHigh)
   const distance = Math.hypot(goalX - bx, rough.y - by)
   const speed = Math.min(DRIVEN_SPEED, PLACED_SPEED + SPEED_PER_METRE * Math.max(0, distance - 6))
-  const error = (shotError(world, carrier) * speed) / POWER_REFERENCE
+  const error = Math.min(WILDEST, (shotError(world, carrier) * speed) / POWER_REFERENCE)
   // The miss on the goal plane grows with the distance to the corner being aimed at.
   const miss = distance * Math.tan(error)
   return { goalX, error, miss, speed, aim: chooseAim(by, keeperY, world.aimHigh, miss) }
@@ -83,18 +85,35 @@ export function shotValue(world: Match, carrier: number): number {
   const toGoal = goalX - bx
   const toKeeper = Position.x[keeper] - bx
   if (Math.abs(toGoal) < 0.1) return 0
+  // A keeper the ball is already past can't stop it.
+  if (toKeeper / toGoal <= 0) return landingChance(aim, miss, null)
   // The keeper's reach, seen from the ball, projected back onto the goal line.
-  const scale = toGoal / toKeeper > 0 && Math.abs(toKeeper) > 0.5 ? toGoal / toKeeper : 1
+  const scale = Math.abs(toKeeper) > 0.5 ? toGoal / toKeeper : 1
   const flight = Math.hypot(toKeeper, (aim.y - by) * (toKeeper / toGoal)) / speed
   const centre = by + (Position.y[keeper] - by) * scale
   const reach = diveReach(keeper, flight - TYPICAL_REACTION, Math.hypot(toKeeper, Position.y[keeper] - by)) * scale
+  return landingChance(aim, miss, { centre, reach })
+}
+
+/**
+ * The chance a shot aimed at `aim`, landing off it by a normal error of
+ * `miss` (m), goes in: inside the posts and under the bar, and clear of a
+ * keeper who can reach `reach` metres either side of `centre` on the goal
+ * line, if there is one in the way.
+ */
+export function landingChance(aim: GoalPoint, miss: number, keeper: { centre: number; reach: number } | null): number {
   // The open parts of the goal either side of the keeper: a wild shot can beat them on the other side.
   const post = GOAL_HALF_WIDTH - BALL_RADIUS
+  const centre = keeper?.centre ?? 0
+  const reach = keeper?.reach ?? -Infinity
   if (miss <= 0) return Math.abs(aim.y) < post && Math.abs(aim.y - centre) > reach ? 1 : 0
   const within = (lo: number, hi: number) => (hi > lo ? normalCdf((hi - aim.y) / miss) - normalCdf((lo - aim.y) / miss) : 0)
-  const across = within(Math.max(-post, centre + reach), post) + within(-post, Math.min(post, centre - reach))
+  const across = keeper
+    ? within(Math.max(-post, centre + reach), post) + within(-post, Math.min(post, centre - reach))
+    : within(-post, post)
   const height = miss * VERTICAL_ERROR
-  const under = normalCdf((GOAL_HEIGHT - BALL_RADIUS - aim.z) / height) - normalCdf((-aim.z) / height)
+  // A shot struck into the ground still goes in low, so only the bar counts.
+  const under = normalCdf((GOAL_HEIGHT - BALL_RADIUS - aim.z) / height)
   return across * under
 }
 

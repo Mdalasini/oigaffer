@@ -4,7 +4,6 @@ import { bodyBetween, resolveBarge, resolveStandingTackle } from './challenge'
 import { Defender, DefenderMode, Dribbler, Facing, OffBalance, Position, Shield, Sliding, TakeOn, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
-import { simulateMatch } from './simulate'
 import { challengeSystem } from './systems/challenge'
 import { ballBodySystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
@@ -12,6 +11,9 @@ import { startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
+
+const RED = 0
+const BLUE = 1
 
 /** Carrier facing goal at the origin of play, defender `gap` m in front facing back at it, ball `ballAhead` m in front of the carrier. */
 function setup(seed: number, gap: number, ballAhead: number, grades: GradeOverrides = {}): Match {
@@ -195,12 +197,18 @@ describe('shielding', () => {
 
 describe('outcomes', () => {
   test('a better tackler wins the ball more often over many attacks', () => {
-    /** Share of Red's spells on the ball that end with Blue winning it back. */
-    const lostRate = (tackling: number, dribbling: number) => {
-      const [red, blue] = simulateMatch(30, { outfielders: 2, seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
-      return blue.won / red.attacks
+    /** Tackles Blue wins per Red spell on the ball, over half an hour. */
+    const tackledRate = (tackling: number, dribbling: number) => {
+      const world = createMatch({ outfielders: 2, seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
+      let tackled = 0
+      world.onEvent = (e) => {
+        if (e.team === BLUE && e.kind === 'tackled') tackled++
+      }
+      while (world.time < 30 * 60) stepMatch(world)
+      return tackled / world.stats[RED].attacks
     }
-    // A gap of 0.17–0.29 across seeds with two a side, where the cover shares the work.
-    expect(lostRate(20, 5)).toBeGreaterThan(lostRate(5, 20) + 0.12)
-  })
+    // Measured at 0.15–0.19 against 0.02–0.04 across seeds. Counting interceptions too, as this once did, mostly
+    // measures how attacks end, which shifted once players stopped shooting at the first chance.
+    expect(tackledRate(20, 5)).toBeGreaterThan(tackledRate(5, 20) + 0.08)
+  }, 20_000)
 })

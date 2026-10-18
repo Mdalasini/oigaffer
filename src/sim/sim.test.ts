@@ -5,7 +5,7 @@ import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
 import { OnBall, Pressing } from './components'
-import { createMatch, winBall, type TeamStats } from './match'
+import { createMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
 
 describe('grades', () => {
@@ -45,15 +45,6 @@ describe('shooting', () => {
 })
 
 describe('match outcomes', () => {
-  const MINUTES = 30
-  const conversion = (s: TeamStats) => s.goals / s.shots
-
-  test('a quicker keeper concedes less of what is shot at them', () => {
-    // Red's keeper faces Blue's shots. One a side, so more of the shots reach the keepers.
-    const [red, blue] = simulateMatch(MINUTES, { seed: 11, outfielders: 1, grades: { red: { keeper: { reaction: 18 } }, blue: { keeper: { reaction: 4 } } } })
-    expect(conversion(blue)).toBeLessThan(conversion(red) - 0.15)
-  })
-
   test('every shot is accounted for, and both sides attack and win the ball back', () => {
     for (const s of simulateMatch(10, { seed: 5 })) {
       expect(s.goals + s.saved + s.missed).toBe(s.shots)

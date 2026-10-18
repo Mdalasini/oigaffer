@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Passer, Position, Velocity } from './components'
-import { BALL_RADIUS, GOAL_X } from './constants'
-import { shotValue } from './finishing'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X } from './constants'
+import { landingChance, planShot, shotValue } from './finishing'
 import { createMatch, handOver, requestShot, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { keepValue } from './playmaking'
+import { createRng } from './rng'
+import { sampleShotTarget } from './shooting'
 import { shotChance } from './space/threat'
 import { FOOT_OFFSET } from './touch'
 
@@ -141,5 +143,36 @@ describe('the keeper narrows the angle', () => {
     const through = keeperAt(chance(1, 12, 0))
     const covered = keeperAt(chance(1, 12, 0, {}, Infinity, true))
     expect(GOAL_X - through.x).toBeGreaterThan(GOAL_X - covered.x + 1.5)
+  })
+})
+
+describe('review fixes', () => {
+  test('the chance a shot lands in the open goal matches where shots actually land, low ones included', () => {
+    // A low shot with a big miss: plenty hit the ground first, and stay in.
+    const aim = { y: 1, z: 0.35 }
+    const miss = 1
+    const rng = createRng(4)
+    let inside = 0
+    for (let i = 0; i < 20000; i++) {
+      const t = sampleShotTarget(rng, aim, miss)
+      if (Math.abs(t.y) <= GOAL_HALF_WIDTH - BALL_RADIUS && t.z <= GOAL_HEIGHT - BALL_RADIUS) inside++
+    }
+    expect(Math.abs(landingChance(aim, miss, null) - inside / 20000)).toBeLessThan(0.02)
+  })
+
+  test('with the ball past a keeper who came out, the goal is open', () => {
+    const world = chance(1, 1, 0)
+    // The keeper came out and has been beaten: they're 6 m out, behind the ball.
+    setVec(Position, world.teams[BLUE].keeper, GOAL_X - 6, 0, 0)
+    expect(shotValue(world, world.carrier)).toBeGreaterThan(0.5)
+  })
+
+  test('however wild the shot, the expected miss is a sensible distance', () => {
+    // The worst finisher, hurried, facing their own goal, from 25 m.
+    const world = chance(1, 25, 0, { red: { outfielder: { shooting: 1 } } }, 1)
+    Facing.angle[world.carrier] = Math.PI
+    const { miss } = planShot(world, world.carrier)
+    expect(miss).toBeGreaterThan(0)
+    expect(miss).toBeLessThan(25)
   })
 })
