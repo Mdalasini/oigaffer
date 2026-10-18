@@ -126,7 +126,13 @@ export function tickRun(eid: number, dt: number) {
 /** Gives up the run, if there was one, and stops calling. */
 export function endRun(world: Match, eid: number) {
   if (Run.phase[eid] !== RunPhase.None) Run.rest[eid] = RUN_REST * (1 + world.rng())
+  clearIntentions(eid)
+}
+
+/** Forgets any run, call or showing: on the ball, leaving a role, or at a restart. */
+export function clearIntentions(eid: number) {
   Run.phase[eid] = RunPhase.None
+  Run.timer[eid] = 0
   Call.kind[eid] = CallKind.None
   OffBall.showing[eid] = 0
 }

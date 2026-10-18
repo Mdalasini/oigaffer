@@ -31,6 +31,7 @@ import {
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
+import { clearIntentions } from './attacking'
 import { clearOffside, playedBy } from './offside'
 import { homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
@@ -452,8 +453,7 @@ function setCarrier(world: Match, eid: number) {
   if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
   addComponent(world, eid, OnBall)
   // On the ball, they've stopped running and calling for it.
-  Run.phase[eid] = 0
-  Call.kind[eid] = 0
+  clearIntentions(eid)
   world.carrier = eid
 }
 
@@ -474,9 +474,7 @@ function setPresser(world: Match, eid: number) {
  * take stock, rather than picking up an off-ball plan from before.
  */
 function stepOffBall(world: Match, eid: number) {
-  Run.phase[eid] = 0
-  Call.kind[eid] = 0
-  OffBall.showing[eid] = 0
+  clearIntentions(eid)
   OffBall.targetX[eid] = Position.x[eid]
   OffBall.targetY[eid] = Position.y[eid]
   OffBall.radius[eid] = 1
@@ -654,8 +652,9 @@ export function takeRestart(world: Match) {
       Facing.angle[eid] = Math.atan2(by - home.y, bx - home.x)
     }
   }
-  // Everyone holds where they've been put until they've had a look around.
+  // Everyone holds where they've been put until they've had a look around, with no run or call carried over.
   for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
+    clearIntentions(eid)
     OffBall.targetX[eid] = Position.x[eid]
     OffBall.targetY[eid] = Position.y[eid]
     OffBall.radius[eid] = 1

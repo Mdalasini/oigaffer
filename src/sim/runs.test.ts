@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Call, CallKind, Facing, Position, Run, RunPhase, Velocity } from './components'
+import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { attackingIntent } from './attacking'
@@ -112,5 +112,59 @@ describe('showing for it', () => {
     expect(Call.kind[mate]).toBe(CallKind.Feet)
     expect(passSafety(world, RED, bx, by, spot.x, spot.y, 10)).toBeGreaterThan(0.6)
     expect(Math.hypot(spot.x - Position.x[carrier], spot.y - Position.y[carrier])).toBeGreaterThan(6)
+  })
+})
+
+describe('run bookkeeping', () => {
+  test('a restart clears runs and calls for everyone, even players whose role stays the same', () => {
+    const world = scene(4, 0, 0, 6, 6, [[10, -4], [10, 6]])
+    const mate = world.teams[RED].outfielders[1]
+    Run.phase[mate] = RunPhase.Go
+    Run.timer[mate] = 1
+    Call.kind[mate] = CallKind.Space
+    world.restart = { kind: 'throw-in', team: RED, x: 0, y: 16 }
+    world.phase = 'stopped'
+    world.phaseTime = 10
+    stepMatch(world)
+    expect(Run.phase[mate]).toBe(RunPhase.None)
+    expect(Call.kind[mate]).toBe(CallKind.None)
+  })
+
+  test('a check away is a real step towards the ball, even from standing', () => {
+    const world = scene(-8, 0, 0, 4, 6, [[6, -4], [6, 8]], { red: { outfielder: { offTheBall: 1 } } })
+    const mate = world.teams[RED].outfielders[1]
+    // Settled where they are, then the run starts.
+    OffBall.targetX[mate] = Position.x[mate]
+    OffBall.targetY[mate] = Position.y[mate]
+    OffBall.radius[mate] = 1.5
+    OffBall.settled[mate] = 1
+    Run.phase[mate] = RunPhase.Prepare
+    Run.timer[mate] = 0.6
+    Run.targetX[mate] = 14
+    Run.targetY[mate] = 6
+    OffBall.decideIn[mate] = 0
+    const startX = Position.x[mate]
+    const startY = Position.y[mate]
+    for (let i = 0; i < 60; i++) stepMatch(world)
+    expect(Math.hypot(Position.x[mate] - startX, Position.y[mate] - startY)).toBeGreaterThan(0.5)
+  })
+
+  test('a runner’s target goes right up to the line, and never past it, whatever the target was before', () => {
+    const world = scene(-8, 0, 0, 4, 6, [[6, -4], [6, 8]])
+    const mate = world.teams[RED].outfielders[1]
+    const limit = onsideLimit(world, RED)
+    // Holding a yard onside, settled.
+    OffBall.targetX[mate] = limit - 1
+    OffBall.targetY[mate] = 6
+    OffBall.radius[mate] = 1.5
+    OffBall.settled[mate] = 1
+    Run.phase[mate] = RunPhase.Go
+    Run.timer[mate] = 1.5
+    Run.targetX[mate] = limit + 6
+    Run.targetY[mate] = 6
+    OffBall.decideIn[mate] = 0
+    stepMatch(world)
+    expect(along(RED, OffBall.targetX[mate])).toBeGreaterThan(onsideLimit(world, RED) - 0.5)
+    expect(along(RED, OffBall.targetX[mate])).toBeLessThanOrEqual(onsideLimit(world, RED) + 1e-4)
   })
 })

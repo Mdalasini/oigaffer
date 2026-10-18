@@ -21,6 +21,8 @@ const COVER_SHADE = 3
 /** Attackers aim to stay this far (m) onside of the opposition's line, or RUNNER_MARGIN when running in behind. */
 const ONSIDE_MARGIN = 1
 const RUNNER_MARGIN = 0.2
+/** A runner's or a check-away's target counts as reached only this close (m). */
+const RUNNER_RADIUS = 0.3
 /** Teammates' targets stay at least this far (m) apart, so two players never do one job. */
 const TEAMMATE_GAP = 4
 /** A marker stands between MARK_TIGHT and MARK_LOOSE metres goal-side of their man, tighter the nearer the ball. */
@@ -161,16 +163,19 @@ function effortFor(world: Match, eid: number, x: number, y: number, defending: b
 
 function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   ;({ x, y } = apart(world, eid, x, y))
-  // Whatever moved it, an attacker's target stays onside.
   const team = Team.id[eid]
-  if (team === world.possession) {
-    // A runner plays on the last defender's shoulder; everyone else keeps a yard onside.
-    const limit = onsideLimit(world, team) - (Run.phase[eid] === RunPhase.Go ? RUNNER_MARGIN : ONSIDE_MARGIN)
-    if (along(team, x) > limit) x = limit * attackDir(team)
-  }
+  const attacking = team === world.possession
   const ball = world.ball
-  const radius = BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
+  // A runner wants to be right on the line, and a check away is a short, deliberate step: both need a tight aim.
+  const precise = attacking && Run.phase[eid] !== RunPhase.None
+  const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
   setTarget(eid, x, y, radius, effort)
+  // Whatever the target ends up being, an attacker's stays onside: a runner on the last
+  // defender's shoulder, everyone else a yard short.
+  if (attacking) {
+    const limit = onsideLimit(world, team) - (Run.phase[eid] === RunPhase.Go ? RUNNER_MARGIN : ONSIDE_MARGIN)
+    if (along(team, OffBall.targetX[eid]) > limit) OffBall.targetX[eid] = limit * attackDir(team)
+  }
 }
 
 /**
