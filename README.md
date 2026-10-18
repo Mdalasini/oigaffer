@@ -53,10 +53,11 @@ two outfielders a side.
   passer misjudges a teammate's position against the line by up to about a
   metre, less with better decisions.
 - **Defending as a unit** — the defender quickest to the ball presses it. The
-  rest are given an attacker each, by an optimal assignment, so no two take
-  the same man and none is left free while a defender is spare. A defender
-  keeps their man unless another is clearly better placed to take him: half a
-  second quicker to get goal-side. The back line moves as one. It drops off
+  rest share out the other jobs by an optimal assignment: one covers behind
+  the presser, and the others pick up the attackers in and around their zones,
+  the more dangerous first, so no two take the same man. A spare defender
+  holds their zone. A defender keeps their job unless another is clearly
+  better placed to take it: half a second quicker to get there. The back line moves as one. It drops off
   when the carrier has time to play forward, and steps up on a pressing cue:
   the carrier facing their own goal, pinned on a touchline, or the ball played
   backwards. On a pressing cue markers also get tight. The covering defender
