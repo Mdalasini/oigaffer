@@ -5,7 +5,7 @@ import { GOAL_X } from '../constants'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { ballAtFeet, dribble, footDistance } from '../touch'
+import { ballAtFeet, canPlayBall, dribble, footDistance } from '../touch'
 
 const SHOT_SPEED = 25
 /**
@@ -70,8 +70,7 @@ export function strikerSystem(world: Match, dt: number) {
 
     const chased = world.defenderActive && isChased(world, dirX, dirY)
     const shootDistance = world.shootDistance + (chased ? CHASED_SHOOT_EARLIER : 0)
-    const steady = OffBalance.timer[eid] === 0
-    if (steady && wantsToShoot(world, eid, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+    if (canPlayBall(world, eid) && wantsToShoot(world, eid, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
       shoot(world, eid)
       continue
     }
@@ -146,8 +145,7 @@ function shield(world: Match, eid: number, gx: number, gy: number, dt: number): 
     Shield.active[eid] = 0
     Shield.timer[eid] = SHIELD_REST
     const lateral = -(Position.x[defender] - Position.x[ball]) * gy + (Position.y[defender] - Position.y[ball]) * gx
-    TakeOn.side[eid] = lateral > 0 ? -1 : 1
-    TakeOn.feintTimer[eid] = 0
+    beginTakeOn(world, eid, lateral > 0 ? -1 : 1, false)
     return false
   }
 
@@ -177,9 +175,8 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
 
   if (TakeOn.side[eid] === 0) {
     // Go round the side the defender is leaning away from.
-    TakeOn.side[eid] = lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
-    TakeOn.feintTimer[eid] = rng() < FEINT_CHANCE ? FEINT_TIME : 0
-    TakeOn.checkBackTimer[eid] = CHECK_BACK_AFTER + rng() * CHECK_BACK_SPREAD
+    const side = lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
+    beginTakeOn(world, eid, side, rng() < FEINT_CHANCE)
   }
   let side = TakeOn.side[eid]
   // How far the defender sits off to the far side of our path: positive once we're getting round them.
@@ -213,6 +210,13 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
     dribble(eid, ball, TouchStyle.Small, tx / len, ty / len, pace)
   }
   return true
+}
+
+/** Commits to going round the defender on `side`, with or without a dummy first. */
+function beginTakeOn(world: Match, eid: number, side: number, dummy: boolean) {
+  TakeOn.side[eid] = side
+  TakeOn.feintTimer[eid] = dummy ? FEINT_TIME : 0
+  TakeOn.checkBackTimer[eid] = CHECK_BACK_AFTER + world.rng() * CHECK_BACK_SPREAD
 }
 
 const rotate = (x: number, y: number, a: number): [number, number] => [

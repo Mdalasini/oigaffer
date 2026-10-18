@@ -75,11 +75,15 @@ export function defenderSystem(world: Match, dt: number) {
   }
 }
 
-/** Decide whether to commit to a tackle, slide or barge this tick. */
+/**
+ * Decide whether to commit to a tackle, slide or barge this tick. Judged on
+ * the defender's read of the ball, so a slow reader mistimes challenges;
+ * whether they connect is settled against where the ball really is.
+ */
 function maybeChallenge(world: Match, eid: number, dt: number) {
   const { ball, striker, rng } = world
-  const toBallX = Position.x[ball] - Position.x[eid]
-  const toBallY = Position.y[ball] - Position.y[eid]
+  const toBallX = Defender.readX[eid] - Position.x[eid]
+  const toBallY = Defender.readY[eid] - Position.y[eid]
   const ballDistance = Math.hypot(toBallX, toBallY)
   const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
   const carrierDistance = Math.hypot(Position.x[striker] - Position.x[eid], Position.y[striker] - Position.y[eid])
@@ -90,7 +94,7 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
 
   if (ballDistance <= STAND_REACH && ballAhead <= STAND_CONE) {
     const rate = exposed ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
-    if (chance(rate)) return startStandingTackle(eid, ball)
+    if (chance(rate)) return startStandingTackle(eid)
   }
   if (carrierDistance <= BARGE_RANGE && footDistance(striker, ball) < CONTROL_RADIUS) {
     // Shoulder in on a carrier who is shielding, or who has the ball alongside.
@@ -99,7 +103,7 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   }
   const beaten = Defender.mode[eid] === DefenderMode.Run
   if (beaten && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
-    if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid, ball)
+    if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
   }
 }
 
@@ -110,10 +114,10 @@ function startAction(eid: number, mode: DefenderMode) {
 }
 
 /** Stab a foot at the ball. */
-function startStandingTackle(eid: number, ball: number) {
+function startStandingTackle(eid: number) {
   startAction(eid, DefenderMode.StandTackle)
-  const dx = Position.x[ball] - Position.x[eid]
-  const dy = Position.y[ball] - Position.y[eid]
+  const dx = Defender.readX[eid] - Position.x[eid]
+  const dy = Defender.readY[eid] - Position.y[eid]
   const len = Math.hypot(dx, dy) || 1
   MoveIntent.vx[eid] = (dx / len) * LUNGE_SPEED
   MoveIntent.vy[eid] = (dy / len) * LUNGE_SPEED
@@ -134,10 +138,10 @@ function startBarge(eid: number, striker: number) {
 }
 
 /** Go to ground, boot first, along a line to where the ball will be. */
-export function startSlide(world: Match, eid: number, ball: number) {
+export function startSlide(world: Match, eid: number) {
   startAction(eid, DefenderMode.SlideTackle)
-  const tx = Position.x[ball] + Velocity.x[ball] * 0.25 - Position.x[eid]
-  const ty = Position.y[ball] + Velocity.y[ball] * 0.25 - Position.y[eid]
+  const tx = Defender.readX[eid] + Defender.readVx[eid] * 0.25 - Position.x[eid]
+  const ty = Defender.readY[eid] + Defender.readVy[eid] * 0.25 - Position.y[eid]
   const len = Math.hypot(tx, ty) || 1
   Defender.actionDirX[eid] = tx / len
   Defender.actionDirY[eid] = ty / len

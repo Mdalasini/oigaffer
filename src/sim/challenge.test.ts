@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { hasComponent } from 'bitecs'
 import { bodyBetween, resolveBarge, resolveStandingTackle } from './challenge'
-import { Defender, DefenderMode, Dribbler, Facing, OffBalance, Position, Shield, Sliding, TouchStyle, Velocity } from './components'
+import { Defender, DefenderMode, Dribbler, Facing, OffBalance, Position, Shield, Sliding, TakeOn, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { simulateAttacks } from './simulate'
 import { challengeSystem } from './systems/challenge'
+import { ballBodySystem } from './systems/collision'
+import { contestSystem } from './systems/contest'
 import { startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { FOOT_OFFSET } from './touch'
@@ -106,7 +108,9 @@ describe('sliding tackles', () => {
     const { defender, ball } = world
     setVec(Velocity, defender, 6, 0, 0)
     Facing.angle[defender] = 0
-    startSlide(world, defender, ball)
+    Defender.readX[defender] = Position.x[ball]
+    Defender.readY[defender] = Position.y[ball]
+    startSlide(world, defender)
     expect(hasComponent(world, defender, Sliding)).toBe(true)
     const startX = Position.x[defender]
     let grounded = false
@@ -121,6 +125,45 @@ describe('sliding tackles', () => {
   })
 })
 
+describe('challenges across the end of an attack', () => {
+  test('a defender sliding when the shot goes in still slides out and gets up', () => {
+    const world = setup(1, -2, 6)
+    const { defender, ball } = world
+    setVec(Velocity, defender, 6, 0, 0)
+    Defender.readX[defender] = Position.x[ball]
+    Defender.readY[defender] = Position.y[ball]
+    startSlide(world, defender)
+    world.phase = 'shot'
+    const startX = Position.x[defender]
+    for (let i = 0; i < 120 * 3; i++) challengeSystem(world, FIXED_DT)
+    expect(Position.x[defender] - startX).toBeGreaterThan(2)
+    expect(hasComponent(world, defender, Sliding)).toBe(false)
+  })
+
+  test('an off-balance defender cannot gather a loose ball', () => {
+    const world = setup(1, 5, FOOT_OFFSET)
+    const { ball, defender } = world
+    setVec(Position, ball, Position.x[defender] - FOOT_OFFSET - 0.3, 0, BALL_RADIUS)
+    OffBalance.timer[defender] = 0.3
+    contestSystem(world, FIXED_DT)
+    expect(world.outcome).toBeNull()
+  })
+
+  test('a shot passes over a defender on the ground', () => {
+    const world = setup(1, 4, FOOT_OFFSET)
+    const { ball, defender } = world
+    Defender.readX[defender] = Position.x[ball]
+    Defender.readY[defender] = Position.y[ball]
+    startSlide(world, defender)
+    world.phase = 'shot'
+    world.prevBall = { x: Position.x[defender] - 0.5, y: Position.y[defender], z: 1 }
+    setVec(Position, ball, Position.x[defender] + 0.2, Position.y[defender], 1)
+    setVec(Velocity, ball, 25, 0, 0)
+    ballBodySystem(world, FIXED_DT)
+    expect(world.outcome).toBeNull()
+  })
+})
+
 describe('shielding', () => {
   test('with the defender tight and the ball on the far side, the striker shields it', () => {
     const world = setup(2, 1.1, -0.3)
@@ -130,6 +173,22 @@ describe('shielding', () => {
     for (let i = 0; i < 20; i++) stepMatch(world)
     expect(Shield.active[striker]).toBe(1)
     expect(bodyBetween(striker, defender, ball)).toBe(true)
+  })
+
+  test('turning away after a shield keeps to the chosen side', () => {
+    const world = setup(2, 1.1, -0.3)
+    const { striker, defender } = world
+    Facing.angle[striker] = Math.PI
+    // Defender just to the left of the striker's line, so the turn away is to the right.
+    Position.y[defender] = 0.2
+    TakeOn.checkBackTimer[striker] = 0
+    for (let i = 0; i < 20; i++) stepMatch(world)
+    expect(Shield.active[striker]).toBe(1)
+    Shield.timer[striker] = 0
+    stepMatch(world)
+    expect(Shield.active[striker]).toBe(0)
+    expect(TakeOn.side[striker]).toBe(-1)
+    expect(TakeOn.checkBackTimer[striker]).toBeGreaterThan(0)
   })
 })
 

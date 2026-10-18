@@ -1,4 +1,5 @@
 import { removeComponent } from 'bitecs'
+import { angleDelta } from './angles'
 import { Body, Defender, DefenderMode, Dribbler, Facing, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Velocity } from './components'
 import { bargeWinChance, tackleSkill } from './grades'
 import { endAttack, type Match } from './match'
@@ -49,7 +50,7 @@ export function resolveStandingTackle(world: Match, defender: number) {
   const { ball, striker } = world
   const dx = Position.x[ball] - Position.x[defender]
   const dy = Position.y[ball] - Position.y[defender]
-  const facingGap = Math.abs(Math.atan2(Math.sin(Math.atan2(dy, dx) - Facing.angle[defender]), Math.cos(Math.atan2(dy, dx) - Facing.angle[defender])))
+  const facingGap = Math.abs(angleDelta(Facing.angle[defender], Math.atan2(dy, dx)))
   if (Math.hypot(dx, dy) > STAND_REACH || facingGap > STAND_CONE) {
     stumble(defender, 0.35)
     return record(world, 'stand', 'missed')

@@ -1,6 +1,6 @@
 import { Velocity } from '../components'
 import { endAttack, type Match } from '../match'
-import { ballAtFeet, CONTROL_RADIUS, footDistance } from '../touch'
+import { ballAtFeet, canPlayBall, CONTROL_RADIUS, footDistance } from '../touch'
 
 /** Beyond the carrier's control, the defender must be at least this much nearer to call it theirs. */
 const LOOSE_MARGIN = 0.4
@@ -15,7 +15,7 @@ const MAX_GATHER_SPEED = 6
 export function contestSystem(world: Match, _dt: number) {
   if (!world.defenderActive || world.phase !== 'approach') return
   const { ball, striker, defender } = world
-  if (!ballAtFeet(defender, ball)) return
+  if (!canPlayBall(world, defender) || !ballAtFeet(defender, ball)) return
   const carrierDistance = footDistance(striker, ball)
   const loose = carrierDistance > CONTROL_RADIUS && carrierDistance - footDistance(defender, ball) >= LOOSE_MARGIN
   const relativeSpeed = Math.hypot(Velocity.x[ball] - Velocity.x[defender], Velocity.y[ball] - Velocity.y[defender])

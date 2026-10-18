@@ -1,5 +1,5 @@
-import { query } from 'bitecs'
-import { Body, Position, Velocity } from '../components'
+import { hasComponent, query } from 'bitecs'
+import { Body, Position, Sliding, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { endAttack, type Match } from '../match'
 
@@ -7,6 +7,8 @@ import { endAttack, type Match } from '../match'
 const BODY_RESTITUTION = 0.3
 /** Legs and hips present a narrower target than the shoulders. */
 const LEG_WIDTH = 0.8
+/** Height (m) of a player lying on the ground, sliding or getting up. */
+const PRONE_HEIGHT = 0.4
 /** Separating one pair can push a body into another, so repeat until settled. */
 const MAX_PASSES = 8
 const TOLERANCE = 1e-4
@@ -62,7 +64,8 @@ function ballOffBody(world: Match, eid: number) {
   if (!contact) return
   const { t, nx, ny } = contact
   const z = prevBall.z + (Position.z[ball] - prevBall.z) * t
-  if (z > Body.height[eid]) return
+  const height = hasComponent(world, eid, Sliding) ? PRONE_HEIGHT : Body.height[eid]
+  if (z > height) return
   const into = (Velocity.x[ball] - Velocity.x[eid]) * nx + (Velocity.y[ball] - Velocity.y[eid]) * ny
   if (into >= 0) return
   Velocity.x[ball] -= (1 + BODY_RESTITUTION) * into * nx
