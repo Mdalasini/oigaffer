@@ -342,3 +342,21 @@ describe('five-a-side: defending as a unit', () => {
     }
   })
 })
+
+describe('eleven a side: defending near goal on a full-size pitch', () => {
+  test('the line drops to about the six-yard box and the block stays compact in front of it', () => {
+    const world = createMatch({ outfielders: 10, seed: 1 })
+    const L = world.pitch.halfLength
+    world.possession = RED
+    // Red has the ball 8 m out from the goal Blue defends.
+    setVec(Position, world.ball, L - 8, 5, BALL_RADIUS)
+    world.lines[BLUE] = baseLine(world, BLUE)
+    expect(world.lines[BLUE] + L).toBeCloseTo(9, 6)
+    for (const eid of world.teams[BLUE].outfielders) {
+      const fromGoalLine = along(BLUE, homePosition(world, eid).x) + L
+      // Everyone within the block: the back line, and the rest no more than 18 m in front of it.
+      expect(fromGoalLine).toBeGreaterThanOrEqual(9 - 1e-6)
+      expect(fromGoalLine).toBeLessThanOrEqual(9 + 18 + 1e-6)
+    }
+  })
+})
