@@ -75,12 +75,13 @@ export function timeOnBall(world: Match, eid: number): number {
 export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number): number {
   const length = Math.hypot(toX - fromX, toY - fromY)
   if (length === 0) return 1
+  // A pass that stops short never gets there.
+  if (rollTime(speed, length) === Infinity) return 0
   // Where the ball is along its path, and when.
   const samples: { x: number; y: number; t: number }[] = []
   for (let i = 0; ; i++) {
     const s = Math.min(length, Math.min(PASS_START, length) + i * PASS_STEP)
     const t = rollTime(speed, s)
-    if (t === Infinity) break
     samples.push({ x: fromX + ((toX - fromX) * s) / length, y: fromY + ((toY - fromY) * s) / length, t })
     if (s === length) break
   }

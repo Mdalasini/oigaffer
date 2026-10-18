@@ -21,14 +21,23 @@ const TURN_FALLOFF_SPEED = 2.5
  * evaluate, which matters more here than precision.
  */
 export function arrivalTime(world: World, eid: number, x: number, y: number, reach = 0, reaction = REACTION_TIME): number {
-  if (Math.hypot(x - Position.x[eid], y - Position.y[eid]) <= reach) return 0
   const vx = Velocity.x[eid]
   const vy = Velocity.y[eid]
-  const dx = x - (Position.x[eid] + vx * reaction)
-  const dy = y - (Position.y[eid] + vy * reaction)
+  const ox = Position.x[eid] - x
+  const oy = Position.y[eid] - y
+  if (Math.hypot(ox, oy) <= reach) return 0
+  // Carried within reach while still reacting: the first moment their path enters it.
+  const a = vx * vx + vy * vy
+  const b = 2 * (ox * vx + oy * vy)
+  const c = ox * ox + oy * oy - reach * reach
+  const disc = b * b - 4 * a * c
+  if (a > 0 && disc >= 0) {
+    const t = (-b - Math.sqrt(disc)) / (2 * a)
+    if (t >= 0 && t <= reaction) return t
+  }
+  const dx = -(ox + vx * reaction)
+  const dy = -(oy + vy * reaction)
   const gap = Math.hypot(dx, dy)
-  // Carried within reach while still reacting.
-  if (gap <= reach) return reaction
   const ux = dx / gap
   const uy = dy / gap
   const speed = Math.hypot(vx, vy)

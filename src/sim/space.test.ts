@@ -95,6 +95,13 @@ describe('arrival time', () => {
     expect(arrivalTime(world, red, 20, 0)).toBeGreaterThan(standing + 0.5)
   })
 
+  test('a spot they run through while still reacting counts from the moment they reach it', () => {
+    const world = placed(0, 0, 25, 0)
+    const red = world.teams[RED].outfielders[0]
+    setVec(Velocity, red, 8, 0, 0)
+    expect(arrivalTime(world, red, 0.6, 0, 0.1)).toBeCloseTo(0.5 / 8, 3)
+  })
+
   test('nothing for a spot already within reach, and little more than the reaction for one just beyond it', () => {
     const world = placed(0, 0, 25, 0)
     const red = world.teams[RED].outfielders[0]
@@ -117,6 +124,12 @@ describe('control and passing lanes', () => {
     const world = placed(-10, 0, 0, 0)
     expect(passSafety(world, RED, -10, 0, 10, 0, 14)).toBeLessThan(0.1)
     expect(passSafety(world, RED, -10, 0, -10, 12, 12)).toBeGreaterThan(0.9)
+  })
+
+  test('a pass that stops short of its target never gets there', () => {
+    const world = placed(-10, 0, 10, 10)
+    expect(passSafety(world, RED, -10, 0, 0, 0, 1)).toBe(0)
+    expect(passSafety(world, RED, -10, 0, 10, 0, 4)).toBe(0)
   })
 
   test('a firmer pass gets past a nearby opponent more often than a soft one', () => {
