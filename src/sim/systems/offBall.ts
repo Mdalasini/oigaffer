@@ -75,11 +75,12 @@ export function offBallSystem(world: Match, dt: number) {
     else endRun(world, eid)
     OffBall.decideIn[eid] -= dt
     if (OffBall.decideIn[eid] <= 0) {
-      OffBall.decideIn[eid] = nextLook(world, eid)
       if (attacking) {
         const intent = attackingIntent(world, eid)
         go(world, eid, intent.x, intent.y, intent.effort)
       } else defend(world, eid)
+      // How soon they look again depends on what they've just decided: setting off on a run keeps them alert.
+      OffBall.decideIn[eid] = nextLook(world, eid)
     }
     const face = attacking ? halfTurn(world, eid) : { x: Position.x[ball] - Position.x[eid], y: Position.y[ball] - Position.y[eid] }
     steer(eid, face.x, face.y)
