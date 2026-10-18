@@ -162,6 +162,8 @@ export function passToOutfielder(world: Match, keeper: number, receiver: number,
   world.lastTouchDeliberate = true
   world.lastTouch = null
   world.shot = null
+  // A new ball from the keeper, even to the player an earlier pass was meant for.
+  world.pass = null
   handOver(world, receiver)
   setPhase(world, 'play')
 }

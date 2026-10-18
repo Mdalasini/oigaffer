@@ -13,6 +13,8 @@ const RECEIVE_REACH = 0.5
 /** Steps (s) along the ball's roll when looking for where to meet it, and how far ahead to look. */
 const LOOK_STEP = 0.1
 const LOOK_AHEAD = 4
+/** Fastest (m/s) a receiver moves towards a ball coming at them. */
+const STEP_IN = 1.5
 /** A through ball's receiver meets it no more than this far (m) short of where it was aimed. */
 const THROUGH_SLACK = 2
 /** A pass not taken within this long (s) has gone astray: the ball is anyone's. */
@@ -64,7 +66,9 @@ export function meetTheBall(world: Match, eid: number) {
   const dx = tx - Position.x[eid]
   const dy = ty - Position.y[eid]
   const distance = Math.hypot(dx, dy)
-  const pace = distance < 0.2 ? 0 : Math.min(topSpeed(Physical.pace[eid]), distance / Math.max(meet, 0.15))
+  let pace = distance < 0.2 ? 0 : Math.min(topSpeed(Physical.pace[eid]), distance / Math.max(meet, 0.15))
+  // Stepping towards a ball coming at them, they only step in, so they're set when it arrives.
+  if (speed > 0.3 && distance > 0 && (dx * Velocity.x[ball] + dy * Velocity.y[ball]) / (distance * speed) < -0.5) pace = Math.min(pace, STEP_IN)
   MoveIntent.vx[eid] = distance > 0 ? (dx / distance) * pace : 0
   MoveIntent.vy[eid] = distance > 0 ? (dy / distance) * pace : 0
   const near = distance < 4 || pace < 3

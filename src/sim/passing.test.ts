@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Outfielder, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
-import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
+import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollSpeedAfter, rollSpeedToArrive, rollTime } from './passing'
 import { choosePass, passOptions, strikePass } from './playmaking'
+import { passToOutfielder } from './systems/keeper'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from './touch'
 
 const RED = 0
@@ -92,8 +93,46 @@ describe('through balls', () => {
   })
 })
 
+describe('getting a pass away', () => {
+  test('the passer can’t take back a soft pass on its way out', () => {
+    const world = scene(7, -10, 0, -4, 0)
+    const [passer, mate] = world.teams[RED].outfielders
+    setVec(Velocity, passer, 3, 0, 0)
+    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -4, y: 0, speed: 4, safety: 1, value: 1 })
+    for (let i = 0; i < 20; i++) stepMatch(world)
+    expect(world.pass?.to).toBe(mate)
+    expect(world.carrier).toBe(mate)
+  })
+
+  test('a pass across the body doesn’t hit the passer', () => {
+    const world = scene(8, -10, 0, -14, 7, [], { red: { outfielder: { passing: 20 } } })
+    const [passer, mate] = world.teams[RED].outfielders
+    // Facing +x, passing back and to the side.
+    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -14, y: 7, speed: 9, safety: 1, value: 1 })
+    for (let i = 0; i < 20; i++) stepMatch(world)
+    expect(world.pass?.to).toBe(mate)
+  })
+
+  test('a keeper kicking out a pass meant for a teammate starts a new one', () => {
+    const world = scene(9, -10, 0, -4, 0)
+    const [passer, mate] = world.teams[RED].outfielders
+    const keeper = world.teams[RED].keeper
+    world.pass = { from: passer, to: mate, kind: 'through', x: 20, y: 0, time: world.time }
+    handOver(world, mate)
+    passToOutfielder(world, keeper, mate, Position.x[keeper], Position.y[keeper])
+    expect(world.pass).toBeNull()
+    expect(world.carrier).toBe(mate)
+  })
+})
+
 describe('first touch', () => {
-  /** Share of firm passes, rolled at the receiver at `speed`, that they keep within control a moment after the touch. */
+  /** A set first touch leaves the ball moving at most this fast (m/s) relative to the receiver. */
+  const SET_PACE = 2.5
+
+  /**
+   * Share of passes, rolled at the receiver at `speed`, that their first
+   * touch sets: the ball comes off them no faster than a controlled touch.
+   */
   function controlled(firstTouch: number, speed: number) {
     let kept = 0
     for (let seed = 1; seed <= 60; seed++) {
@@ -104,10 +143,12 @@ describe('first touch', () => {
       setVec(Position, world.ball, -3, 0, BALL_RADIUS)
       setVec(Velocity, world.ball, speed, 0, 0)
       world.pass = { from: passer, to: mate, kind: 'feet', x: 0, y: 0, time: world.time }
-      world.carrier = mate
+      handOver(world, mate)
       world.stats[RED].passes++
-      for (let i = 0; i < 90; i++) stepMatch(world)
-      if (world.possession === RED && world.stats[RED].completed === 1 && footDistance(mate, world.ball) < CONTROL_RADIUS) kept++
+      for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
+      // Straight after the touch: a ball set at their feet moves with them; a heavy one runs away.
+      const away = Math.hypot(Velocity.x[world.ball] - Velocity.x[mate], Velocity.y[world.ball] - Velocity.y[mate])
+      if (world.stats[RED].completed === 1 && away < SET_PACE) kept++
     }
     return kept / 60
   }
