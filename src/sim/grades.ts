@@ -125,3 +125,23 @@ export function judgementError(decisions: number): number {
 export function offsideMisjudgement(decisions: number): number {
   return lerp(1, 0.2, gradeT(decisions))
 }
+
+/** Seconds a marker takes to pick up a run made behind their back. */
+export function blindSideDelay(positioning: number): number {
+  return lerp(0.8, 0.15, gradeT(positioning))
+}
+
+/** Seconds between choosing a pass and striking it: the look, the set and the backswing. */
+export function passWindup(passing: number): number {
+  return lerp(0.28, 0.14, gradeT(passing))
+}
+
+/** Standard deviation (s) of how far a runner's burst is from the moment a through ball is struck. */
+export function runTimingError(offTheBall: number): number {
+  return lerp(0.35, 0.06, gradeT(offTheBall))
+}
+
+/** Chance a back line steps up together to catch a runner offside as a pass is shaped to be played. */
+export function trapChance(positioning: number): number {
+  return lerp(0.1, 0.6, gradeT(positioning))
+}

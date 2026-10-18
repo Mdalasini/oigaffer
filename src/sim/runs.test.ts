@@ -64,7 +64,7 @@ describe('running in behind', () => {
       for (const seed of [1, 2, 3]) {
         const world = createMatch({ seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
         const before = new Map<number, number>()
-        for (let i = 0; i < 120 * 120; i++) {
+        for (let i = 0; i < 5 * 60 * 120; i++) {
           stepMatch(world)
           for (const team of world.teams) {
             for (const eid of team.outfielders) {
@@ -76,7 +76,8 @@ describe('running in behind', () => {
       }
       return count
     }
-    expect(runs(20)).toBeGreaterThan(runs(1) * 1.3)
+    // 35–110% more over five minutes, depending on the seeds.
+    expect(runs(20)).toBeGreaterThan(runs(1) * 1.2)
   })
 
   test('the carrier hears a run they can’t see, and can put it into the space being called for', () => {

@@ -1,5 +1,6 @@
 import { addComponent, addEntity, createWorld, hasComponent, query, removeComponent, type World } from 'bitecs'
 import type { LastChallenge } from './challenge'
+import type { PassOption } from './playmaking'
 import {
   Ball,
   Body,
@@ -9,6 +10,7 @@ import {
   Dribbler,
   Facing,
   Goalkeeper,
+  Mark,
   MoveIntent,
   OffBalance,
   OffBall,
@@ -33,7 +35,7 @@ import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
 import { clearIntentions } from './attacking'
 import { clearOffside, playedBy } from './offside'
-import { homePosition } from './shape'
+import { baseLine, homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
 import type { GoalPoint, Vec3 } from './shooting'
 import { balanceSystem } from './systems/balance'
@@ -42,6 +44,7 @@ import { challengeSystem } from './systems/challenge'
 import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
+import { defendingSystem } from './systems/defending'
 import { keeperSystem } from './systems/keeper'
 import { locomotionSystem } from './systems/locomotion'
 import { offBallSystem } from './systems/offBall'
@@ -151,6 +154,7 @@ export const GRADE_FIELDS = {
     vision: Outfielder.vision,
     decisions: Outfielder.decisions,
     offTheBall: Outfielder.offTheBall,
+    positioning: Outfielder.positioning,
     pace: Physical.pace,
     agility: Physical.agility,
     strength: Physical.strength,
@@ -174,6 +178,7 @@ export const DEFAULT_GRADES: RoleGrades = {
     vision: 12,
     decisions: 12,
     offTheBall: 12,
+    positioning: 12,
     pace: 14,
     agility: 13,
     strength: 12,
@@ -208,6 +213,14 @@ export interface MatchContext {
   shot: ShotInfo | null
   /** The pass on its way, until it's received or broken up. Its receiver is the carrier meanwhile. */
   pass: PassInfo | null
+  /** A pass the carrier has chosen and is shaping to strike, at match time `at`. */
+  windup: { carrier: number; option: PassOption; at: number } | null
+  /** Each team's defensive line, in that team's `along` terms: it moves as a unit, stepping up and dropping off. */
+  lines: [number, number]
+  /** Match time at which each team next shares out its marking jobs. */
+  nextMarking: [number, number]
+  /** Match time until which each team is springing the offside trap: its line stepping up together on a pass. */
+  trap: [number, number]
   /** The restart just taken can't produce an offside, so the next touch takes no offside snapshot. */
   offsideExempt: boolean
   /**
@@ -274,7 +287,11 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     shootRequested: false,
     shot: null,
     pass: null,
+    windup: null,
     offsideExempt: false,
+    lines: [0, 0],
+    nextMarking: [0, 0],
+    trap: [0, 0],
     indirectTaker: -1,
     event: null,
     restart: null,
@@ -315,11 +332,12 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call, Mark]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
   Slot.index[eid] = slot
+  Mark.target[eid] = -1
   Physical.acceleration[eid] = 14
   Body.radius[eid] = 0.35
   Body.height[eid] = 1.8
@@ -378,6 +396,7 @@ export function kickOff(world: Match, team: number) {
 export function setPossession(world: Match, team: number, carrier: number) {
   const lost = world.carrier
   world.pass = null
+  world.nextMarking = [0, 0]
   // The other team has played it on purpose, which ends any offside.
   clearOffside(world)
   world.possession = team
@@ -641,6 +660,12 @@ export function takeRestart(world: Match) {
   Facing.angle[taker] = Math.atan2(faceY, faceX)
   Dribbler.cooldown[taker] = 0
 
+  // Both lines start where they'd naturally be, and the marking is shared out at once.
+  for (const t of [0, 1]) {
+    world.lines[t] = baseLine(world, t)
+    world.nextMarking[t] = 0
+    world.trap[t] = 0
+  }
   // Everyone else takes up their place in the shape around the ball: the side
   // without it first, since the attackers' shape depends on where they stand.
   world.possession = team
@@ -731,6 +756,7 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   touchCooldownSystem(world, dt)
   balanceSystem(world, dt)
   rolesSystem(world, dt)
+  defendingSystem(world, dt)
   carrierSystem(world, dt)
   defenderSystem(world, dt)
   offBallSystem(world, dt)

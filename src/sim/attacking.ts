@@ -1,7 +1,7 @@
 import { angleDelta } from './angles'
-import { Call, CallKind, Effort, Facing, OffBall, Outfielder, Position, Run, RunPhase } from './components'
+import { Call, CallKind, Effort, Facing, Mark, OffBall, Outfielder, Position, Run, RunPhase } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
-import { gradeT } from './grades'
+import { blindSideDelay, gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
 import { rateFeetPass } from './playmaking'
@@ -61,6 +61,8 @@ const PREPARE_SLOW = 0.6
 const PREPARE_QUICK = 0.3
 /** How far (m) they check towards the ball first. */
 const CHECK_AWAY = 2
+/** A marker sees runners within this angle (rad) either side of where they face. */
+const MARKER_VIEW = 1.75
 /** Seconds the run stays on without a pass before they give it up. */
 const GO_WINDOW = 1.8
 /** Seconds before making another run, plus up to as long again. */
@@ -91,6 +93,7 @@ export function attackingIntent(world: Match, eid: number): Intent {
     if (Run.timer[eid] > 0) return checkAway(world, eid)
     Run.phase[eid] = RunPhase.Go
     Run.timer[eid] = GO_WINDOW
+    blindSide(world, eid)
   }
   if (Run.phase[eid] === RunPhase.Go) {
     if (Run.timer[eid] > 0 && !inOffsidePosition(world, eid)) {
@@ -115,6 +118,19 @@ export function attackingIntent(world: Match, eid: number): Intent {
     }
   }
   return hold(world, eid, true)
+}
+
+/**
+ * A run starting behind a marker's back: a marker who can't see the runner
+ * is slow to pick the run up, the slower the worse their positioning.
+ */
+function blindSide(world: Match, runner: number) {
+  for (const marker of world.teams[opponent(world.possession)].outfielders) {
+    if (Mark.target[marker] !== runner) continue
+    const toRunner = Math.atan2(Position.y[runner] - Position.y[marker], Position.x[runner] - Position.x[marker])
+    if (Math.abs(angleDelta(Facing.angle[marker], toRunner)) <= MARKER_VIEW) continue
+    OffBall.decideIn[marker] = Math.max(OffBall.decideIn[marker], blindSideDelay(Outfielder.positioning[marker]))
+  }
 }
 
 /** Counts down the run's clock and the rest before the next one. Called every tick. */

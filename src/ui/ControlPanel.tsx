@@ -3,6 +3,7 @@ import type { Game, GameSnapshot } from '../game/Game'
 import type { Overlay } from '../render/overlay'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
 import {
+  blindSideDelay,
   catchChance,
   cleanTakeSpeed,
   gradeT,
@@ -17,6 +18,7 @@ import {
   tackleSkill,
   topSpeed,
   touchAngleError,
+  trapChance,
 } from '../sim/grades'
 import type { GradeKey, Role } from '../sim/match'
 import { TEAM_NAMES, type TeamName } from '../sim/teams'
@@ -48,6 +50,7 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'vision', label: 'Vision', detail: (g) => `spots ${Math.round(spotChance(g) * 100)}% of teammates over the shoulder` },
       { key: 'decisions', label: 'Decisions', detail: (g) => `misjudges options by ±${Math.round(judgementError(g) * 100)}%` },
       { key: 'offTheBall', label: 'Off the ball', detail: (g) => `goes for ${Math.round((0.15 + 0.45 * gradeT(g)) * 100)}% of chances to run in behind` },
+      { key: 'positioning', label: 'Positioning', detail: (g) => `picks up a blind-side run in ${Math.round(blindSideDelay(g) * 1000)} ms; springs the trap ${Math.round(trapChance(g) * 100)}% of the time` },
       { key: 'pace', label: 'Pace', detail: (g) => `top speed ${topSpeed(g).toFixed(1)} m/s` },
       { key: 'agility', label: 'Agility', detail: (g) => `sidestep ${sideStepSpeed(g).toFixed(1)} m/s` },
       { key: 'strength', label: 'Strength', detail: () => 'wins barges, holds off when shielding' },
