@@ -120,3 +120,8 @@ export function spotChance(vision: number): number {
 export function judgementError(decisions: number): number {
   return lerp(0.4, 0.05, gradeT(decisions))
 }
+
+/** Standard deviation (m) of how far a passer misjudges a teammate's position against the offside line. */
+export function offsideMisjudgement(decisions: number): number {
+  return lerp(1, 0.2, gradeT(decisions))
+}

@@ -1,23 +1,25 @@
 import { addComponent, addEntity, createWorld, hasComponent, query, removeComponent, type World } from 'bitecs'
 import type { LastChallenge } from './challenge'
 import {
-  OnBall,
   Ball,
   Body,
+  Call,
   Defender,
   DefenderMode,
-  Pressing,
   Dribbler,
   Facing,
   Goalkeeper,
   MoveIntent,
-  OffBall,
   OffBalance,
+  OffBall,
   Offside,
-  Passer,
+  OnBall,
   Outfielder,
+  Passer,
   Physical,
   Position,
+  Pressing,
+  Run,
   Shield,
   Sliding,
   Slot,
@@ -147,6 +149,7 @@ export const GRADE_FIELDS = {
     firstTouch: Outfielder.firstTouch,
     vision: Outfielder.vision,
     decisions: Outfielder.decisions,
+    offTheBall: Outfielder.offTheBall,
     pace: Physical.pace,
     agility: Physical.agility,
     strength: Physical.strength,
@@ -169,6 +172,7 @@ export const DEFAULT_GRADES: RoleGrades = {
     firstTouch: 13,
     vision: 12,
     decisions: 12,
+    offTheBall: 12,
     pace: 14,
     agility: 13,
     strength: 12,
@@ -310,7 +314,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -447,6 +451,9 @@ function setCarrier(world: Match, eid: number) {
   }
   if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
   addComponent(world, eid, OnBall)
+  // On the ball, they've stopped running and calling for it.
+  Run.phase[eid] = 0
+  Call.kind[eid] = 0
   world.carrier = eid
 }
 
@@ -467,6 +474,9 @@ function setPresser(world: Match, eid: number) {
  * take stock, rather than picking up an off-ball plan from before.
  */
 function stepOffBall(world: Match, eid: number) {
+  Run.phase[eid] = 0
+  Call.kind[eid] = 0
+  OffBall.showing[eid] = 0
   OffBall.targetX[eid] = Position.x[eid]
   OffBall.targetY[eid] = Position.y[eid]
   OffBall.radius[eid] = 1
