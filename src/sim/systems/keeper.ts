@@ -1,6 +1,7 @@
 import { query } from 'bitecs'
 import { Body, Facing, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH } from '../constants'
+import { cue } from '../cues'
 import { handOver, setPhase, setVec, type Match } from '../match'
 import { rollSpeedFor } from '../passing'
 import { playBall } from '../offside'
@@ -36,6 +37,9 @@ export const ARM_REACH = 0.9
 const SPREAD = 0.6
 const SPREAD_RANGE = 10
 
+/** With the ball in hand, look around for who to roll it to every LOOK_EVERY seconds, plus up to LOOK_SPREAD. */
+const LOOK_EVERY = 0.3
+const LOOK_SPREAD = 0.2
 /** Hold the ball at least this long (s), and roll it out by HOLD_MAX whatever happens. */
 const HOLD_MIN = 1
 const HOLD_MAX = 4
@@ -159,11 +163,19 @@ function dive(world: Match, eid: number, dt: number) {
 /**
  * Stands with the ball in hands, facing the teammate it would be safest to
  * roll it to, and rolls it out once that teammate is far enough away and the
- * pass would surely get through.
+ * pass would surely get through. They judge that by looking around a few
+ * times a second, not continuously.
  */
 function holdAndRollOut(world: Match, eid: number) {
   const { ball } = world
-  const { receiver, safety } = bestReceiver(world, eid, Position.x[eid], Position.y[eid])
+  if (world.time >= Goalkeeper.nextLook[eid]) {
+    Goalkeeper.nextLook[eid] = world.time + LOOK_EVERY + world.rng() * LOOK_SPREAD
+    const look = bestReceiver(world, eid, Position.x[eid], Position.y[eid])
+    Goalkeeper.receiver[eid] = look.receiver
+    Goalkeeper.safety[eid] = look.safety
+  }
+  const receiver = Goalkeeper.receiver[eid]
+  const safety = Goalkeeper.safety[eid]
   setVec(Velocity, eid, 0, 0, 0)
   Facing.angle[eid] = Math.atan2(Position.y[receiver] - Position.y[eid], Position.x[receiver] - Position.x[eid])
   const fx = Math.cos(Facing.angle[eid])
@@ -227,6 +239,7 @@ export function passToOutfielder(world: Match, keeper: number, receiver: number,
   world.pass = null
   handOver(world, receiver)
   setPhase(world, 'play')
+  cue(world, { kind: 'passStruck', passer: keeper, receiver })
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))

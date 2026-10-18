@@ -2,6 +2,7 @@ import { angleDelta } from './angles'
 import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { gradeT, judgementError, offsideMisjudgement, passAngleError, passWeightError, spotChance } from './grades'
+import { cue } from './cues'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
 import { playBall } from './offside'
@@ -303,6 +304,7 @@ export function strikePass(world: Match, carrier: number, option: PassOption) {
   world.stats[team].passes++
   world.pass = { from: carrier, to: option.receiver, kind: option.kind, x: option.x, y: option.y, time: world.time }
   handOver(world, option.receiver)
+  cue(world, { kind: 'passStruck', passer: carrier, receiver: option.receiver })
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))

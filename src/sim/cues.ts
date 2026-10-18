@@ -1,6 +1,6 @@
 import { angleDelta } from './angles'
 import { clearIntentions } from './attacking'
-import { Facing, Mark, OffBall, Outfielder, Position, Run } from './components'
+import { Facing, Goalkeeper, Mark, OffBall, Outfielder, Position, Run } from './components'
 import { blindSideDelay, runTimingError } from './grades'
 import type { Match } from './match'
 import type { PassOption } from './playmaking'
@@ -26,6 +26,8 @@ export type Cue =
   | { kind: 'presser'; player: number; previous: number }
   /** A keeper has the ball in their hands. */
   | { kind: 'held'; keeper: number }
+  /** A pass is on its way from `passer` to `receiver`. */
+  | { kind: 'passStruck'; passer: number; receiver: number }
   /** `runner` has gone for the space in behind. */
   | { kind: 'run'; runner: number }
   /** The carrier is shaping to play `option`, striking it `windup` seconds from now. */
@@ -37,6 +39,8 @@ export type Cue =
 
 /** Players take this long, plus up to as long again, to react to the ball changing hands. */
 const TURNOVER_REACTION = 0.2
+/** Players take this long, plus up to as long again, to react to a pass being struck. */
+const BALL_MOVED_REACTION = 0.2
 /** A marker sees runners within this angle (rad) either side of where they face. */
 const MARKER_VIEW = 1.75
 /** Seconds before defenders react to the trap being sprung. */
@@ -61,6 +65,15 @@ export function cue(world: Match, c: Cue) {
       return
     case 'held':
       reshareJobs(world)
+      // They look for who to roll it to straight away.
+      Goalkeeper.nextLook[c.keeper] = 0
+      return
+    case 'passStruck':
+      // Everyone watches the ball go, and rethinks where they should be once they've seen where it's going: a look
+      // that was due any moment waits for that too, or it would be taken with the ball still at the passer's feet.
+      for (const t of [0, 1]) {
+        for (const eid of world.teams[t].outfielders) OffBall.decideIn[eid] = BALL_MOVED_REACTION + world.rng() * BALL_MOVED_REACTION
+      }
       return
     case 'run':
       blindSide(world, c.runner)
