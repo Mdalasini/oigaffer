@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { Goalkeeper, Position, Velocity } from './components'
+import { hasComponent } from 'bitecs'
+import { Defender, DefenderMode, Goalkeeper, Position, Sliding, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollSpeedFor } from './passing'
+import { startSlide } from './systems/defender'
 import { shotUnderway } from './testUtils'
 import { ballAtFeet } from './touch'
 
@@ -84,6 +86,19 @@ describe('keeper distribution', () => {
       received = ballAtFeet(receiver, world.ball)
     }
     expect(received).toBe(true)
+  })
+})
+
+describe('a keeper with the ball in their hands', () => {
+  test('lets an opponent who was sliding in finish the slide and get back up', () => {
+    const world = caughtShot()
+    const slider = world.defender
+    Defender.readX[slider] = Position.x[slider] + 2
+    Defender.readY[slider] = Position.y[slider]
+    startSlide(world, slider)
+    for (let i = 0; i < 120 * 3; i++) stepMatch(world)
+    expect(hasComponent(world, slider, Sliding)).toBe(false)
+    expect(Defender.mode[slider]).not.toBe(DefenderMode.Grounded)
   })
 })
 

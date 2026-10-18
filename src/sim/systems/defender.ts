@@ -52,7 +52,9 @@ export function defenderSystem(world: Match, dt: number) {
   for (const eid of query(world, [Defending, Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
     const ball = world.ball
     if (world.phase === 'held') {
-      markReceiver(world, eid)
+      // A slide, get-up or challenge already under way plays out first; the challenge system owns it.
+      const mode = Defender.mode[eid]
+      if (mode === DefenderMode.Jockey || mode === DefenderMode.Run) markReceiver(world, eid)
       continue
     }
     if (world.phase !== 'play') {
