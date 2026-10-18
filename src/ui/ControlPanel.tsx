@@ -22,7 +22,7 @@ const deg = (rad: number) => Math.round((rad * 180) / Math.PI)
 const ROLE_CONTROLS: RoleControls[] = [
   {
     role: 'outfielder',
-    name: 'Outfielder',
+    name: 'Outfielders',
     grades: [
       { key: 'shooting', label: 'Shooting', detail: (g) => `spread radius ${shotSpreadRadius(g).toFixed(2)} m` },
       { key: 'dribbling', label: 'Dribbling', detail: (g) => `touch error ±${deg(touchAngleError(g))}°` },
@@ -139,10 +139,12 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       </div>
 
       <p className="text-xs leading-relaxed text-neutral-400">
-        Red attacks to the right, Blue to the left. Whoever has the ball takes the other outfielder on with small touches,
-        shields when they get tight, and knocks it past once clear; win it back and you go the other way. Rings mark touches:{' '}
-        <span className="text-cyan-300">small</span> keeps it close, <span className="text-orange-300">large</span> knocks it
-        ahead. Shots land inside the yellow circle. Space makes whoever has the ball shoot.
+        Red attacks to the right, Blue to the left, two outfielders and a keeper a side; outfield grades apply to both of a
+        team's outfielders. Whoever has the ball takes the nearest defender on, shields when they get tight, and knocks it
+        past once clear, while their teammate holds the line. The other defender covers, and steps in once the first is
+        beaten. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
+        <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Space makes
+        whoever has the ball shoot.
       </p>
     </aside>
   )

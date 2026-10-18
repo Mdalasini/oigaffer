@@ -31,7 +31,8 @@ const angleToBall = (world: Match, eid: number) =>
  * which Red gets the ball goal-side of Blue.
  */
 function beatenRate(grades: GradeOverrides, attacks: number) {
-  const world = createMatch({ seed: 7, grades })
+  // One a side, so it's the duel being measured and not the cover behind it.
+  const world = createMatch({ seed: 7, grades, outfielders: 1 })
   let played = 0
   let beaten = 0
   let spell = -1
@@ -81,8 +82,8 @@ describe('defender', () => {
   test('better marking and agility are harder to get past', () => {
     const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 300)
     const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 300)
-    // About 0.65 against 0.38, varying by a few points with the seed.
-    expect(strong).toBeLessThan(weak - 0.15)
+    // About 0.6 against 0.4 on this pitch: a gap of 0.15–0.25 depending on the seed.
+    expect(strong).toBeLessThan(weak - 0.1)
   })
 
   test('players cannot overlap, even three at once', () => {

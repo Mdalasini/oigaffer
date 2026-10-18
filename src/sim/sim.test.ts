@@ -48,8 +48,8 @@ describe('match outcomes', () => {
   })
 
   test('a quicker keeper concedes less of what is shot at them', () => {
-    // Red's keeper faces Blue's shots.
-    const [red, blue] = simulateMatch(MINUTES, { seed: 11, grades: { red: { keeper: { reaction: 18 } }, blue: { keeper: { reaction: 4 } } } })
+    // Red's keeper faces Blue's shots. One a side, so more of the shots reach the keepers.
+    const [red, blue] = simulateMatch(MINUTES, { seed: 11, outfielders: 1, grades: { red: { keeper: { reaction: 18 } }, blue: { keeper: { reaction: 4 } } } })
     expect(conversion(blue)).toBeLessThan(conversion(red) - 0.15)
   })
 

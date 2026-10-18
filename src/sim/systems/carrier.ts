@@ -3,10 +3,10 @@ import { angleDelta } from '../angles'
 import { OnBall, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
-import { closeControlSpeed, reactionDelay, shotSpreadRadius, topSpeed } from '../grades'
+import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { attackDir, attackedGoalX, ownGoalX } from '../teams'
+import { attackedGoalX } from '../teams'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
 const SHOT_SPEED = 25
@@ -54,20 +54,14 @@ const SHIELD_SPREAD = 0.8
 const SHIELD_REST = 1.5
 /** Barely move while shielding (m/s). */
 const SHIELD_PACE = 1.2
-/** With their keeper holding the ball, get open this far (m) up from their own goal line and this far out wide. */
-const RECEIVE_DEPTH = 11
-const RECEIVE_WIDTH = 7
-const POSITION_GAIN = 2
 
 /** The carrier's decisions: dribble at goal with touches, then shoot. */
 export function carrierSystem(world: Match, dt: number) {
   for (const eid of query(world, [OnBall, Outfielder, MoveIntent, Dribbler])) {
     MoveIntent.faceX[eid] = 0
     MoveIntent.faceY[eid] = 0
-    if (world.phase === 'held') {
-      getOpen(world, eid)
-      continue
-    }
+    // With a keeper holding the ball, everyone is off it.
+    if (world.phase === 'held') continue
     if (world.phase !== 'play') {
       MoveIntent.vx[eid] = 0
       MoveIntent.vy[eid] = 0
@@ -103,23 +97,6 @@ export function carrierSystem(world: Match, dt: number) {
   }
 }
 
-/** Runs wide of their own keeper, who has the ball, to take it from them, facing them. */
-function getOpen(world: Match, eid: number) {
-  const team = Team.id[eid]
-  const keeper = world.teams[team].keeper
-  // Stay on the side already on, so the run doesn't dither across the middle.
-  const side = Position.y[eid] >= 0 ? 1 : -1
-  const dx = ownGoalX(team) + attackDir(team) * RECEIVE_DEPTH - Position.x[eid]
-  const dy = side * RECEIVE_WIDTH - Position.y[eid]
-  const distance = Math.hypot(dx, dy) || 1
-  const speed = Math.min(topSpeed(Physical.pace[eid]), distance * POSITION_GAIN)
-  MoveIntent.vx[eid] = (dx / distance) * speed
-  MoveIntent.vy[eid] = (dy / distance) * speed
-  MoveIntent.faceX[eid] = Position.x[keeper] - Position.x[eid]
-  MoveIntent.faceY[eid] = Position.y[keeper] - Position.y[eid]
-  Dribbler.style[eid] = TouchStyle.None
-}
-
 function wantsToShoot(world: Match, eid: number, goalX: number, distance: number, shootDistance: number) {
   if (!world.shootRequested && distance > shootDistance) return false
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
@@ -134,18 +111,13 @@ function isChased(world: Match, gx: number, gy: number) {
   return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
 }
 
-/** Whether the defender is out of the way of a shot at this attack's aim point. */
+/** Whether every opposing outfielder is out of the way of a shot at this attack's aim point. */
 function laneClear(world: Match, goalX: number) {
-  const { ball, presser: defender, keeper } = world
+  const { ball, keeper } = world
   const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
-  return distanceToSegment(
-    Position.x[defender],
-    Position.y[defender],
-    Position.x[ball],
-    Position.y[ball],
-    goalX,
-    aim.y,
-  ) > LANE_CLEARANCE
+  return world.teams[Team.id[keeper]].outfielders.every(
+    (eid) => distanceToSegment(Position.x[eid], Position.y[eid], Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
+  )
 }
 
 /**

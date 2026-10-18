@@ -1,5 +1,5 @@
 import { hasComponent, query } from 'bitecs'
-import { Body, Position, Sliding, Velocity } from '../components'
+import { Body, Outfielder, Position, Sliding, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { endShot, type Match } from '../match'
 
@@ -26,11 +26,15 @@ export function collisionSystem(world: Match, _dt: number) {
 }
 
 /**
- * The ball bounces off the defender's legs. Runs after the ball has moved and
- * checks the whole path it took this step, so a fast shot can't skip through.
+ * The ball bounces off the legs of any outfielder but the one playing it.
+ * Runs after the ball has moved and checks the whole path it took this step,
+ * so a fast shot can't skip through.
  */
 export function ballBodySystem(world: Match, _dt: number) {
-  if (world.phase === 'play' || world.phase === 'shot') ballOffBody(world, world.presser)
+  if (world.phase !== 'play' && world.phase !== 'shot') return
+  for (const eid of query(world, [Outfielder, Body, Position])) {
+    if (eid !== world.carrier && ballOffBody(world, eid)) return
+  }
 }
 
 /** Pushes two overlapping bodies apart and cancels their closing speed. Returns whether they overlapped. */
@@ -58,16 +62,17 @@ function separate(a: number, b: number): boolean {
   return true
 }
 
-function ballOffBody(world: Match, eid: number) {
+/** Bounces the ball off `eid` if its path met them this step; returns whether it did. */
+function ballOffBody(world: Match, eid: number): boolean {
   const { ball, prevBall } = world
   const contact = firstContact(world, eid)
-  if (!contact) return
+  if (!contact) return false
   const { t, nx, ny } = contact
   const z = prevBall.z + (Position.z[ball] - prevBall.z) * t
   const height = hasComponent(world, eid, Sliding) ? PRONE_HEIGHT : Body.height[eid]
-  if (z > height) return
+  if (z > height) return false
   const into = (Velocity.x[ball] - Velocity.x[eid]) * nx + (Velocity.y[ball] - Velocity.y[eid]) * ny
-  if (into >= 0) return
+  if (into >= 0) return false
   Velocity.x[ball] -= (1 + BODY_RESTITUTION) * into * nx
   Velocity.y[ball] -= (1 + BODY_RESTITUTION) * into * ny
   const minimum = Body.radius[eid] * LEG_WIDTH + BALL_RADIUS
@@ -77,6 +82,7 @@ function ballOffBody(world: Match, eid: number) {
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = false
   if (world.phase === 'shot') endShot(world, 'blocked', null)
+  return true
 }
 
 /**

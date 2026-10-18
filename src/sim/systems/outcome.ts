@@ -1,9 +1,9 @@
 import { query } from 'bitecs'
-import { Body, Goalkeeper, Position, Team, Velocity } from '../components'
+import { Body, Goalkeeper, Outfielder, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
 import { catchChance } from '../grades'
 import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
-import { passToOutfielder } from './keeper'
+import { bestReceiver, passToOutfielder } from './keeper'
 import { gaussian } from '../rng'
 import type { GoalPoint } from '../shooting'
 import { attackDir, opponent } from '../teams'
@@ -31,8 +31,12 @@ export function outcomeSystem(world: Match, _dt: number) {
   if (world.phase === 'play') {
     const keeper = keeperWithinReach(world)
     if (keeper === null) leftThePitch(world)
-    // Their own outfielder played it to them, so it's feet only: knock it straight back out to them.
-    else if (isBackPass(world, keeper)) passToOutfielder(world, keeper, Position.x[world.ball], Position.y[world.ball])
+    // A teammate played it to them, so it's feet only: knock it straight back out to a teammate.
+    else if (isBackPass(world, keeper)) {
+      const x = Position.x[world.ball]
+      const y = Position.y[world.ball]
+      passToOutfielder(world, keeper, bestReceiver(world, keeper, x, y).receiver, x, y)
+    }
     else keeperClaims(world, keeper)
     return
   }
@@ -99,8 +103,8 @@ function leftThePitch(world: Match) {
  * outfielder's feet, and not just after parrying it or playing it out.
  */
 function keeperWithinReach(world: Match): number | null {
-  const { ball, carrier, presser: defender } = world
-  if (ballAtFeet(carrier, ball) || ballAtFeet(defender, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return null
+  const { ball } = world
+  if (Position.z[ball] > KEEPER_MAX_HEIGHT || query(world, [Outfielder]).some((eid) => ballAtFeet(eid, ball))) return null
   for (const keeper of query(world, [Goalkeeper, Position, Body])) {
     if (Goalkeeper.recover[keeper] > 0) continue
     const reach = Body.radius[keeper] + ARM_REACH
