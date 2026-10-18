@@ -20,7 +20,7 @@ export interface TouchSpec {
 
 export const TOUCH_SPECS: Record<Exclude<TouchStyle, 0>, TouchSpec> = {
   [TouchStyle.Small]: { push: 1.1, maxAngle: 1.75, cooldown: 0.22, stride: 0.9, errorScale: 1 },
-  [TouchStyle.Large]: { push: 5.5, maxAngle: 0.8, cooldown: 0.5, stride: 1, errorScale: 1.6 },
+  [TouchStyle.Large]: { push: 2.6, maxAngle: 0.8, cooldown: 0.4, stride: 1, errorScale: 1.3 },
   [TouchStyle.Shield]: { push: 0.25, maxAngle: Math.PI, cooldown: 0.3, stride: 0.8, errorScale: 0.5 },
 }
 

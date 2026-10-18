@@ -2,26 +2,51 @@ import { query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { distanceToSegment } from '../geometry'
-import { closeControlSpeed, passWindup, reactionDelay } from '../grades'
+import { closeControlSpeed, passWindup, reactionDelay, topSpeed } from '../grades'
+import { rollDistanceIn } from '../passing'
 import { cue } from '../cues'
 import { setPhase, setVec, type Match } from '../match'
 import { playBall } from '../offside'
 import { planShot, shotValue } from '../finishing'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { attackedGoalX } from '../teams'
+import { attackedGoalX, opponent } from '../teams'
+import { arrivalTime } from '../space/arrival'
+import { teamArrival } from '../space/control'
 import { chooseAction, strikePass } from '../playmaking'
 import { meetTheBall } from './receive'
-import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
+import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
 
 /** Seconds after shooting before the shooter can play the ball again. */
 const SHOT_RECOVER = 0.4
 /**
- * Rough distance (m) covered before a large touch is caught up with, at a
- * given running speed: the faster you run, the further the ball goes.
+ * Roughly how far (m) the ball rolls from a large touch before `eid` can
+ * play it again: struck a stride's worth faster than they're running, it
+ * runs on until they've run it down at full pace, and they can't touch it
+ * again before the touch has cooled down anyway.
  */
-const largeTouchTravel = (speed: number) => 3 + speed * 2.2
+export function largeTouchTravel(eid: number): number {
+  const spec = TOUCH_SPECS[TouchStyle.Large]
+  const ball = Math.hypot(Velocity.x[eid], Velocity.y[eid]) + spec.push
+  const run = topSpeed(Physical.pace[eid])
+  for (let t = spec.cooldown; t < CATCH_WITHIN; t += CATCH_STEP) {
+    const rolled = rollDistanceIn(ball, t)
+    // It's played as it comes into reach, so it starts out as far ahead of the foot as it's caught.
+    if (run * t >= rolled) return rolled
+  }
+  return rollDistanceIn(ball, CATCH_WITHIN)
+}
+/** Steps (s) along a large touch's roll when looking for where it's caught, and how far ahead to look. */
+const CATCH_STEP = 0.05
+const CATCH_WITHIN = 3
 /** Spare room (m) beyond a large touch's run before the line. */
 const LARGE_TOUCH_MARGIN = 3
+/**
+ * An opponent who'd get within CONTEST_REACH (m) of where a large touch is
+ * next played less than this long (s) after the carrier would nick it: they
+ * keep it close instead. The keeper coming off their line counts.
+ */
+const LARGE_TOUCH_SAFETY = 0.3
+const CONTEST_REACH = 1
 /** Within this distance (m) of a touchline, take defenders on the infield side. */
 const TOUCHLINE_MARGIN = 5
 /** Nobody shoots with less than this chance of scoring: from further out it's a clearance, not a shot. */
@@ -139,8 +164,7 @@ export function carrierSystem(world: Match, dt: number) {
 
     // Knock it long while the next contact would still come before shooting range,
     // or whenever a beaten defender is chasing.
-    const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
-    const roomToRun = distance - largeTouchTravel(speed) > shootDistance
+    const roomToRun = distance - largeTouchTravel(eid) > shootDistance
     const style = roomToRun || chased ? TouchStyle.Large : TouchStyle.Small
     carry(world, eid, ball, style, dirX, dirY)
   }
@@ -291,15 +315,24 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
 }
 
 /**
- * Dribbles, but only knocks the ball long if, the way the body will send it,
- * it would still be on the pitch when caught up with; otherwise keeps it close.
+ * Dribbles, but only knocks the ball on if, the way the body will send it,
+ * it would still be on the pitch when caught up with, and nobody they know
+ * of would get to it first; otherwise keeps it close.
  */
 function carry(world: Match, eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number) {
-  if (style === TouchStyle.Large) {
+  // Only worth weighing up when the touch is about to be played.
+  if (style === TouchStyle.Large && Dribbler.cooldown[eid] === 0 && ballAtFeet(eid, ball)) {
     const angle = touchAngle(eid, style, dirX, dirY)
-    const room = roomAhead(world.pitch, Position.x[ball], Position.y[ball], Math.cos(angle), Math.sin(angle))
-    const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
-    if (room < largeTouchTravel(speed) + LARGE_TOUCH_MARGIN) style = TouchStyle.Small
+    const dx = Math.cos(angle)
+    const dy = Math.sin(angle)
+    const travel = largeTouchTravel(eid)
+    const x = Position.x[ball] + dx * travel
+    const y = Position.y[ball] + dy * travel
+    if (
+      roomAhead(world.pitch, Position.x[ball], Position.y[ball], dx, dy) < travel + LARGE_TOUCH_MARGIN ||
+      teamArrival(world, opponent(Team.id[eid]), x, y, CONTEST_REACH, eid) < arrivalTime(world, eid, x, y, 0, 0, eid) + LARGE_TOUCH_SAFETY
+    )
+      style = TouchStyle.Small
   }
   dribble(eid, ball, style, dirX, dirY)
 }
