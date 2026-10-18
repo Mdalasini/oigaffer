@@ -1,4 +1,4 @@
-import { Dribbler, Facing, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from '../components'
+import { Dribbler, Facing, MoveIntent, Outfielder, Passer, Physical, Position, TouchStyle, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { controlTime, firstTouchError, topSpeed } from '../grades'
 import type { Match } from '../match'
@@ -102,6 +102,8 @@ export function receiveSystem(world: Match, _dt: number) {
   Position.z[ball] = BALL_RADIUS
 
   Dribbler.cooldown[eid] = controlTime(firstTouch)
+  Passer.receivedFrom[eid] = pass.from
+  Passer.receivedAt[eid] = world.time
   world.lastTouch = { by: eid, style: TouchStyle.Small, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true

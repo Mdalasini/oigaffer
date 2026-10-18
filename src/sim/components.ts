@@ -135,6 +135,9 @@ export const Offside = {
 /** A player on the ball looking for a pass: the match time at which they next weigh their options. */
 export const Passer = {
   nextLook: new Float32Array(MAX_ENTITIES),
+  /** Who last passed the ball to them (-1 if nobody), and the match time they took it. */
+  receivedFrom: new Int32Array(MAX_ENTITIES),
+  receivedAt: new Float32Array(MAX_ENTITIES),
 }
 
 /** Knocked off balance: can't play the ball and barely accelerates until the timer runs out. */

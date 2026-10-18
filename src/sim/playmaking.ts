@@ -40,8 +40,13 @@ const THROUGH_FASTEST = 7
 const THROUGH_LEADS = [4, 7, 10, 13]
 /** The ball should get to the meeting point this long (s) after the runner, not before. */
 const THROUGH_LAG = 0.1
-/** Longest pass (m) worth considering along the ground. */
+/**
+ * Longest pass (m) worth considering along the ground: 35 m, or on a bigger
+ * pitch this share of its length, so a switch or a ball over the top of a
+ * full-size pitch is on.
+ */
 const MAX_PASS = 35
+const MAX_PASS_SHARE = 0.45
 /** Shortest pass (m) worth playing: any closer and they'd be better keeping it. */
 const MIN_PASS = 4
 /**
@@ -55,9 +60,9 @@ const OPEN_TIME = 1.5
 /** How sharply a lead in the race to a through ball turns into winning it (s). */
 const RACE_SCALE = 0.25
 /** A pass has to be worth this much more than keeping the ball before it's played. */
-const PASS_MARGIN = 0.01
+const PASS_MARGIN = 0
 /** Judgement errors are at least this big, so options worth next to nothing still vary. */
-const MIN_JUDGED = 0.02
+const MIN_JUDGED = 0.002
 /** Where along a pass (as a share of its length) a cut-out is reckoned to happen. */
 const LOSS_ALONG = 0.35
 /** Carrying it on is worth a little more than where the ball is now. */
@@ -74,6 +79,15 @@ const NOW_SHARE = 0.5
 /** Weigh up options every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD. */
 const DECIDE_EVERY = 0.2
 const DECIDE_SPREAD = 0.15
+/**
+ * A pass straight back to whoever played it within RETURN_WINDOW seconds,
+ * moving the ball on less than RETURN_PROGRESS metres, is worth RETURN_SHARE
+ * of what having the ball where it is is worth less, whichever pass back it
+ * is: so it's played only when nothing else is nearly as good.
+ */
+const RETURN_WINDOW = 5
+const RETURN_PROGRESS = 5
+const RETURN_SHARE = 2
 /** Seconds after passing before the passer can play the ball again. */
 const PASSER_RECOVER = 0.4
 /** An opponent within this distance (m) of the passer hurries the pass. */
@@ -111,13 +125,26 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
     }
   }
   for (const option of passOptions(world, carrier)) {
-    const v = judged(option.value)
+    const v = judged(option.value) - returnCost(world, carrier, option)
     if (v > bestJudged) {
       best = option
       bestJudged = v
     }
   }
   return best
+}
+
+/**
+ * What it costs to give the ball straight back to whoever just passed it:
+ * nothing if it moves the ball on, as a one-two does, but otherwise the two
+ * of them are only knocking it between themselves. It's the same for every
+ * pass back to them, so it never makes a worse one look better.
+ */
+export function returnCost(world: Match, carrier: number, option: PassOption): number {
+  if (option.receiver !== Passer.receivedFrom[carrier] || world.time - Passer.receivedAt[carrier] > RETURN_WINDOW) return 0
+  const team = Team.id[carrier]
+  if (along(team, option.x) - along(team, Position.x[world.ball]) >= RETURN_PROGRESS) return 0
+  return RETURN_SHARE * threat(world.pitch, team, Position.x[world.ball], Position.y[world.ball])
 }
 
 /**
@@ -260,7 +287,7 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
 
 /** Whether a pass from (bx, by) to (x, y) is one the carrier can play from how they stand. */
 function playable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
-  if (distance < MIN_PASS || distance > MAX_PASS) return false
+  if (distance < MIN_PASS || distance > Math.max(MAX_PASS, MAX_PASS_SHARE * 2 * world.pitch.halfLength)) return false
   if (Math.abs(x) > world.pitch.halfLength - 0.5 || Math.abs(y) > world.pitch.halfWidth - 0.5) return false
   return Math.abs(angleDelta(Facing.angle[carrier], Math.atan2(y - by, x - bx))) <= MAX_PASS_TURN
 }

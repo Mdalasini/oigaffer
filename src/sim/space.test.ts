@@ -76,6 +76,13 @@ describe('threat', () => {
     }
   })
 
+  test('having the ball deep in your own half is still worth something: about what real possessions there go on to score', () => {
+    const L = FULL_PITCH.halfLength
+    expect(threat(FULL_PITCH, RED, -L + 5, 0)).toBeGreaterThan(0.004)
+    expect(threat(FULL_PITCH, RED, 0, 0)).toBeGreaterThan(0.01)
+    expect(threat(FULL_PITCH, RED, 0, 0)).toBeLessThan(0.02)
+  })
+
   test('is the same for both teams, mirrored', () => {
     expect(threat(SMALL_SIDED_PITCH, BLUE, -10, 3)).toBeCloseTo(threat(SMALL_SIDED_PITCH, RED, 10, 3), 6)
     expect(threat(SMALL_SIDED_PITCH, RED, 5, 4)).toBeCloseTo(threat(SMALL_SIDED_PITCH, RED, 5, -4), 6)
