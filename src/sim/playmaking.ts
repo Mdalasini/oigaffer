@@ -90,6 +90,8 @@ const RETURN_PROGRESS = 5
 const RETURN_SHARE = 2
 /** Seconds after passing before the passer can play the ball again. */
 const PASSER_RECOVER = 0.4
+/** A pass played on first time goes this many times further astray than one from a ball they've set. */
+const FIRST_TIME_ERROR = 1.4
 /** An opponent within this distance (m) of the passer hurries the pass. */
 const PRESSURE_RANGE = 2
 
@@ -309,9 +311,10 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
 /**
  * Strikes the pass. It goes off line and off weight with an error that
  * shrinks with the passing grade, grows with distance, and grows when the
- * passer is hurried. The receiver takes over as the carrier while it travels.
+ * passer is hurried, or plays it on first time. The receiver takes over as
+ * the carrier while it travels.
  */
-export function strikePass(world: Match, carrier: number, option: PassOption) {
+export function strikePass(world: Match, carrier: number, option: PassOption, firstTime = false) {
   if (!playBall(world, carrier)) return
   const { ball, rng } = world
   const bx = Position.x[ball]
@@ -319,7 +322,7 @@ export function strikePass(world: Match, carrier: number, option: PassOption) {
   const distance = Math.hypot(option.x - bx, option.y - by)
   const presser = world.presser
   const gap = Math.hypot(Position.x[presser] - Position.x[carrier], Position.y[presser] - Position.y[carrier])
-  const hurried = 1 + Math.max(0, 1 - gap / PRESSURE_RANGE)
+  const hurried = (1 + Math.max(0, 1 - gap / PRESSURE_RANGE)) * (firstTime ? FIRST_TIME_ERROR : 1)
   const passing = Outfielder.passing[carrier]
   const aim = Math.atan2(option.y - by, option.x - bx)
   const across = 1 + Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], aim)) - CLEAN_PASS_TURN)

@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Carry, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { Carry, Dribbler, Facing, Passer, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, passWindup, reactionDelay, topSpeed } from '../grades'
 import { rollDistanceIn } from '../passing'
@@ -11,10 +11,11 @@ import { planShot, shotValue } from '../finishing'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
 import { attackedGoalX, opponent } from '../teams'
 import { arrivalTime } from '../space/arrival'
-import { teamArrival } from '../space/control'
+import { teamArrival, timeOnBall } from '../space/control'
 import { chooseAction, strikePass } from '../playmaking'
 import { chooseCarry } from '../carrying'
 import { meetTheBall } from './receive'
+import { seenX, seenY } from '../perception'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
 
 /** Seconds after shooting before the shooter can play the ball again. */
@@ -54,6 +55,8 @@ const FORWARD_CARRY = 0.7
 const TOUCHLINE_MARGIN = 5
 /** Nobody shoots with less than this chance of scoring: from further out it's a clearance, not a shot. */
 const MIN_CHANCE = 0.02
+/** Only someone with less than this long (s) before they're closed down plays a pass on first time. */
+const FIRST_TIME_WHEN = 1
 /** Only shoot when facing within this angle (rad) of goal. */
 const MAX_SHOT_TURN = 1.3
 /** Don't shoot if the defender is within this distance (m) of the line to the aim point. */
@@ -179,11 +182,34 @@ export function carrierSystem(world: Match, dt: number) {
   }
 }
 
+/**
+ * A pass has just reached `eid`. Closed down as it arrives, they may play it
+ * on first time, with no touch to control it: a pass or a shot, chosen just
+ * as they would with the ball at their feet, and struck at once, a little
+ * less truly than a ball they've set. With time on the ball, or nothing
+ * better on, they control it instead. Returns whether they played it.
+ */
+export function playFirstTime(world: Match, eid: number): boolean {
+  if (timeOnBall(world, eid, eid) > FIRST_TIME_WHEN) return false
+  const goalX = attackedGoalX(world.pitch, Team.id[eid])
+  const chance = shotOn(world, eid, goalX) ? shotValue(world, eid) : 0
+  Passer.nextLook[eid] = 0
+  const choice = chooseAction(world, eid, chance >= MIN_CHANCE ? chance : null)
+  if (choice === 'shoot') {
+    shoot(world, eid, goalX)
+    return true
+  }
+  if (!choice) return false
+  cue(world, { kind: 'passShaped', passer: eid, option: choice, windup: 0 })
+  strikePass(world, eid, choice, true)
+  return true
+}
+
 /** Whether a shot is on at all: facing near enough to goal, with a clear sight of it, and not straight from an indirect free kick. */
 function shotOn(world: Match, eid: number, goalX: number) {
   if (world.indirectTaker === eid) return false
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
-  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX)
+  return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX, eid)
 }
 
 /** Whoever has the ball shoots on request, if they're facing near enough to goal. */
@@ -215,13 +241,16 @@ function isChased(world: Match, gx: number, gy: number) {
   return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
 }
 
-/** Whether every other outfielder, either side's, is out of the way of a shot at this attack's aim point. */
-function laneClear(world: Match, goalX: number) {
+/**
+ * Whether every other outfielder, either side's, is out of the way of a shot
+ * at this attack's aim point, as `by` reckons where they and the keeper are.
+ */
+export function laneClear(world: Match, goalX: number, by: number) {
   const { ball, keeper, carrier } = world
-  const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
+  const aim = chooseAim(Position.y[ball], seenY(world, by, keeper), world.aimHigh)
   const outfielders = [...world.teams[0].outfielders, ...world.teams[1].outfielders]
   return outfielders.every(
-    (eid) => eid === carrier || distanceToSegment(Position.x[eid], Position.y[eid], Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
+    (eid) => eid === carrier || distanceToSegment(seenX(world, by, eid), seenY(world, by, eid), Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
   )
 }
 

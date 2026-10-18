@@ -9,6 +9,7 @@ import { gaussian } from '../rng'
 import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
 import { ballAtFeet, canPlayBall, touchAngle } from '../touch'
+import { playFirstTime } from './carrier'
 
 /** How close (m) to the ball's path the receiver needs to be to take it. */
 const RECEIVE_REACH = 0.5
@@ -75,7 +76,8 @@ export function meetTheBall(world: Match, eid: number) {
 }
 
 /**
- * The receiver's first touch, once the pass reaches them. They cushion it,
+ * The receiver's first touch, once the pass reaches them, unless they play
+ * it on first time (see `playFirstTime`). They cushion it,
  * however hard it came, and set it for their next action: towards goal,
  * away from anyone closing them down, and within what their body shape
  * allows, moving with them if they're running onto it. A better first touch
@@ -93,6 +95,12 @@ export function receiveSystem(world: Match, _dt: number) {
   if (!canPlayBall(world, eid) || !ballAtFeet(eid, ball)) return
   if (!playBall(world, eid)) return
 
+  world.stats[world.possession].completed++
+  world.pass = null
+  Passer.receivedFrom[eid] = pass.from
+  Passer.receivedAt[eid] = world.time
+  if (playFirstTime(world, eid)) return
+
   const firstTouch = Outfielder.firstTouch[eid]
   const want = touchDirection(world, eid)
   const angle = touchAngle(eid, TouchStyle.Small, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch)
@@ -102,13 +110,9 @@ export function receiveSystem(world: Match, _dt: number) {
   Position.z[ball] = BALL_RADIUS
 
   Dribbler.cooldown[eid] = controlTime(firstTouch)
-  Passer.receivedFrom[eid] = pass.from
-  Passer.receivedAt[eid] = world.time
   world.lastTouch = { by: eid, style: TouchStyle.Small, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true
-  world.stats[world.possession].completed++
-  world.pass = null
 }
 
 /**
