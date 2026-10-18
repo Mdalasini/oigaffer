@@ -222,6 +222,44 @@ describe('first touch', () => {
   }
 })
 
+describe('first time', () => {
+  /**
+   * Share of 60 seeds in which a pass rolled to Red's second outfielder, with
+   * a teammate free alongside and a defender `gap` m off them, is played on
+   * first time: struck again the moment it arrives, with no touch to control it.
+   */
+  function firstTime(gap: number) {
+    let n = 0
+    for (let seed = 1; seed <= 60; seed++) {
+      const world = createMatch({ outfielders: 4, seed })
+      const [passer, receiver, free, away] = world.teams[RED].outfielders
+      place(passer, -15, 0)
+      place(receiver, 0, 0, Math.PI)
+      place(free, 2, 12, Math.PI)
+      place(away, -25, -15)
+      const [defender, ...rest] = world.teams[BLUE].outfielders
+      place(defender, gap, -0.5, Math.PI)
+      rest.forEach((eid, i) => place(eid, 25, 15 - 15 * i, Math.PI))
+      setVec(Position, world.ball, -4, 0, BALL_RADIUS)
+      setVec(Velocity, world.ball, 8, 0, 0)
+      lookAround(world)
+      world.pass = { from: passer, to: receiver, kind: 'feet', x: 0, y: 0, time: world.time }
+      handOver(world, receiver)
+      for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
+      if (world.stats[RED].completed === 1 && world.pass?.from === receiver) n++
+    }
+    return n / 60
+  }
+
+  test('closed down as the ball arrives, with a teammate free, a receiver often plays it on first time', () => {
+    expect(firstTime(1.5)).toBeGreaterThan(0.3)
+  })
+
+  test('with time on the ball, they take a touch to control it first', () => {
+    expect(firstTime(15)).toBeLessThan(0.1)
+  })
+})
+
 describe('choosing a pass', () => {
   test('a pass straight back to whoever just played it is a last resort, when another teammate is as free', () => {
     let back = 0
