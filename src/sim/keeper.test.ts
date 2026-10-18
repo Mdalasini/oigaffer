@@ -14,8 +14,8 @@ const BLUE = 1
 /** Red shoots at Blue's keeper, who stands centrally on the line; the ball is struck 3 m out at `offset` across and `height` up. */
 function shotAtKeeper(seed: number, offset: number, height: number, grades: GradeOverrides = {}): Match {
   const world = createMatch({ seed, grades })
-  setVec(Position, world.striker, 0, 10, 0)
-  setVec(Position, world.defender, 0, -10, 0)
+  setVec(Position, world.carrier, 0, 10, 0)
+  setVec(Position, world.presser, 0, -10, 0)
   setVec(Position, world.keeper, GOAL_X - 0.5, 0, 0)
   shotUnderway(world)
   setVec(Position, world.ball, GOAL_X - 3, offset, height)
@@ -65,14 +65,14 @@ describe('keeper distribution', () => {
     const world = caughtShot()
     expect(world.phase).toBe('held')
     expect(world.possession).toBe(BLUE)
-    expect(world.striker).toBe(world.teams[BLUE].outfielder)
+    expect(world.carrier).toBe(world.teams[BLUE].outfielders[0])
     expect(world.stats[RED].saved).toBe(1)
   })
 
   test('the keeper rolls it out to their outfielder once they have got open', () => {
     const world = caughtShot()
     const keeper = world.teams[BLUE].keeper
-    const receiver = world.teams[BLUE].outfielder
+    const receiver = world.teams[BLUE].outfielders[0]
     for (let i = 0; i < 120 * 5 && world.phase === 'held'; i++) stepMatch(world)
     expect(world.phase).toBe('play')
     expect(world.lastTouchedBy).toBe(keeper)
@@ -92,7 +92,7 @@ describe('keeper distribution', () => {
 describe('a keeper with the ball in their hands', () => {
   test('lets an opponent who was sliding in finish the slide and get back up', () => {
     const world = caughtShot()
-    const slider = world.defender
+    const slider = world.presser
     Defender.readX[slider] = Position.x[slider] + 2
     Defender.readY[slider] = Position.y[slider]
     startSlide(world, slider)
@@ -106,13 +106,13 @@ describe('back-passes', () => {
   /** A ball rolling gently into Blue's keeper's arms, last played by `by`. */
   function rollToKeeper(by: 'own' | 'opponent', deliberate: boolean): Match {
     const world = createMatch({ seed: 1 })
-    setVec(Position, world.striker, 0, 10, 0)
-    setVec(Position, world.defender, 0, -10, 0)
+    setVec(Position, world.carrier, 0, 10, 0)
+    setVec(Position, world.presser, 0, -10, 0)
     const keeper = world.teams[BLUE].keeper
     setVec(Position, keeper, GOAL_X - 0.5, 0, 0)
     setVec(Position, world.ball, GOAL_X - 3, 0, BALL_RADIUS)
     setVec(Velocity, world.ball, 3, 0, 0)
-    world.lastTouchedBy = by === 'own' ? world.teams[BLUE].outfielder : world.teams[RED].outfielder
+    world.lastTouchedBy = by === 'own' ? world.teams[BLUE].outfielders[0] : world.teams[RED].outfielders[0]
     world.lastTouchDeliberate = deliberate
     for (let i = 0; i < 120 && world.phase === 'play' && world.lastTouchedBy !== keeper; i++) stepMatch(world)
     return world
@@ -121,7 +121,7 @@ describe('back-passes', () => {
   test('a keeper cannot pick up a ball their own outfielder played to them, so kicks it back out to them', () => {
     const world = rollToKeeper('own', true)
     const keeper = world.teams[BLUE].keeper
-    const outfielder = world.teams[BLUE].outfielder
+    const outfielder = world.teams[BLUE].outfielders[0]
     expect(world.event).toBeNull()
     expect(world.phase).toBe('play')
     expect(world.lastTouchedBy).toBe(keeper)

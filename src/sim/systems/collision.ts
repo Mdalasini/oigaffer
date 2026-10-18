@@ -30,7 +30,7 @@ export function collisionSystem(world: Match, _dt: number) {
  * checks the whole path it took this step, so a fast shot can't skip through.
  */
 export function ballBodySystem(world: Match, _dt: number) {
-  if (world.phase === 'play' || world.phase === 'shot') ballOffBody(world, world.defender)
+  if (world.phase === 'play' || world.phase === 'shot') ballOffBody(world, world.presser)
 }
 
 /** Pushes two overlapping bodies apart and cancels their closing speed. Returns whether they overlapped. */

@@ -4,7 +4,7 @@ import { reactionDelay, shotSpreadRadius } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
-import { Attacking, Defending } from './components'
+import { OnBall, Pressing } from './components'
 import { createMatch, winBall, type TeamStats } from './match'
 import { simulateMatch } from './simulate'
 
@@ -63,14 +63,14 @@ describe('match outcomes', () => {
 
   test('winning the ball back turns defence into attack', () => {
     const world = createMatch({ seed: 3 })
-    const red = world.teams[0].outfielder
-    const blue = world.teams[1].outfielder
-    winBall(world, 1, 'tackled')
+    const red = world.teams[0].outfielders[0]
+    const blue = world.teams[1].outfielders[0]
+    winBall(world, blue, 'tackled')
     expect(world.possession).toBe(1)
-    expect(world.striker).toBe(blue)
-    expect(world.defender).toBe(red)
-    expect(hasComponent(world, blue, Attacking) && !hasComponent(world, blue, Defending)).toBe(true)
-    expect(hasComponent(world, red, Defending) && !hasComponent(world, red, Attacking)).toBe(true)
+    expect(world.carrier).toBe(blue)
+    expect(world.presser).toBe(red)
+    expect(hasComponent(world, blue, OnBall) && !hasComponent(world, blue, Pressing)).toBe(true)
+    expect(hasComponent(world, red, Pressing) && !hasComponent(world, red, OnBall)).toBe(true)
     // Blue now attacks the goal at -x, defended by Red's keeper.
     expect(world.keeper).toBe(world.teams[0].keeper)
     expect(world.stats[1].won).toBe(1)

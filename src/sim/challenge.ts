@@ -1,6 +1,6 @@
 import { removeComponent } from 'bitecs'
 import { angleDelta } from './angles'
-import { Body, Defender, DefenderMode, Dribbler, Facing, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from './components'
+import { Body, Defender, DefenderMode, Dribbler, Facing, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Velocity } from './components'
 import { bargeWinChance, tackleSkill } from './grades'
 import { winBall, type Match } from './match'
 import { gaussian } from './rng'
@@ -47,7 +47,7 @@ export function bodyBetween(carrier: number, defender: number, ball: number): bo
 
 /** A standing tackle meets the ball: it may win it, poke it loose, or miss. */
 export function resolveStandingTackle(world: Match, defender: number) {
-  const { ball, striker } = world
+  const { ball, carrier } = world
   const dx = Position.x[ball] - Position.x[defender]
   const dy = Position.y[ball] - Position.y[defender]
   const facingGap = Math.abs(angleDelta(Facing.angle[defender], Math.atan2(dy, dx)))
@@ -56,31 +56,31 @@ export function resolveStandingTackle(world: Match, defender: number) {
     return record(world, 'stand', 'missed')
   }
   // A ball right at the carrier's feet is much harder to take than one between touches.
-  const exposure = Math.min(1, Math.max(0.25, footDistance(striker, ball) / 0.9))
-  const shielded = bodyBetween(striker, defender, ball)
-  const chance = tackleSkill(Outfielder.tackling[defender], Outfielder.dribbling[striker]) * exposure * (shielded ? THROUGH_THE_BODY : 1)
+  const exposure = Math.min(1, Math.max(0.25, footDistance(carrier, ball) / 0.9))
+  const shielded = bodyBetween(carrier, defender, ball)
+  const chance = tackleSkill(Outfielder.tackling[defender], Outfielder.dribbling[carrier]) * exposure * (shielded ? THROUGH_THE_BODY : 1)
   settle(world, defender, 'stand', chance, shielded)
 }
 
 /** A slide reaches the ball. */
 export function resolveSlideTackle(world: Match, defender: number) {
-  const { ball, striker } = world
-  const shielded = bodyBetween(striker, defender, ball)
-  const chance = tackleSkill(Outfielder.tackling[defender], Outfielder.dribbling[striker]) * 0.9 * (shielded ? THROUGH_THE_BODY : 1)
+  const { ball, carrier } = world
+  const shielded = bodyBetween(carrier, defender, ball)
+  const chance = tackleSkill(Outfielder.tackling[defender], Outfielder.dribbling[carrier]) * 0.9 * (shielded ? THROUGH_THE_BODY : 1)
   settle(world, defender, 'slide', chance, shielded)
 }
 
 /** Shoulder to shoulder: the stronger player usually keeps their feet. */
 export function resolveBarge(world: Match, defender: number) {
-  const { striker, rng } = world
-  const nx = Position.x[striker] - Position.x[defender]
-  const ny = Position.y[striker] - Position.y[defender]
+  const { carrier, rng } = world
+  const nx = Position.x[carrier] - Position.x[defender]
+  const ny = Position.y[carrier] - Position.y[defender]
   const len = Math.hypot(nx, ny) || 1
   // A carrier braced to shield is a little harder to move.
-  const chance = bargeWinChance(Physical.strength[defender], Physical.strength[striker]) - (Shield.active[striker] ? 0.1 : 0)
+  const chance = bargeWinChance(Physical.strength[defender], Physical.strength[carrier]) - (Shield.active[carrier] ? 0.1 : 0)
   if (rng() < chance) {
-    shove(striker, nx / len, ny / len, 2.5)
-    stumble(striker, 0.7)
+    shove(carrier, nx / len, ny / len, 2.5)
+    stumble(carrier, 0.7)
     record(world, 'barge', 'won')
   } else {
     shove(defender, -nx / len, -ny / len, 1.5)
@@ -116,7 +116,7 @@ function settle(world: Match, defender: number, kind: ChallengeKind, chance: num
     Velocity.x[world.ball] = Velocity.x[defender]
     Velocity.y[world.ball] = Velocity.y[defender]
     record(world, kind, 'won')
-    winBall(world, Team.id[defender], 'tackled')
+    winBall(world, defender, 'tackled')
   } else if (roll < chance) {
     pokeAway(world, defender)
     record(world, kind, 'poked')
@@ -137,7 +137,7 @@ function pokeAway(world: Match, defender: number) {
   world.lastTouchedBy = defender
   world.lastTouchDeliberate = false
   // The carrier can't instantly play a ball that's just been knocked off them.
-  Dribbler.cooldown[world.striker] = Math.max(Dribbler.cooldown[world.striker], 0.25)
+  Dribbler.cooldown[world.carrier] = Math.max(Dribbler.cooldown[world.carrier], 0.25)
 }
 
 function stumble(eid: number, seconds: number) {

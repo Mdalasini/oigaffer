@@ -99,8 +99,8 @@ function leftThePitch(world: Match) {
  * outfielder's feet, and not just after parrying it or playing it out.
  */
 function keeperWithinReach(world: Match): number | null {
-  const { ball, striker, defender } = world
-  if (ballAtFeet(striker, ball) || ballAtFeet(defender, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return null
+  const { ball, carrier, presser: defender } = world
+  if (ballAtFeet(carrier, ball) || ballAtFeet(defender, ball) || Position.z[ball] > KEEPER_MAX_HEIGHT) return null
   for (const keeper of query(world, [Goalkeeper, Position, Body])) {
     if (Goalkeeper.recover[keeper] > 0) continue
     const reach = Body.radius[keeper] + ARM_REACH

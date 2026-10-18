@@ -1,5 +1,5 @@
 import { hasComponent, query } from 'bitecs'
-import { Body, Defender, DefenderMode, Defending, Position, Velocity } from '../components'
+import { Body, Defender, DefenderMode, Pressing, Position, Velocity } from '../components'
 import { getUp, resolveBarge, resolveSlideTackle, resolveStandingTackle, slideReachesBall } from '../challenge'
 import type { Match } from '../match'
 
@@ -20,7 +20,7 @@ const BARGE_DURATION = 0.35
  */
 export function challengeSystem(world: Match, dt: number) {
   for (const eid of query(world, [Defender, Position, Velocity])) {
-    const live = world.phase === 'play' && hasComponent(world, eid, Defending)
+    const live = world.phase === 'play' && hasComponent(world, eid, Pressing)
     const mode = Defender.mode[eid]
     if (mode === DefenderMode.Jockey || mode === DefenderMode.Run) continue
     const t = (Defender.actionTime[eid] += dt)
@@ -40,9 +40,9 @@ export function challengeSystem(world: Match, dt: number) {
       }
       if (t >= STAND_DURATION) Defender.mode[eid] = DefenderMode.Jockey
     } else if (mode === DefenderMode.Barge) {
-      const striker = world.striker
-      const gap = Math.hypot(Position.x[striker] - Position.x[eid], Position.y[striker] - Position.y[eid])
-      if (!Defender.contacted[eid] && gap <= Body.radius[striker] + Body.radius[eid] + 0.08) {
+      const carrier = world.carrier
+      const gap = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
+      if (!Defender.contacted[eid] && gap <= Body.radius[carrier] + Body.radius[eid] + 0.08) {
         Defender.contacted[eid] = 1
         resolveBarge(world, eid)
       }

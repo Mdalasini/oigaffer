@@ -1,12 +1,12 @@
-import { addComponent, addEntity, createWorld, hasComponent, removeComponent, type World } from 'bitecs'
+import { addComponent, addEntity, createWorld, hasComponent, query, removeComponent, type World } from 'bitecs'
 import type { LastChallenge } from './challenge'
 import {
-  Attacking,
+  OnBall,
   Ball,
   Body,
   Defender,
   DefenderMode,
-  Defending,
+  Pressing,
   Dribbler,
   Facing,
   Goalkeeper,
@@ -35,7 +35,7 @@ import { defenderSystem } from './systems/defender'
 import { keeperSystem } from './systems/keeper'
 import { locomotionSystem } from './systems/locomotion'
 import { outcomeSystem } from './systems/outcome'
-import { strikerSystem } from './systems/striker'
+import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { attackDir, attackedGoalX, opponent, ownGoalX, TEAM_NAMES, type TeamName } from './teams'
 
@@ -103,7 +103,7 @@ export interface LastTouch {
 }
 
 export interface TeamPlayers {
-  outfielder: number
+  outfielders: number[]
   keeper: number
 }
 
@@ -143,11 +143,14 @@ export interface MatchContext {
   teams: [TeamPlayers, TeamPlayers]
   /** The team on the ball. */
   possession: number
-  /** The roles of the moment: the outfielder on the ball, the one trying to win it, and the keeper they're attacking. */
-  striker: number
-  defender: number
+  /**
+   * The roles of the moment: the outfielder on the ball, the opponent
+   * engaging them to win it, and the keeper whose goal they're attacking.
+   */
+  carrier: number
+  presser: number
   keeper: number
-  /** Distance from goal at which the striker pulls the trigger this attack. */
+  /** Distance from goal at which the carrier pulls the trigger this attack. */
   shootDistance: number
   /** Whether this attack's shot is aimed high or low. */
   aimHigh: boolean
@@ -192,12 +195,12 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
     phaseTime: 0,
     ball: 0,
     teams: [
-      { outfielder: 0, keeper: 0 },
-      { outfielder: 0, keeper: 0 },
+      { outfielders: [], keeper: 0 },
+      { outfielders: [], keeper: 0 },
     ],
     possession: 0,
-    striker: 0,
-    defender: 0,
+    carrier: 0,
+    presser: 0,
     keeper: 0,
     shootDistance: 0,
     aimHigh: false,
@@ -218,14 +221,15 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
   addComponent(world, world.ball, Velocity)
   addComponent(world, world.ball, Ball)
 
-  for (const team of [0, 1]) world.teams[team].outfielder = addOutfielder(world, team)
+  for (const team of [0, 1]) world.teams[team].outfielders = [addOutfielder(world, team)]
   for (const team of [0, 1]) world.teams[team].keeper = addKeeper(world, team)
 
   TEAM_NAMES.forEach((name, team) => {
     for (const role of ROLES) {
       for (const key of gradeKeys(role)) {
         const override = (grades[name]?.[role] as Partial<Record<string, number>> | undefined)?.[key]
-        gradeStore(role, key)[playerFor(world, team, role)] = clampGrade(override ?? (DEFAULT_GRADES[role] as Record<string, number>)[key])
+        const grade = clampGrade(override ?? (DEFAULT_GRADES[role] as Record<string, number>)[key])
+        for (const eid of playersFor(world, team, role)) gradeStore(role, key)[eid] = grade
       }
     }
   })
@@ -234,8 +238,8 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
 }
 
 /**
- * An outfielder can carry the ball and defend: which it does is down to the
- * Attacking or Defending tag, swapped whenever the ball changes hands.
+ * An outfielder can carry the ball or press it: the OnBall and Pressing tags
+ * mark who is doing which right now.
  */
 function addOutfielder(world: Match, team: number): number {
   const eid = addEntity(world)
@@ -259,15 +263,16 @@ function addKeeper(world: Match, team: number): number {
 }
 
 const gradeStore = (role: Role, key: string): Uint8Array => (GRADE_FIELDS[role] as Record<string, Uint8Array>)[key]
-const playerFor = (world: Match, team: number, role: Role) => (role === 'keeper' ? world.teams[team].keeper : world.teams[team].outfielder)
+/** Grades are set per role for the whole team: every outfielder on a side shares them. */
+const playersFor = (world: Match, team: number, role: Role) => (role === 'keeper' ? [world.teams[team].keeper] : world.teams[team].outfielders)
 const teamIndex = (name: TeamName) => TEAM_NAMES.indexOf(name)
 
 export function setGrade<R extends Role>(world: Match, team: TeamName, role: R, key: GradeKey<R>, grade: number) {
-  gradeStore(role, key)[playerFor(world, teamIndex(team), role)] = clampGrade(grade)
+  for (const eid of playersFor(world, teamIndex(team), role)) gradeStore(role, key)[eid] = clampGrade(grade)
 }
 
 export function getGrade<R extends Role>(world: Match, team: TeamName, role: R, key: GradeKey<R>): number {
-  return gradeStore(role, key)[playerFor(world, teamIndex(team), role)]
+  return gradeStore(role, key)[playersFor(world, teamIndex(team), role)[0]]
 }
 
 /** Starts the match again: score cleared, red to kick off. */
@@ -283,29 +288,24 @@ export function kickOff(world: Match, team: number) {
 }
 
 /**
- * Hands the ball to `team`: its outfielder attacks and the other one defends.
- * Called whenever the ball changes hands, in open play or at a restart.
+ * Hands the ball to `team`, with `carrier` on it, and picks the opponent who
+ * engages them. Called whenever the ball changes hands, in open play or at a
+ * restart.
  */
-export function setPossession(world: Match, team: number) {
-  const attacker = world.teams[team].outfielder
-  const defender = world.teams[opponent(team)].outfielder
+export function setPossession(world: Match, team: number, carrier: number) {
+  const defender = world.teams[opponent(team)].outfielders[0]
   world.possession = team
-  world.striker = attacker
-  world.defender = defender
   world.keeper = world.teams[opponent(team)].keeper
   world.stats[team].attacks++
+  setCarrier(world, carrier)
+  setPresser(world, defender)
 
-  if (hasComponent(world, attacker, Defending)) removeComponent(world, attacker, Defending)
-  addComponent(world, attacker, Attacking)
-  if (hasComponent(world, defender, Attacking)) removeComponent(world, defender, Attacking)
-  addComponent(world, defender, Defending)
-
-  for (const eid of [attacker, defender]) Dribbler.style[eid] = TouchStyle.None
-  TakeOn.side[attacker] = 0
-  TakeOn.feintTimer[attacker] = 0
-  TakeOn.checkBackTimer[attacker] = 0
-  Shield.active[attacker] = 0
-  Shield.timer[attacker] = 0
+  for (const eid of [carrier, defender]) Dribbler.style[eid] = TouchStyle.None
+  TakeOn.side[carrier] = 0
+  TakeOn.feintTimer[carrier] = 0
+  TakeOn.checkBackTimer[carrier] = 0
+  Shield.active[carrier] = 0
+  Shield.timer[carrier] = 0
 
   // The player who lost it knows where the ball is, but needs a moment to turn before challenging.
   const mode = Defender.mode[defender]
@@ -316,19 +316,36 @@ export function setPossession(world: Match, team: number) {
   Defender.readVy[defender] = Velocity.y[world.ball]
   Defender.challengeDelay[defender] = CHALLENGE_DELAY_ON_LOSS
 
-  // Shots come a touch or two after the striker decides to, so plan a little further out.
+  // Shots come a touch or two after the carrier decides to, so plan a little further out.
   world.shootDistance = 13 + world.rng() * 5
   world.aimHigh = world.rng() < 0.5
   world.shootRequested = false
 }
 
-/** The defending team wins the ball in open play and goes the other way. */
-export function winBall(world: Match, team: number, kind: 'tackled' | 'intercepted') {
+/** Moves the OnBall tag to `eid`. */
+function setCarrier(world: Match, eid: number) {
+  for (const other of query(world, [OnBall])) if (other !== eid) removeComponent(world, other, OnBall)
+  if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
+  addComponent(world, eid, OnBall)
+  world.carrier = eid
+}
+
+/** Moves the Pressing tag to `eid`. */
+function setPresser(world: Match, eid: number) {
+  for (const other of query(world, [Pressing])) if (other !== eid) removeComponent(world, other, Pressing)
+  if (hasComponent(world, eid, OnBall)) removeComponent(world, eid, OnBall)
+  addComponent(world, eid, Pressing)
+  world.presser = eid
+}
+
+/** `player` wins the ball for their team in open play, and they go the other way. */
+export function winBall(world: Match, player: number, kind: 'tackled' | 'intercepted') {
+  const team = Team.id[player]
   world.stats[team].won++
   // The winner played it last, so a ball that runs out straight away goes against them.
-  world.lastTouchedBy = world.teams[team].outfielder
+  world.lastTouchedBy = player
   world.lastTouchDeliberate = kind === 'intercepted'
-  setPossession(world, team)
+  setPossession(world, team, player)
   record(world, kind, team)
 }
 
@@ -374,7 +391,7 @@ export function keeperClaims(world: Match, keeper: number) {
 function takeInHands(world: Match, keeper: number) {
   const team = Team.id[keeper]
   setVec(Velocity, world.ball, 0, 0, 0)
-  if (team !== world.possession) setPossession(world, team)
+  if (team !== world.possession) setPossession(world, team, world.teams[team].outfielders[0])
   setPhase(world, 'held')
 }
 
@@ -437,7 +454,7 @@ export function takeRestart(world: Match) {
   faceX /= faceLen
   faceY /= faceLen
 
-  for (const eid of [world.teams[0].outfielder, world.teams[1].outfielder]) {
+  for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
     setVec(Velocity, eid, 0, 0, 0)
     OffBalance.timer[eid] = 0
     Defender.mode[eid] = DefenderMode.Jockey
@@ -455,13 +472,13 @@ export function takeRestart(world: Match) {
 
   setVec(Position, ball, bx, by, BALL_RADIUS)
   setVec(Velocity, ball, 0, 0, 0)
-  const taker = world.teams[team].outfielder
+  const taker = world.teams[team].outfielders[0]
   setVec(Position, taker, bx - faceX * 0.5, by - faceY * 0.5, 0)
   Facing.angle[taker] = Math.atan2(faceY, faceX)
   Dribbler.cooldown[taker] = 0
 
   // The opponent stands off towards the goal the taker attacks, a little to one side.
-  const other = world.teams[opponent(team)].outfielder
+  const other = world.teams[opponent(team)].outfielders[0]
   const gx = goalX - bx
   const gy = -by
   const gLen = Math.hypot(gx, gy) || 1
@@ -477,7 +494,7 @@ export function takeRestart(world: Match) {
   world.lastTouchedBy = taker
   world.lastTouchDeliberate = true
   world.restart = null
-  setPossession(world, team)
+  setPossession(world, team, taker)
   Defender.mode[other] = DefenderMode.Jockey
   Defender.challengeDelay[other] = 0
   setPhase(world, 'play')
@@ -487,9 +504,9 @@ export function requestShot(world: Match) {
   if (world.phase === 'play') world.shootRequested = true
 }
 
-/** The striker's current spread circle, before or after the shot. */
+/** The carrier's current spread circle, before or after the shot. */
 export function currentSpread(world: Match): number {
-  return shotSpreadRadius(Outfielder.shooting[world.striker])
+  return shotSpreadRadius(Outfielder.shooting[world.carrier])
 }
 
 export function setPhase(world: Match, phase: Phase) {
@@ -502,7 +519,7 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.phaseTime += dt
   touchCooldownSystem(world, dt)
   balanceSystem(world, dt)
-  strikerSystem(world, dt)
+  carrierSystem(world, dt)
   defenderSystem(world, dt)
   touchSystem(world, dt)
   locomotionSystem(world, dt)

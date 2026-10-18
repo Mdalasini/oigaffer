@@ -81,7 +81,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
   drawMarkings(batch)
   for (const end of ENDS) drawGoal(batch, end)
   for (const team of world.teams) {
-    drawPlayer(batch, cam, world, team.outfielder, KITS[Team.id[team.outfielder]].outfield)
+    for (const eid of team.outfielders) drawPlayer(batch, cam, world, eid, KITS[Team.id[eid]].outfield)
     drawPlayer(batch, cam, world, team.keeper, KITS[Team.id[team.keeper]].keeper)
   }
   drawTouchRing(batch, world)
@@ -301,7 +301,7 @@ function drawShotGuide(b: Batch, world: Match) {
     origin = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
     aim = chooseAim(origin.y, Position.y[world.keeper], world.aimHigh)
     radius = currentSpread(world)
-    goalX = attackedGoalX(Team.id[world.striker])
+    goalX = attackedGoalX(Team.id[world.carrier])
   }
   const end = Math.sign(goalX)
 

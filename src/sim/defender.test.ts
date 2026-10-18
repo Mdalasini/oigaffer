@@ -9,12 +9,12 @@ import { defenderSystem } from './systems/defender'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
 
-/** Striker with the ball 20 m out, defender `gap` metres goal-side of it. */
+/** Carrier with the ball 20 m out, defender `gap` metres goal-side of it. */
 function faceOff(gap: number, grades: GradeOverrides = {}): Match {
   const world = createMatch({ seed: 1, grades })
-  const { striker, defender, ball } = world
-  setVec(Position, striker, GOAL_X - 20, 0, 0)
-  Facing.angle[striker] = 0
+  const { carrier, presser: defender, ball } = world
+  setVec(Position, carrier, GOAL_X - 20, 0, 0)
+  Facing.angle[carrier] = 0
   setVec(Position, ball, GOAL_X - 20 + FOOT_OFFSET, 0, BALL_RADIUS)
   setVec(Position, defender, GOAL_X - 20 + gap, 0, 0)
   Facing.angle[defender] = Math.PI
@@ -47,9 +47,9 @@ function beatenRate(grades: GradeOverrides, attacks: number) {
       engaged = counted = false
     }
     if (current === -1 || world.phase !== 'play') continue
-    engaged ||= TakeOn.side[world.striker] !== 0
+    engaged ||= TakeOn.side[world.carrier] !== 0
     if (counted || !engaged) continue
-    const { ball, defender } = world
+    const { ball, presser: defender } = world
     const gx = GOAL_X - Position.x[ball]
     const gy = -Position.y[ball]
     const along = ((Position.x[defender] - Position.x[ball]) * gx + (Position.y[defender] - Position.y[ball]) * gy) / Math.hypot(gx, gy)
@@ -67,7 +67,7 @@ describe('defender', () => {
     // Ball carried across the defender's face.
     setVec(Velocity, world.ball, 0, 3, 0)
     for (let i = 0; i < 30; i++) stepMatch(world)
-    const { defender } = world
+    const { presser: defender } = world
     expect(Defender.mode[defender]).toBe(DefenderMode.Jockey)
     expect(Math.abs(angleDelta(Facing.angle[defender], angleToBall(world, defender)))).toBeLessThan(0.3)
   })
@@ -75,7 +75,7 @@ describe('defender', () => {
   test('turns and runs once the ball is past', () => {
     const world = faceOff(-3)
     defenderSystem(world, FIXED_DT)
-    expect(Defender.mode[world.defender]).toBe(DefenderMode.Run)
+    expect(Defender.mode[world.presser]).toBe(DefenderMode.Run)
   })
 
   test('better marking and agility are harder to get past', () => {
@@ -87,18 +87,18 @@ describe('defender', () => {
 
   test('players cannot overlap, even three at once', () => {
     const world = faceOff(0.5)
-    const { striker, defender, keeper } = world
+    const { carrier, presser: defender, keeper } = world
     setVec(Position, keeper, GOAL_X - 19, 0, 0)
     collisionSystem(world, FIXED_DT)
     const gap = (a: number, b: number) => Math.hypot(Position.x[b] - Position.x[a], Position.y[b] - Position.y[a])
-    expect(gap(striker, defender)).toBeGreaterThan(0.7 - 1e-3)
+    expect(gap(carrier, defender)).toBeGreaterThan(0.7 - 1e-3)
     expect(gap(defender, keeper)).toBeGreaterThan(0.75 - 1e-3)
-    expect(gap(striker, keeper)).toBeGreaterThan(0.75 - 1e-3)
+    expect(gap(carrier, keeper)).toBeGreaterThan(0.75 - 1e-3)
   })
 
   test('a fast shot clipping the edge of the defender is still blocked', () => {
     const world = faceOff(4)
-    const { ball, defender } = world
+    const { ball, presser: defender } = world
     shotUnderway(world)
     // Starts just outside the legs and ends this step inside them, already heading out.
     const dx = Position.x[defender]
@@ -112,7 +112,7 @@ describe('defender', () => {
 
   test('wins a ball that has got away from the carrier', () => {
     const world = faceOff(5)
-    const { ball, defender } = world
+    const { ball, presser: defender } = world
     setVec(Position, ball, Position.x[defender] - FOOT_OFFSET - 0.3, 0, BALL_RADIUS)
     contestSystem(world, FIXED_DT)
     expect(world.event?.kind).toBe('intercepted')

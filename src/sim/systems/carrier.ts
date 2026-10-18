@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Attacking, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { OnBall, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius, topSpeed } from '../grades'
@@ -59,9 +59,9 @@ const RECEIVE_DEPTH = 11
 const RECEIVE_WIDTH = 7
 const POSITION_GAIN = 2
 
-/** The striker's decisions: dribble at goal with touches, then shoot. */
-export function strikerSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Attacking, Outfielder, MoveIntent, Dribbler])) {
+/** The carrier's decisions: dribble at goal with touches, then shoot. */
+export function carrierSystem(world: Match, dt: number) {
+  for (const eid of query(world, [OnBall, Outfielder, MoveIntent, Dribbler])) {
     MoveIntent.faceX[eid] = 0
     MoveIntent.faceY[eid] = 0
     if (world.phase === 'held') {
@@ -129,14 +129,14 @@ function wantsToShoot(world: Match, eid: number, goalX: number, distance: number
 
 /** Whether a defender who has been beaten is close behind. */
 function isChased(world: Match, gx: number, gy: number) {
-  const rx = Position.x[world.defender] - Position.x[world.ball]
-  const ry = Position.y[world.defender] - Position.y[world.ball]
+  const rx = Position.x[world.presser] - Position.x[world.ball]
+  const ry = Position.y[world.presser] - Position.y[world.ball]
   return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
 }
 
 /** Whether the defender is out of the way of a shot at this attack's aim point. */
 function laneClear(world: Match, goalX: number) {
-  const { ball, defender, keeper } = world
+  const { ball, presser: defender, keeper } = world
   const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
   return distanceToSegment(
     Position.x[defender],
@@ -154,12 +154,12 @@ function laneClear(world: Match, goalX: number) {
  * moment before spinning away from them. Returns false when not shielding.
  */
 function shield(world: Match, eid: number, gx: number, gy: number, dt: number): boolean {
-  const { ball, defender, rng } = world
+  const { ball, presser: defender, rng } = world
   Shield.timer[eid] -= dt
   const awayX = Position.x[eid] - Position.x[defender]
   const awayY = Position.y[eid] - Position.y[defender]
   const gap = Math.hypot(awayX, awayY)
-  // How far the ball sits towards the defender's side of the striker's body:
+  // How far the ball sits towards the defender's side of the carrier's body:
   // shielding only works with the ball on the far side.
   const ballTowardDefender = -((Position.x[ball] - Position.x[eid]) * awayX + (Position.y[ball] - Position.y[eid]) * awayY) / (gap || 1)
 
@@ -196,7 +196,7 @@ function shield(world: Match, eid: number, gx: number, gy: number, dt: number): 
  * the way.
  */
 function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): boolean {
-  const { ball, defender, rng } = world
+  const { ball, presser: defender, rng } = world
   const rx = Position.x[defender] - Position.x[ball]
   const ry = Position.y[defender] - Position.y[ball]
   // Defender's position along the line to goal, and to its left (+) or right (-).
@@ -272,22 +272,22 @@ const rotate = (x: number, y: number, a: number): [number, number] => [
   x * Math.sin(a) + y * Math.cos(a),
 ]
 
-function shoot(world: Match, striker: number, goalX: number) {
+function shoot(world: Match, carrier: number, goalX: number) {
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
   const aim = chooseAim(from.y, Position.y[keeper], world.aimHigh)
-  const radius = shotSpreadRadius(Outfielder.shooting[striker])
+  const radius = shotSpreadRadius(Outfielder.shooting[carrier])
   const target = sampleShotTarget(world.rng, aim, radius)
   const v = launchVelocity(from, target, SHOT_SPEED, goalX)
   setVec(Velocity, ball, v.x, v.y, v.z)
 
   Goalkeeper.reactTimer[keeper] = reactionDelay(Goalkeeper.reaction[keeper])
-  Dribbler.style[striker] = TouchStyle.None
-  const team = Team.id[striker]
+  Dribbler.style[carrier] = TouchStyle.None
+  const team = Team.id[carrier]
   world.shot = { team, goalX, origin: from, aim, radius, target, crossing: null }
   world.shootRequested = false
   world.lastTouch = null
-  world.lastTouchedBy = striker
+  world.lastTouchedBy = carrier
   world.lastTouchDeliberate = true
   world.stats[team].shots++
   setPhase(world, 'shot')
