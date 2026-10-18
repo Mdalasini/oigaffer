@@ -1,11 +1,10 @@
-import { hasComponent, query } from 'bitecs'
-import { Goalkeeper, Position, Team } from '../components'
+import { Position, Team } from '../components'
 import { PENALTY_AREA_DEPTH, PENALTY_AREA_HALF_WIDTH } from '../constants'
 import type { Match } from '../match'
 import { rollTime } from '../passing'
 import { ownGoalX } from '../teams'
 import { FOOT_OFFSET, TOUCH_REACH } from '../touch'
-import { arrivalTime } from './arrival'
+import { arrivalTime, fastest, isKeeper } from './arrival'
 
 /**
  * How sharply arrival-time gaps turn into certainty (s). A team that is this
@@ -32,16 +31,21 @@ export function inOwnArea(team: number, x: number, y: number): boolean {
 
 /** Whether `eid` can get to a ball at (x, y) at all: a keeper only in their own area. */
 function canContest(world: Match, eid: number, x: number, y: number): boolean {
-  return !hasComponent(world, eid, Goalkeeper) || inOwnArea(Team.id[eid], x, y)
+  return !isKeeper(world, eid) || inOwnArea(Team.id[eid], x, y)
+}
+
+/** Every player of `team`, outfielders then the keeper. */
+function playersOf(world: Match, team: number): number[] {
+  const { outfielders, keeper } = world.teams[team]
+  return [...outfielders, keeper]
 }
 
 /** The quickest any player of `team` gets to within `reach` of (x, y), in seconds. */
 export function teamArrival(world: Match, team: number, x: number, y: number, reach = 0): number {
   let best = Infinity
-  for (const eid of query(world, [Team, Position])) {
-    if (Team.id[eid] !== team || !canContest(world, eid, x, y)) continue
-    best = Math.min(best, arrivalTime(world, eid, x, y, reach))
-  }
+  for (const eid of world.teams[team].outfielders) best = Math.min(best, arrivalTime(world, eid, x, y, reach))
+  const keeper = world.teams[team].keeper
+  if (canContest(world, keeper, x, y)) best = Math.min(best, arrivalTime(world, keeper, x, y, reach))
   return best
 }
 
@@ -78,22 +82,36 @@ export function passSafety(world: Match, team: number, fromX: number, fromY: num
   // A pass that stops short never gets there.
   if (rollTime(speed, length) === Infinity) return 0
   // Where the ball is along its path, and when.
-  const samples: { x: number; y: number; t: number }[] = []
-  for (let i = 0; ; i++) {
-    const s = Math.min(length, Math.min(PASS_START, length) + i * PASS_STEP)
-    const t = rollTime(speed, s)
-    samples.push({ x: fromX + ((toX - fromX) * s) / length, y: fromY + ((toY - fromY) * s) / length, t })
+  let n = 0
+  for (let s = Math.min(PASS_START, length); ; s = Math.min(length, s + PASS_STEP)) {
+    sampleT[n] = rollTime(speed, s, n > 0 ? sampleT[n - 1] : 0)
+    sampleX[n] = fromX + ((toX - fromX) * s) / length
+    sampleY[n] = fromY + ((toY - fromY) * s) / length
+    n++
     if (s === length) break
   }
   let safety = 1
-  for (const eid of query(world, [Team, Position])) {
-    if (Team.id[eid] === team) continue
-    const reach = hasComponent(world, eid, Goalkeeper) ? KEEPER_REACH : INTERCEPT_REACH
+  for (const eid of playersOf(world, 1 - team)) {
+    const reach = isKeeper(world, eid) ? KEEPER_REACH : INTERCEPT_REACH
+    const px = Position.x[eid]
+    const py = Position.y[eid]
+    const top = fastest(world, eid)
     let lead = -Infinity
-    for (const { x, y, t } of samples) {
-      if (canContest(world, eid, x, y)) lead = Math.max(lead, t - arrivalTime(world, eid, x, y, reach))
+    for (let i = 0; i < n; i++) {
+      // No one covers ground faster than their top speed, so a spot they couldn't beat the ball to even
+      // at that pace can't be where they're likeliest to cut it out.
+      const dx = sampleX[i] - px
+      const dy = sampleY[i] - py
+      if (sampleT[i] - (Math.sqrt(dx * dx + dy * dy) - reach) / top <= lead) continue
+      if (canContest(world, eid, sampleX[i], sampleY[i])) lead = Math.max(lead, sampleT[i] - arrivalTime(world, eid, sampleX[i], sampleY[i], reach))
     }
     if (lead > -Infinity) safety *= 1 - sigmoid(lead / INTERCEPT_SCALE)
   }
   return safety
 }
+
+/** The ball's path for `passSafety`: a sample a metre, so enough for any pass across the pitch. */
+const MAX_SAMPLES = 200
+const sampleX = new Float64Array(MAX_SAMPLES)
+const sampleY = new Float64Array(MAX_SAMPLES)
+const sampleT = new Float64Array(MAX_SAMPLES)

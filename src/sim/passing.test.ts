@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Facing, Outfielder, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
-import { rollSpeedAfter, rollSpeedToArrive, rollTime } from './passing'
+import { rollDistance, rollDistanceIn, rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollStopTime, rollTime } from './passing'
 import { choosePass, passOptions, strikePass } from './playmaking'
 import { passToOutfielder } from './systems/keeper'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from './touch'
@@ -40,6 +40,41 @@ describe('weighting a pass', () => {
     expect(rollTime(speed, 20)).toBeCloseTo(2, 2)
     expect(rollSpeedAfter(speed, 2)).toBeLessThan(speed)
     expect(rollSpeedToArrive(80, 1)).toBe(Infinity)
+  })
+})
+
+describe('the rolling ball, worked backwards', () => {
+  test('each inverse lands on its forward model, across the range of passes', () => {
+    for (const distance of [0.5, 3, 8, 15, 25, 35]) {
+      for (const arrival of [0, 1.5, 6]) expect(rollDistance(rollSpeedFor(distance, arrival), arrival)).toBeCloseTo(distance, 6)
+      for (const from of [4, 10, 20, 30]) {
+        const t = rollTime(from, distance)
+        if (t === Infinity) expect(rollDistanceIn(from, rollStopTime(from))).toBeLessThan(distance)
+        else expect(rollDistanceIn(from, t)).toBeCloseTo(distance, 6)
+        // Starting from the time to somewhere nearer gives the same answer.
+        if (t !== Infinity) expect(rollTime(from, distance, rollTime(from, distance / 2))).toBeCloseTo(t, 9)
+      }
+      for (const time of [0.8, 2, 4, 8]) {
+        const speed = rollSpeedToArrive(distance, time)
+        if (speed !== Infinity) expect(rollTime(speed, distance)).toBeLessThanOrEqual(time + 1e-6)
+      }
+    }
+  })
+
+  test('however long there is, a pass that can get there at all is given a speed that does', () => {
+    // Plenty of time for 10 m; and 120 m, which needs more than the 40 m/s cap on paced passes but not the 60 m/s limit.
+    for (const [distance, time] of [[10, 100], [120, 20]]) {
+      const speed = rollSpeedToArrive(distance, time)
+      expect(speed).toBeLessThan(Infinity)
+      expect(rollTime(speed, distance)).toBeLessThanOrEqual(time)
+    }
+  })
+
+  test('a ball that would have to stop first is struck just hard enough to get there', () => {
+    // Twenty seconds for 10 m: any ball that slow stops sooner, so it's the gentlest that reaches at all.
+    const speed = rollSpeedToArrive(10, 20)
+    expect(speed).toBeCloseTo(rollSpeedFor(10, 0), 6)
+    expect(rollTime(speed * 1.001, 10)).toBeLessThan(20)
   })
 })
 

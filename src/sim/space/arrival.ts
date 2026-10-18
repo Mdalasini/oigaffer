@@ -1,7 +1,7 @@
-import { hasComponent, type World } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Facing, Goalkeeper, Physical, Position, Velocity } from '../components'
+import { Facing, Physical, Position, Velocity } from '../components'
 import { accelerationRate, topSpeed, turnRate } from '../grades'
+import type { Match } from '../match'
 
 /** Seconds before a player responds to something new: until then they carry on as they were. */
 export const REACTION_TIME = 0.2
@@ -20,12 +20,12 @@ const TURN_FALLOFF_SPEED = 2.5
  * This is the arrival-time model from pitch-control research. It is quick to
  * evaluate, which matters more here than precision.
  */
-export function arrivalTime(world: World, eid: number, x: number, y: number, reach = 0, reaction = REACTION_TIME): number {
+export function arrivalTime(world: Match, eid: number, x: number, y: number, reach = 0, reaction = REACTION_TIME): number {
   const vx = Velocity.x[eid]
   const vy = Velocity.y[eid]
   const ox = Position.x[eid] - x
   const oy = Position.y[eid] - y
-  if (Math.hypot(ox, oy) <= reach) return 0
+  if (ox * ox + oy * oy <= reach * reach) return 0
   // Carried within reach while still reacting: the first moment their path enters it.
   const a = vx * vx + vy * vy
   const b = 2 * (ox * vx + oy * vy)
@@ -37,18 +37,30 @@ export function arrivalTime(world: World, eid: number, x: number, y: number, rea
   }
   const dx = -(ox + vx * reaction)
   const dy = -(oy + vy * reaction)
-  const gap = Math.hypot(dx, dy)
+  const gap = Math.sqrt(dx * dx + dy * dy)
   const ux = dx / gap
   const uy = dy / gap
-  const speed = Math.hypot(vx, vy)
+  const speed = Math.sqrt(a)
   const along = Math.max(0, vx * ux + vy * uy)
 
-  const keeper = hasComponent(world, eid, Goalkeeper)
+  const keeper = isKeeper(world, eid)
   const top = keeper ? KEEPER_SPEED : topSpeed(Physical.pace[eid])
   const accel = keeper ? KEEPER_ACCEL : accelerationRate(Physical.acceleration[eid])
   // Keepers stay square to the ball and move sideways, so only outfielders pay to turn.
   const turn = keeper ? 0 : Math.abs(angleDelta(Facing.angle[eid], Math.atan2(uy, ux))) / (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED))
   return reaction + turn + runTime(gap - reach, Math.min(along, top), top, accel)
+}
+
+/** Whether `eid` is either side's goalkeeper. */
+export const isKeeper = (world: Match, eid: number) => eid === world.teams[0].keeper || eid === world.teams[1].keeper
+
+/**
+ * The fastest (m/s) `eid` can be moving at any point on the way somewhere:
+ * no one speeds up past their top speed, though they may already be going faster.
+ */
+export function fastest(world: Match, eid: number): number {
+  const top = isKeeper(world, eid) ? KEEPER_SPEED : topSpeed(Physical.pace[eid])
+  return Math.max(top, Math.sqrt(Velocity.x[eid] ** 2 + Velocity.y[eid] ** 2))
 }
 
 /** Seconds to cover `distance` starting at `v0`, accelerating at `accel` up to `top`. */
