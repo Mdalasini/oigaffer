@@ -19,7 +19,9 @@ export const CIRCLE_RADIUS = 9.15
 export const GRAVITY = 9.81
 export const BALL_RADIUS = 0.11
 export const BALL_RESTITUTION = 0.55
-export const BALL_ROLLING_FRICTION = 0.6
+/** Rolling resistance: a constant deceleration plus drag proportional to speed. */
+export const BALL_ROLL_DECEL = 0.8
+export const BALL_ROLL_DRAG = 0.3
 
 export const FIXED_DT = 1 / 120
 

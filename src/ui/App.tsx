@@ -6,6 +6,8 @@ import { ControlPanel } from './ControlPanel'
 const OUTCOME_BANNER: Record<Outcome, { text: string; className: string }> = {
   goal: { text: 'GOAL!', className: 'text-emerald-300' },
   save: { text: 'SAVED', className: 'text-sky-300' },
+  claimed: { text: 'CLAIMED', className: 'text-sky-300' },
+  abandoned: { text: 'PLAY STALLED', className: 'text-neutral-300' },
   wide: { text: 'WIDE', className: 'text-rose-300' },
   over: { text: 'OVER THE BAR', className: 'text-rose-300' },
 }
@@ -49,6 +51,7 @@ export function App() {
         <Stat label="Goals" value={stats.goals} className="text-emerald-300" />
         <Stat label="Saves" value={stats.saves} className="text-sky-300" />
         <Stat label="Misses" value={stats.misses} className="text-rose-300" />
+        <Stat label="Lost" value={stats.lost} className="text-neutral-300" />
       </div>
 
       {banner && (

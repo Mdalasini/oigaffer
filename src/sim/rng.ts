@@ -1,5 +1,11 @@
 export type Rng = () => number
 
+/** Standard normal sample (Box–Muller). */
+export function gaussian(rng: Rng): number {
+  const u = 1 - rng()
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng())
+}
+
 /** Small seeded PRNG (mulberry32) so matches can be replayed and tested. */
 export function createRng(seed: number): Rng {
   let a = seed >>> 0
