@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Game, GameSnapshot } from '../game/Game'
+import type { Overlay } from '../render/overlay'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
 import { catchChance, reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, tackleSkill, topSpeed, touchAngleError } from '../sim/grades'
 import type { GradeKey, Role } from '../sim/match'
@@ -40,6 +41,12 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'handling', label: 'Handling', detail: (g) => `holds ${Math.round(catchChance(g) * 100)}% of shots at the body` },
     ],
   },
+]
+
+const OVERLAYS: { value: Overlay; label: string; detail: string }[] = [
+  { value: 'off', label: 'Off', detail: 'How players read the pitch, drawn over it.' },
+  { value: 'threat', label: 'Threat', detail: 'How dangerous it is to have the ball in each spot, for the team on it.' },
+  { value: 'control', label: 'Control', detail: 'Which team would get to a ball in each spot first, and how surely.' },
 ]
 
 export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Props) {
@@ -99,6 +106,24 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
           </section>
         )
       })}
+
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold tracking-wide text-neutral-300 uppercase">Show space</h2>
+        <div role="radiogroup" aria-label="Show space" className="grid grid-cols-3 gap-1 rounded-lg bg-white/5 p-1">
+          {OVERLAYS.map(({ value, label }) => (
+            <button
+              key={value}
+              role="radio"
+              aria-checked={snapshot.overlay === value}
+              className={`rounded-md px-2 py-1 text-xs font-semibold ${snapshot.overlay === value ? 'bg-white/15' : 'text-neutral-400 hover:bg-white/10'}`}
+              onClick={() => game.setOverlay(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-neutral-400">{OVERLAYS.find((o) => o.value === snapshot.overlay)?.detail}</p>
+      </section>
 
       <div className="flex gap-2">
         <button

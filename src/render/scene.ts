@@ -21,6 +21,7 @@ import { chooseAim, type GoalPoint, type Vec3 } from '../sim/shooting'
 import { attackedGoalX } from '../sim/teams'
 import type { Batch, Color } from './batch'
 import type { Camera } from './cameras'
+import { drawOverlay, type Overlay } from './overlay'
 
 const GRASS: Color = [0.18, 0.47, 0.22, 1]
 const GRASS_STRIPE: Color = [0.2, 0.52, 0.24, 1]
@@ -75,10 +76,11 @@ const X = { x: 1, y: 0, z: 0 }
 const Y = { x: 0, y: 1, z: 0 }
 const Z = { x: 0, y: 0, z: 1 }
 
-export function buildScene(batch: Batch, world: Match, cam: Camera) {
+export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Overlay = 'off') {
   batch.clear()
   drawGround(batch)
   drawMarkings(batch)
+  drawOverlay(batch, world, overlay)
   for (const end of ENDS) drawGoal(batch, end)
   for (const team of world.teams) {
     for (const eid of team.outfielders) drawPlayer(batch, cam, world, eid, KITS[Team.id[eid]].outfield)
