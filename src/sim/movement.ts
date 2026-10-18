@@ -50,8 +50,9 @@ export function steer(eid: number, faceX: number, faceY: number) {
 /** Sets where an off-ball player is heading, unless it's within the area they're already making for. */
 export function setTarget(eid: number, x: number, y: number, radius: number, effort: Effort) {
   const moved = Math.hypot(x - OffBall.targetX[eid], y - OffBall.targetY[eid])
-  // Small shifts of the ideal spot don't change where they're going.
-  if (moved > OffBall.radius[eid]) {
+  // Small shifts of the ideal spot don't change where they're going, judged by the
+  // tighter of the old and new areas, so a precise new aim is never swallowed.
+  if (moved > Math.min(OffBall.radius[eid], radius)) {
     OffBall.targetX[eid] = x
     OffBall.targetY[eid] = y
   }

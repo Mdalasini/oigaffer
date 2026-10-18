@@ -1,23 +1,25 @@
 import { addComponent, addEntity, createWorld, hasComponent, query, removeComponent, type World } from 'bitecs'
 import type { LastChallenge } from './challenge'
 import {
-  OnBall,
   Ball,
   Body,
+  Call,
   Defender,
   DefenderMode,
-  Pressing,
   Dribbler,
   Facing,
   Goalkeeper,
   MoveIntent,
-  OffBall,
   OffBalance,
+  OffBall,
   Offside,
-  Passer,
+  OnBall,
   Outfielder,
+  Passer,
   Physical,
   Position,
+  Pressing,
+  Run,
   Shield,
   Sliding,
   Slot,
@@ -29,6 +31,7 @@ import {
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
+import { clearIntentions } from './attacking'
 import { clearOffside, playedBy } from './offside'
 import { homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
@@ -147,6 +150,7 @@ export const GRADE_FIELDS = {
     firstTouch: Outfielder.firstTouch,
     vision: Outfielder.vision,
     decisions: Outfielder.decisions,
+    offTheBall: Outfielder.offTheBall,
     pace: Physical.pace,
     agility: Physical.agility,
     strength: Physical.strength,
@@ -169,6 +173,7 @@ export const DEFAULT_GRADES: RoleGrades = {
     firstTouch: 13,
     vision: 12,
     decisions: 12,
+    offTheBall: 12,
     pace: 14,
     agility: 13,
     strength: 12,
@@ -310,7 +315,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -447,6 +452,8 @@ function setCarrier(world: Match, eid: number) {
   }
   if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
   addComponent(world, eid, OnBall)
+  // On the ball, they've stopped running and calling for it.
+  clearIntentions(eid)
   world.carrier = eid
 }
 
@@ -467,6 +474,7 @@ function setPresser(world: Match, eid: number) {
  * take stock, rather than picking up an off-ball plan from before.
  */
 function stepOffBall(world: Match, eid: number) {
+  clearIntentions(eid)
   OffBall.targetX[eid] = Position.x[eid]
   OffBall.targetY[eid] = Position.y[eid]
   OffBall.radius[eid] = 1
@@ -644,8 +652,9 @@ export function takeRestart(world: Match) {
       Facing.angle[eid] = Math.atan2(by - home.y, bx - home.x)
     }
   }
-  // Everyone holds where they've been put until they've had a look around.
+  // Everyone holds where they've been put until they've had a look around, with no run or call carried over.
   for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
+    clearIntentions(eid)
     OffBall.targetX[eid] = Position.x[eid]
     OffBall.targetY[eid] = Position.y[eid]
     OffBall.radius[eid] = 1

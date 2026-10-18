@@ -1,17 +1,16 @@
 import { hasComponent, query } from 'bitecs'
-import { Defender, DefenderMode, Effort, MoveIntent, OffBall, Outfielder, Position, Sliding, Team } from '../components'
+import { Defender, DefenderMode, Effort, MoveIntent, OffBall, Outfielder, Position, Run, RunPhase, Sliding, Team } from '../components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
+import { attackingIntent, endRun, tickRun } from '../attacking'
 import type { Match } from '../match'
 import { setTarget, steer } from '../movement'
-import { along, homePosition, onsideLimit } from '../shape'
+import { along, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
 
 /** Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so the team doesn't move in lockstep. */
 const DECIDE_EVERY = 0.25
 const DECIDE_SPREAD = 0.2
 
-/** Attackers keep at least this far (m) from the carrier, so they offer a pass rather than crowd them. */
-const SPACING = 0.16 * 2 * PITCH_HALF_LENGTH
 /** A target counts as reached within BASE_RADIUS, growing by RADIUS_PER_METRE for every metre from the ball. */
 const BASE_RADIUS = 1.2
 const RADIUS_PER_METRE = 0.06
@@ -19,8 +18,11 @@ const RADIUS_PER_METRE = 0.06
 /** The covering defender sits this far (m) behind the ball, towards goal, and this far across towards the free attacker. */
 const COVER_DEPTH = 5.5
 const COVER_SHADE = 3
-/** Attackers aim to stay this far (m) onside of the opposition's line. */
+/** Attackers aim to stay this far (m) onside of the opposition's line, or RUNNER_MARGIN when running in behind. */
 const ONSIDE_MARGIN = 1
+const RUNNER_MARGIN = 0.2
+/** A runner's or a check-away's target counts as reached only this close (m). */
+const RUNNER_RADIUS = 0.3
 /** Teammates' targets stay at least this far (m) apart, so two players never do one job. */
 const TEAMMATE_GAP = 4
 /** A marker stands between MARK_TIGHT and MARK_LOOSE metres goal-side of their man, tighter the nearer the ball. */
@@ -38,9 +40,9 @@ const MARK_WHEN_AHEAD = 2
 const COVER_WHEN_BEHIND = 5
 
 /**
- * The outfielders without a job on the ball: the carrier's teammates keep
- * the team's shape and offer an option, and the presser's teammates cover
- * and mark. While a keeper holds the ball everyone is off it: the keeper's
+ * The outfielders without a job on the ball: the carrier's teammates hold
+ * the shape, show for it or run in behind (see `attackingIntent`), and the
+ * presser's teammates cover and mark. While a keeper holds the ball everyone is off it: the keeper's
  * team spreads out to receive, and the other side picks up a man each.
  */
 export function offBallSystem(world: Match, dt: number) {
@@ -59,39 +61,19 @@ export function offBallSystem(world: Match, dt: number) {
       continue
     }
 
+    if (attacking) tickRun(eid, dt)
+    else endRun(world, eid)
     OffBall.decideIn[eid] -= dt
     if (OffBall.decideIn[eid] <= 0) {
       OffBall.decideIn[eid] = DECIDE_EVERY + world.rng() * DECIDE_SPREAD
-      if (attacking) support(world, eid)
-      else cover(world, eid)
+      if (attacking) {
+        const intent = attackingIntent(world, eid)
+        go(world, eid, intent.x, intent.y, intent.effort)
+      } else cover(world, eid)
     }
     const face = attacking ? halfTurn(world, eid) : { x: Position.x[ball] - Position.x[eid], y: Position.y[ball] - Position.y[eid] }
     steer(eid, face.x, face.y)
   }
-}
-
-/**
- * Take up their place in the shape, kept clear of the carrier. While their
- * keeper has the ball, the shape itself spreads them out to receive it.
- */
-function support(world: Match, eid: number) {
-  let { x, y } = homePosition(world, eid)
-  const carrier = world.carrier
-  if (world.phase !== 'held' && carrier !== eid) {
-    const dx = x - Position.x[carrier]
-    const dy = y - Position.y[carrier]
-    const gap = Math.hypot(dx, dy)
-    if (gap < SPACING) {
-      // Slide away from the carrier, keeping on the side they're already on.
-      const ux = gap > 0.5 ? dx / gap : 0
-      const uy = gap > 0.5 ? dy / gap : Math.sign(y - Position.y[carrier]) || 1
-      x = Position.x[carrier] + ux * SPACING
-      y = Position.y[carrier] + uy * SPACING
-    }
-  }
-  x = clamp(x, -PITCH_HALF_LENGTH + 1.5, PITCH_HALF_LENGTH - 1.5)
-  y = clamp(y, -PITCH_HALF_WIDTH + 1.5, PITCH_HALF_WIDTH - 1.5)
-  go(world, eid, x, y, effortFor(world, eid, x, y, false))
 }
 
 /**
@@ -181,15 +163,19 @@ function effortFor(world: Match, eid: number, x: number, y: number, defending: b
 
 function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   ;({ x, y } = apart(world, eid, x, y))
-  // Whatever moved it, an attacker's target stays onside.
   const team = Team.id[eid]
-  if (team === world.possession) {
-    const limit = onsideLimit(world, team) - ONSIDE_MARGIN
-    if (along(team, x) > limit) x = limit * attackDir(team)
-  }
+  const attacking = team === world.possession
   const ball = world.ball
-  const radius = BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
+  // A runner wants to be right on the line, and a check away is a short, deliberate step: both need a tight aim.
+  const precise = attacking && Run.phase[eid] !== RunPhase.None
+  const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
   setTarget(eid, x, y, radius, effort)
+  // Whatever the target ends up being, an attacker's stays onside: a runner on the last
+  // defender's shoulder, everyone else a yard short.
+  if (attacking) {
+    const limit = onsideLimit(world, team) - (Run.phase[eid] === RunPhase.Go ? RUNNER_MARGIN : ONSIDE_MARGIN)
+    if (along(team, OffBall.targetX[eid]) > limit) OffBall.targetX[eid] = limit * attackDir(team)
+  }
 }
 
 /**

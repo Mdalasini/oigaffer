@@ -5,6 +5,7 @@ import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
 import {
   catchChance,
   cleanTakeSpeed,
+  gradeT,
   judgementError,
   passAngleError,
   passWeightError,
@@ -46,6 +47,7 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'firstTouch', label: 'First touch', detail: (g) => `takes a ${cleanTakeSpeed(g).toFixed(0)} m/s ball dead` },
       { key: 'vision', label: 'Vision', detail: (g) => `spots ${Math.round(spotChance(g) * 100)}% of teammates over the shoulder` },
       { key: 'decisions', label: 'Decisions', detail: (g) => `misjudges options by ±${Math.round(judgementError(g) * 100)}%` },
+      { key: 'offTheBall', label: 'Off the ball', detail: (g) => `goes for ${Math.round((0.15 + 0.45 * gradeT(g)) * 100)}% of chances to run in behind` },
       { key: 'pace', label: 'Pace', detail: (g) => `top speed ${topSpeed(g).toFixed(1)} m/s` },
       { key: 'agility', label: 'Agility', detail: (g) => `sidestep ${sideStepSpeed(g).toFixed(1)} m/s` },
       { key: 'strength', label: 'Strength', detail: () => 'wins barges, holds off when shielding' },
@@ -159,8 +161,10 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       <p className="text-xs leading-relaxed text-neutral-400">
         Red attacks to the right, Blue to the left, two outfielders and a keeper a side; outfield grades apply to both of a
         team's outfielders. Whoever has the ball takes the nearest defender on, shields when they get tight, and knocks it
-        past once clear, while their teammate holds the line. When a pass to feet or into space is the better bet they play
-        it: a white ring marks where it's aimed, dashed for a through ball. The other defender covers, and steps in once the first is
+        past once clear. Their teammate holds the line, shows for it when the carrier is closed down, and runs in behind when
+        the carrier has time to play forward; a yellow ring means they're calling for it, with a line to the space they
+        want it in. When a pass is the better bet it's played: a white ring marks where it's aimed, dashed for a through
+        ball. The other defender covers, and steps in once the first is
         beaten. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
         <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Space makes
         whoever has the ball shoot.

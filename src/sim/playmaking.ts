@@ -1,10 +1,11 @@
 import { angleDelta } from './angles'
-import { Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
+import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
-import { gradeT, judgementError, passAngleError, passWeightError, spotChance } from './grades'
+import { gradeT, judgementError, offsideMisjudgement, passAngleError, passWeightError, spotChance } from './grades'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
-import { inOffsidePosition, playBall } from './offside'
+import { playBall } from './offside'
+import { along, onsideLimit } from './shape'
 import { gaussian } from './rng'
 import { arrivalTime } from './space/arrival'
 import { passSafety, teamArrival, timeOnBall } from './space/control'
@@ -122,20 +123,37 @@ export function passOptions(world: Match, carrier: number): PassOption[] {
   const team = Team.id[carrier]
   const options: PassOption[] = []
   for (const mate of world.teams[team].outfielders) {
-    // A teammate in an offside position now would be offside the moment it's played.
-    if (mate === carrier || inOffsidePosition(world, mate) || !sees(world, carrier, mate)) continue
+    // A teammate who looks offside now would be offside the moment it's played.
+    if (mate === carrier || looksOffside(world, carrier, mate) || !sees(world, carrier, mate)) continue
     const feet = toFeet(world, carrier, mate)
     if (feet) options.push(feet)
+    // Into space towards goal, or towards where they're calling for it.
+    const calling = Call.kind[mate] === CallKind.Space
     for (const lead of THROUGH_LEADS) {
-      const through = intoSpace(world, carrier, mate, lead)
+      const through = intoSpace(world, carrier, mate, lead, attackedGoalX(team), 0)
       if (through) options.push(through)
+      const called = calling ? intoSpace(world, carrier, mate, lead, Call.x[mate], Call.y[mate]) : null
+      if (called) options.push(called)
     }
   }
   return options
 }
 
+/**
+ * Whether `mate` looks offside to `carrier`: judged by eye, so a teammate
+ * near the line may be misjudged either way, by less the better their
+ * decisions.
+ */
+function looksOffside(world: Match, carrier: number, mate: number): boolean {
+  const team = Team.id[mate]
+  const misjudged = along(team, Position.x[mate]) + gaussian(world.rng) * offsideMisjudgement(Outfielder.decisions[carrier])
+  return misjudged > Math.max(onsideLimit(world, team), 0)
+}
+
 /** Whether `carrier` has `mate` in view: in their field of view, or spotted with a look around. */
 function sees(world: Match, carrier: number, mate: number): boolean {
+  // A teammate calling for it is heard wherever they are.
+  if (Call.kind[mate] !== CallKind.None) return true
   const angle = Math.atan2(Position.y[mate] - Position.y[carrier], Position.x[mate] - Position.x[carrier])
   if (Math.abs(angleDelta(Facing.angle[carrier], angle)) <= FIELD_OF_VIEW) return true
   return world.rng() < spotChance(Outfielder.vision[carrier])
@@ -152,24 +170,36 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   const y = Position.y[mate] + Velocity.y[mate] * rough
   const distance = Math.hypot(x - bx, y - by)
   if (!playable(carrier, bx, by, x, y, distance)) return null
-  const speed = rollSpeedFor(distance, FEET_ARRIVAL)
-  const safety = passSafety(world, Team.id[carrier], bx, by, x, y, speed)
-  const value = passValue(Team.id[carrier], safety, receiveValue(world, mate, x, y, rollTime(speed, distance)), bx, by, x, y)
+  const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y)
   return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
 }
 
 /**
- * A pass into the space `lead` metres ahead of `mate`, towards the goal they
- * attack. It is weighted to meet them there just after they arrive, so they
- * can run onto it in stride.
+ * How good a pass to `receiver`'s feet at (x, y) would be from where the
+ * ball is now. Off-ball players use it too, to pick a spot to show for it.
  */
-function intoSpace(world: Match, carrier: number, mate: number, lead: number): PassOption | null {
+export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number) {
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const distance = Math.hypot(x - bx, y - by)
+  const speed = rollSpeedFor(distance, FEET_ARRIVAL)
+  const safety = passSafety(world, team, bx, by, x, y, speed)
+  const value = passValue(team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance)), bx, by, x, y)
+  return { speed, safety, value }
+}
+
+/**
+ * A pass into the space `lead` metres ahead of `mate`, in the direction of
+ * (towardX, towardY). It is weighted to meet them there just after they
+ * arrive, so they can run onto it in stride.
+ */
+function intoSpace(world: Match, carrier: number, mate: number, lead: number, towardX: number, towardY: number): PassOption | null {
   const team = Team.id[carrier]
   const ball = world.ball
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  const gx = attackedGoalX(team) - Position.x[mate]
-  const gy = -Position.y[mate]
+  const gx = towardX - Position.x[mate]
+  const gy = towardY - Position.y[mate]
   const glen = Math.hypot(gx, gy)
   if (glen < 1) return null
   const x = clamp(Position.x[mate] + (gx / glen) * lead, -GOAL_X + 1, GOAL_X - 1)

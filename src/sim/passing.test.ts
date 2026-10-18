@@ -34,11 +34,6 @@ function scene(seed: number, x: number, y: number, mx: number, my: number, blue:
   return world
 }
 
-/** Plays `seconds` of match time, or until play stops. */
-function play(world: Match, seconds: number) {
-  for (let i = 0; i < seconds * 120 && world.phase === 'play'; i++) stepMatch(world)
-}
-
 describe('weighting a pass', () => {
   test('a ball struck to arrive in a given time does, and slows as it goes', () => {
     const speed = rollSpeedToArrive(20, 2)
@@ -69,9 +64,15 @@ describe('passes to feet', () => {
     const option = passOptions(world, world.carrier).find((o) => o.receiver === mate && o.kind === 'feet')!
     expect(option.safety).toBeLessThan(0.2)
     strikePass(world, world.carrier, option)
-    play(world, 3)
+    // The defender gets to it first, whoever ends up with the loose ball.
+    const defender = world.teams[BLUE].outfielders[0]
+    let touched = false
+    for (let i = 0; i < 3 * 120 && world.phase === 'play' && !touched; i++) {
+      stepMatch(world)
+      touched = world.lastTouchedBy === defender
+    }
+    expect(touched).toBe(true)
     expect(world.stats[RED].completed).toBe(0)
-    expect(world.possession).toBe(BLUE)
   })
 })
 

@@ -36,6 +36,19 @@ being built in stages.
   towards goal and away from pressure. **First touch** sets how fast a ball
   they can take dead and how true the touch goes. A faster ball bounces off
   them. Anyone can cut a pass out.
+- **Off the ball (1–20)** — the carrier's teammate holds their place in the
+  shape and calls for it when free. When the carrier is closed down or facing
+  their own goal, they *show for it*: they go to the spot around the carrier
+  where a pass would be worth most, and stay there until a clearly better spot
+  appears. When the carrier has time and is facing forward, they *run in
+  behind*. First they check towards the ball, then sprint for the space beyond
+  the line that they'd win the race to, holding the line until the pass and
+  calling for it there. The carrier hears a call even from a teammate they
+  can't see, and can play into the called space. A run nobody finds is given
+  up after a couple of seconds. **Off the ball** sets how often they spot the
+  moment, how quickly they go, and how well they judge where to show. A
+  passer misjudges a teammate's position against the line by up to about a
+  metre, less with better decisions.
 - **Offside** — judged each time a team plays the ball on purpose (a touch,
   pass, shot or first touch). Any teammate then in the opponents' half, and
   nearer their goal line than both the ball and the second-last opponent, is

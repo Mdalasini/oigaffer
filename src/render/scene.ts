@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Body, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, Team, TouchStyle, Velocity } from '../sim/components'
+import { Body, Call, CallKind, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, Team, TouchStyle, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
   CIRCLE_RADIUS,
@@ -42,6 +42,8 @@ const AIM_FILL: Color = [1, 0.85, 0.25, 0.16]
 const SMALL_TOUCH: Color = [0.4, 0.9, 1, 1]
 const LARGE_TOUCH: Color = [1, 0.6, 0.25, 1]
 const PASS_LINE: Color = [1, 1, 1, 0.25]
+const CALL_RING: Color = [1, 0.95, 0.4, 0.7]
+const CALL_LINE: Color = [1, 0.95, 0.4, 0.3]
 const PASS_RING: Color = [1, 1, 1, 0.8]
 /** Seconds a touch ring stays on screen. */
 const TOUCH_RING_LIFE = 0.45
@@ -90,6 +92,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Ove
   }
   drawTouchRing(batch, world)
   drawPass(batch, world)
+  drawCalls(batch, world)
   drawBall(batch, cam, world.ball)
   drawShotGuide(batch, world)
 }
@@ -290,6 +293,23 @@ function drawPass(b: Batch, world: Match) {
     const a0 = (i / segments) * Math.PI * 2
     const a1 = a0 + (Math.PI * 2) / segments / (pass.kind === 'through' ? 2 : 1)
     b.arc({ x: pass.x, y: pass.y, z: 0.02 }, X, Y, 0.45, 0.07, a0, a1, PASS_RING, 12)
+  }
+}
+
+/**
+ * Players calling for the ball: a ring at their feet for "here!", and a
+ * line to the space they want it played into for "in behind!".
+ */
+function drawCalls(b: Batch, world: Match) {
+  for (const team of world.teams) {
+    for (const eid of team.outfielders) {
+      const kind = Call.kind[eid]
+      if (kind === CallKind.None || eid === world.carrier) continue
+      const x = Position.x[eid]
+      const y = Position.y[eid]
+      b.arc({ x, y, z: 0.02 }, X, Y, 0.75, 0.06, 0, Math.PI * 2, CALL_RING, 24)
+      if (kind === CallKind.Space) b.groundLine(x, y, Call.x[eid], Call.y[eid], 0.05, 0.015, CALL_LINE)
+    }
   }
 }
 

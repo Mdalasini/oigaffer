@@ -70,6 +70,44 @@ export const Outfielder = {
   vision: new Uint8Array(MAX_ENTITIES),
   /** How reliably a player picks the best option they've seen. */
   decisions: new Uint8Array(MAX_ENTITIES),
+  /** How well a player finds space and times runs without the ball. */
+  offTheBall: new Uint8Array(MAX_ENTITIES),
+}
+
+export const RunPhase = {
+  None: 0,
+  /** Checking away from the marker before going. */
+  Prepare: 1,
+  /** Running into the space, staying onside until the pass. */
+  Go: 2,
+} as const
+export type RunPhase = (typeof RunPhase)[keyof typeof RunPhase]
+
+/** A run in behind: where to, how far through it, and how long before the next. */
+export const Run = {
+  phase: new Uint8Array(MAX_ENTITIES),
+  /** Seconds left in the current phase. */
+  timer: new Float32Array(MAX_ENTITIES),
+  /** Seconds before they'll make another run. */
+  rest: new Float32Array(MAX_ENTITIES),
+  targetX: new Float32Array(MAX_ENTITIES),
+  targetY: new Float32Array(MAX_ENTITIES),
+}
+
+export const CallKind = {
+  None: 0,
+  /** "Here!": wants it played to feet. */
+  Feet: 1,
+  /** "In behind!": wants it played into the space at (x, y). */
+  Space: 2,
+} as const
+export type CallKind = (typeof CallKind)[keyof typeof CallKind]
+
+/** A player calling for the ball. The carrier hears a call even from a teammate they can't see. */
+export const Call = {
+  kind: new Uint8Array(MAX_ENTITIES),
+  x: new Float32Array(MAX_ENTITIES),
+  y: new Float32Array(MAX_ENTITIES),
 }
 
 /**
@@ -199,6 +237,8 @@ export const OffBall = {
   settled: new Uint8Array(MAX_ENTITIES),
   /** Seconds until they next reconsider. */
   decideIn: new Float32Array(MAX_ENTITIES),
+  /** An attacker's current intention: holding the shape (0) or showing for the ball (1). */
+  showing: new Uint8Array(MAX_ENTITIES),
 }
 
 export const Goalkeeper = {
