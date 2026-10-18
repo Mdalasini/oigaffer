@@ -10,7 +10,7 @@ import { dribble, FOOT_OFFSET } from './touch'
 
 /** A carrier in open grass with the ball at its feet, running along +x at `speed`. */
 function setup(seed: number, speed = 0, dribbling = 13): Match {
-  const world = createMatch({ seed, grades: { red: { outfielder: { dribbling, pace: 14 } } } })
+  const world = createMatch({ outfielders: 2, seed, grades: { red: { outfielder: { dribbling, pace: 14 } } } })
   const { carrier, ball } = world
   setVec(Position, carrier, -20, 0, 0)
   setVec(Velocity, carrier, speed, 0, 0)
@@ -104,7 +104,7 @@ describe('touches', () => {
 
   test('the carrier never shoots without the ball at its feet', () => {
     // Any shot origin must be within touching distance of the carrier's feet.
-    const world = createMatch({ seed: 4 })
+    const world = createMatch({ outfielders: 2, seed: 4 })
     const totalShots = () => world.stats[0].shots + world.stats[1].shots
     let shots = 0
     let lastShots = 0

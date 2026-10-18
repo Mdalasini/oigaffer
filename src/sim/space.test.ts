@@ -13,7 +13,7 @@ const BLUE = 1
 
 /** Red's first outfielder at (x, y), Blue's at (bx, by), standing still and facing each other; the keepers on their lines. */
 function placed(x: number, y: number, bx: number, by: number, grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed: 1, grades })
+  const world = createMatch({ outfielders: 2, seed: 1, grades })
   const red = world.teams[RED].outfielders[0]
   const blue = world.teams[BLUE].outfielders[0]
   for (const [eid, px, py, facing] of [

@@ -22,10 +22,10 @@ function place(eid: number, x: number, y: number, facing = 0) {
  * pass, and Blue's keeper on their line.
  */
 function scene(x: number, mx: number, my: number, d1: number, d2: number): Match {
-  const world = createMatch({ seed: 1 })
+  const world = createMatch({ outfielders: 2, seed: 1 })
   const [carrier, mate] = world.teams[RED].outfielders
   const [blueA, blueB] = world.teams[BLUE].outfielders
-  world.carrier = carrier
+  handOver(world, carrier)
   place(carrier, x, 0)
   setVec(Position, world.ball, x + FOOT_OFFSET, 0, BALL_RADIUS)
   setVec(Velocity, world.ball, 0, 0, 0)
@@ -105,7 +105,7 @@ describe('the offence', () => {
     expect(world.phase as string).toBe('play')
     expect(world.offsideExempt).toBe(true)
     // The taker's first touch judges nobody.
-    const mate = world.teams[RED].outfielders[1]
+    const mate = world.teams[RED].outfielders.find((eid) => eid !== world.carrier)!
     place(mate, 20, 3)
     for (let i = 0; i < 120 && world.offsideExempt; i++) stepMatch(world)
     expect(world.offsideExempt).toBe(false)
@@ -118,8 +118,8 @@ describe('the offence', () => {
     strikePass(world, world.carrier, passTo(world, mate))
     expect(Offside.flagged[mate]).toBe(1)
     // Blue cuts it out.
-    place(world.teams[BLUE].outfielders[0], Position.x[world.ball] + 1, Position.y[world.ball], Math.PI)
-    play(world, 1)
+    play(world, 0.2)
+    winBall(world, world.teams[BLUE].outfielders.find((eid) => eid !== world.presser)!, 'intercepted')
     expect(world.possession).toBe(BLUE)
     expect(Offside.flagged[mate]).toBe(0)
   })
@@ -203,7 +203,7 @@ describe('the free kick for offside', () => {
     const taker = world.carrier
     // The taker can't play it again this step; their teammate just has.
     Dribbler.cooldown[taker] = 1
-    world.lastTouchedBy = world.teams[RED].outfielders[1]
+    world.lastTouchedBy = world.teams[RED].outfielders.find((eid) => eid !== taker)!
     stepMatch(world)
     expect(world.indirectTaker).toBe(-1)
   })

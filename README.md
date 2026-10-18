@@ -3,11 +3,11 @@
 A football match simulation. The simulation is fully 3D (metres, z-up, ballistic
 ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 
-Currently: a match between two teams, Red and Blue, each with two outfielders and a
-goalkeeper, on a small-sided 50 m × 32 m pitch with full-size goals. Red attacks the
-goal at +x, Blue the one at -x. How teammates move off the ball, pass and defend
-together is designed in [docs/off-ball-play.md](docs/off-ball-play.md) and is
-being built in stages.
+Currently: five-a-side between two teams, Red and Blue, each with four outfielders
+and a goalkeeper, on a small-sided 60 m × 40 m pitch with full-size goals. Red
+attacks the goal at +x, Blue the one at -x. The four play a 1-2-1 diamond with
+the ball and a 2-2 box without it. The simulation can also be run with one or
+two outfielders a side.
 
 - **Teammates and shape** — each team has a formation that lives in a block
   moving with the ball. With the ball, the block stretches: one outfielder

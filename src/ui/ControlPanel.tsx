@@ -162,7 +162,7 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       </div>
 
       <p className="text-xs leading-relaxed text-neutral-400">
-        Red attacks to the right, Blue to the left, two outfielders and a keeper a side; outfield grades apply to both of a
+        Red attacks to the right, Blue to the left, four outfielders and a keeper a side; outfield grades apply to all of a
         team's outfielders. Whoever has the ball takes the nearest defender on, shields when they get tight, and knocks it
         past once clear. Their teammate holds the line, shows for it when the carrier is closed down, and runs in behind when
         the carrier has time to play forward; a yellow ring means they're calling for it, with a line to the space they

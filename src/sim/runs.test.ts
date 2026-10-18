@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
-import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
+import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { attackingIntent } from './attacking'
 import { passOptions } from './playmaking'
 import { along, onsideLimit } from './shape'
@@ -19,9 +19,9 @@ function place(eid: number, x: number, y: number, facing = 0) {
 
 /** Red's carrier at (x, y) facing goal with the ball, their teammate at (mx, my), and Blue's two outfielders where given. */
 function scene(seed: number, x: number, y: number, mx: number, my: number, blue: [number, number][], grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed, grades })
+  const world = createMatch({ outfielders: 2, seed, grades })
   const [carrier, mate] = world.teams[RED].outfielders
-  world.carrier = carrier
+  handOver(world, carrier)
   place(carrier, x, y)
   setVec(Position, world.ball, x + FOOT_OFFSET, y, BALL_RADIUS)
   setVec(Velocity, world.ball, 0, 0, 0)
@@ -62,7 +62,7 @@ describe('running in behind', () => {
     const runs = (offTheBall: number) => {
       let count = 0
       for (const seed of [1, 2, 3]) {
-        const world = createMatch({ seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
+        const world = createMatch({ outfielders: 2, seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
         const before = new Map<number, number>()
         for (let i = 0; i < 5 * 60 * 120; i++) {
           stepMatch(world)

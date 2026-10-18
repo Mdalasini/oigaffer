@@ -62,9 +62,9 @@ describe('match outcomes', () => {
   })
 
   test('winning the ball back turns defence into attack', () => {
-    const world = createMatch({ seed: 3 })
-    const red = world.teams[0].outfielders[0]
-    const blue = world.teams[1].outfielders[0]
+    const world = createMatch({ outfielders: 2, seed: 3 })
+    const red = world.carrier
+    const blue = world.presser
     winBall(world, blue, 'tackled')
     expect(world.possession).toBe(1)
     expect(world.carrier).toBe(blue)

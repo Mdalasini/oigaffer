@@ -15,7 +15,7 @@ import { FOOT_OFFSET } from './touch'
 
 /** Carrier facing goal at the origin of play, defender `gap` m in front facing back at it, ball `ballAhead` m in front of the carrier. */
 function setup(seed: number, gap: number, ballAhead: number, grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed, grades })
+  const world = createMatch({ outfielders: 2, seed, grades })
   const { carrier, presser: defender, ball } = world
   const x = GOAL_X - 20
   setVec(Position, carrier, x, 0, 0)
@@ -197,7 +197,7 @@ describe('outcomes', () => {
   test('a better tackler wins the ball more often over many attacks', () => {
     /** Share of Red's spells on the ball that end with Blue winning it back. */
     const lostRate = (tackling: number, dribbling: number) => {
-      const [red, blue] = simulateMatch(30, { seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
+      const [red, blue] = simulateMatch(30, { outfielders: 2, seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
       return blue.won / red.attacks
     }
     // A gap of 0.17–0.29 across seeds with two a side, where the cover shares the work.

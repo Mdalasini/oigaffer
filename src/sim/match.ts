@@ -659,20 +659,21 @@ export function takeRestart(world: Match) {
 
   setVec(Position, ball, bx, by, BALL_RADIUS)
   setVec(Velocity, ball, 0, 0, 0)
-  const taker = world.teams[team].outfielders[0]
-  setVec(Position, taker, bx - faceX * 0.5, by - faceY * 0.5, 0)
-  Facing.angle[taker] = Math.atan2(faceY, faceX)
-  Dribbler.cooldown[taker] = 0
-
   // Both lines start where they'd naturally be, and the marking is shared out at once.
   for (const t of [0, 1]) {
     world.lines[t] = baseLine(world, t)
     world.nextMarking[t] = 0
     world.trap[t] = 0
   }
+  world.possession = team
+  // Whoever's place in the shape is nearest the ball takes it: the pivot kicks off, a wide player takes the throw.
+  const taker = nearestHome(world, team, bx, by)
+  setVec(Position, taker, bx - faceX * 0.5, by - faceY * 0.5, 0)
+  Facing.angle[taker] = Math.atan2(faceY, faceX)
+  Dribbler.cooldown[taker] = 0
+
   // Everyone else takes up their place in the shape around the ball: the side
   // without it first, since the attackers' shape depends on where they stand.
-  world.possession = team
   for (const t of [opponent(team), team]) {
     for (const eid of world.teams[t].outfielders) {
       if (eid === taker) continue
@@ -718,6 +719,21 @@ export function takeRestart(world: Match) {
   Defender.mode[world.presser] = DefenderMode.Jockey
   Defender.challengeDelay[world.presser] = 0
   setPhase(world, 'play')
+}
+
+/** The outfielder of `team` whose place in the shape is nearest (x, y). */
+function nearestHome(world: Match, team: number, x: number, y: number): number {
+  let best = world.teams[team].outfielders[0]
+  let bestDistance = Infinity
+  for (const eid of world.teams[team].outfielders) {
+    const home = homePosition(world, eid)
+    const distance = Math.hypot(home.x - x, home.y - y)
+    if (distance < bestDistance) {
+      best = eid
+      bestDistance = distance
+    }
+  }
+  return best
 }
 
 /**

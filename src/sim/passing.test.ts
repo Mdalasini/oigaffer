@@ -22,9 +22,9 @@ function place(eid: number, x: number, y: number, facing = 0) {
  * goal, out wide).
  */
 function scene(seed: number, x: number, y: number, mx: number, my: number, blue: [number, number][] = [], grades: GradeOverrides = {}): Match {
-  const world = createMatch({ seed, grades })
+  const world = createMatch({ outfielders: 2, seed, grades })
   const [carrier, mate] = world.teams[RED].outfielders
-  world.carrier = carrier
+  handOver(world, carrier)
   place(carrier, x, y)
   setVec(Position, world.ball, x + FOOT_OFFSET, y, BALL_RADIUS)
   setVec(Velocity, world.ball, 0, 0, 0)
