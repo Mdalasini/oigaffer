@@ -113,11 +113,11 @@ export function trapping(world: Match, team: number): boolean {
  */
 export function maybeSpringTrap(world: Match, windup: number) {
   const team = opponent(world.possession)
-  // The real line: where the second-last defender actually is, as the attackers see it.
+  // Their own line they know; the attackers on it, from what they've seen between them.
   const limit = onsideLimit(world, world.possession)
   const lurking = world.teams[world.possession].outfielders.some((a) => {
     if (a === world.carrier) return false
-    const gap = limit - along(world.possession, Position.x[a])
+    const gap = limit - along(world.possession, teamView(world, team, a, seen).x)
     return gap >= 0 && gap <= LURKING
   })
   if (!lurking) return
@@ -128,7 +128,12 @@ export function maybeSpringTrap(world: Match, windup: number) {
   cue(world, { kind: 'trap', team })
 }
 
-/** Whether the carrier has the time and the body shape to play forward. */
+/**
+ * Whether the carrier has the time and the body shape to play forward. The
+ * carrier is on the ball, which everyone follows, so this and `pressCue`
+ * read how he really stands; his time on the ball is from where the
+ * defenders really are, which they know of themselves.
+ */
 export function canPlayForward(world: Match): boolean {
   if (world.pass) return false
   const carrier = world.carrier
