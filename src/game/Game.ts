@@ -3,46 +3,48 @@ import { goalCamera, pitchCamera } from '../render/cameras'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
-import { Defender, DefenderMode, Shield } from '../sim/components'
+import { Defender, DefenderMode, Shield, Team } from '../sim/components'
 import { FIXED_DT } from '../sim/constants'
 import {
   createMatch,
   getGrade,
   gradeKeys,
   requestShot,
-  resetPlay,
+  resetMatch,
   ROLES,
-  setDefenderActive,
   setGrade,
   stepMatch,
   type GradeKey,
   type Grades,
   type Match,
-  type MatchStats,
-  type Outcome,
+  type MatchEventKind,
   type Phase,
-  type Restart,
+  type RestartKind,
   type Role,
+  type TeamStats,
 } from '../sim/match'
+import { attackedGoalX, TEAM_NAMES, type TeamName } from '../sim/teams'
 
 export interface GameSnapshot {
   phase: Phase
-  outcome: Outcome | null
-  /** How play restarts, when the ball went out. */
-  restart: Restart | null
-  stats: MatchStats
+  /** The team on the ball. */
+  possession: number
+  /** The latest notable moment, while it's still news. */
+  event: { kind: MatchEventKind; team: number } | null
+  /** How play restarts, while the ball is dead. */
+  restart: { kind: RestartKind; team: number } | null
+  stats: [TeamStats, TeamStats]
   grades: Grades
-  autoReset: boolean
-  defenderActive: boolean
-  /** What the defender is doing, while it is in play. */
+  /** What the defending outfielder is doing, in open play. */
   defenderMode: DefenderMode | null
   strikerShielding: boolean
   /** The latest tackle or barge, for a moment after it happens. */
   challenge: { kind: ChallengeKind; result: ChallengeResult } | null
 }
 
-/** How long (s) a challenge result stays on screen. */
+/** How long (s) a challenge result or a turnover stays on screen. */
 const CHALLENGE_SHOWN_FOR = 1.4
+const EVENT_SHOWN_FOR = 1.6
 
 const PITCH_SKY: readonly [number, number, number, number] = [0.08, 0.1, 0.14, 1]
 const GOAL_SKY: readonly [number, number, number, number] = [0.16, 0.2, 0.28, 1]
@@ -90,18 +92,8 @@ export class Game {
 
   getSnapshot = () => this.snapshot
 
-  setGrade<R extends Role>(role: R, key: GradeKey<R>, grade: number) {
-    setGrade(this.match, role, key, grade)
-    this.publishIfChanged()
-  }
-
-  setDefenderActive(on: boolean) {
-    setDefenderActive(this.match, on)
-    this.publishIfChanged()
-  }
-
-  setAutoReset(on: boolean) {
-    this.match.autoReset = on
+  setGrade<R extends Role>(team: TeamName, role: R, key: GradeKey<R>, grade: number) {
+    setGrade(this.match, team, role, key, grade)
     this.publishIfChanged()
   }
 
@@ -109,8 +101,9 @@ export class Game {
     requestShot(this.match)
   }
 
+  /** A fresh match: score cleared, red to kick off. */
   reset() {
-    resetPlay(this.match)
+    resetMatch(this.match)
     this.publishIfChanged()
   }
 
@@ -130,23 +123,31 @@ export class Game {
       height: Math.round(r.height * dpr),
     }
     if (view.width <= 0 || view.height <= 0) return
-    const goal = goalCamera(view.width / view.height)
+    const goal = goalCamera(view.width / view.height, this.goalInView())
     buildScene(this.batch, this.match, goal)
     renderer.draw(this.batch, goal.viewProjection, view, GOAL_SKY)
+  }
+
+  /** The goal under attack, or the one a shot went at until play restarts. */
+  private goalInView() {
+    const m = this.match
+    return m.shot ? m.shot.goalX : attackedGoalX(Team.id[m.striker])
   }
 
   private takeSnapshot(): GameSnapshot {
     const m = this.match
     return {
       phase: m.phase,
-      outcome: m.outcome,
-      restart: m.restart,
-      stats: { ...m.stats },
+      possession: m.possession,
+      event: this.recentEvent(),
+      restart: m.restart && { kind: m.restart.kind, team: m.restart.team },
+      stats: [{ ...m.stats[0] }, { ...m.stats[1] }],
       grades: Object.fromEntries(
-        ROLES.map((role) => [role, Object.fromEntries(gradeKeys(role).map((key) => [key, getGrade(m, role, key)]))]),
+        TEAM_NAMES.map((team) => [
+          team,
+          Object.fromEntries(ROLES.map((role) => [role, Object.fromEntries(gradeKeys(role).map((key) => [key, getGrade(m, team, role, key)]))])),
+        ]),
       ) as Grades,
-      autoReset: m.autoReset,
-      defenderActive: m.defenderActive,
       defenderMode: this.defenderMode(),
       strikerShielding: this.strikerShielding(),
       challenge: this.recentChallenge(),
@@ -155,7 +156,7 @@ export class Game {
 
   private strikerShielding() {
     const m = this.match
-    return m.defenderActive && m.phase === 'approach' && Shield.active[m.striker] === 1
+    return m.phase === 'play' && Shield.active[m.striker] === 1
   }
 
   private recentChallenge() {
@@ -163,23 +164,30 @@ export class Game {
     return c && this.match.time - c.time < CHALLENGE_SHOWN_FOR ? { kind: c.kind, result: c.result } : null
   }
 
+  /** Stoppages stay news until the restart; anything else for a moment. */
+  private recentEvent() {
+    const m = this.match
+    const e = m.event
+    if (!e) return null
+    return m.phase === 'stopped' || m.time - e.time < EVENT_SHOWN_FOR ? { kind: e.kind, team: e.team } : null
+  }
+
   private defenderMode(): DefenderMode | null {
     const m = this.match
-    return m.defenderActive && m.phase === 'approach' ? (Defender.mode[m.defender] as DefenderMode) : null
+    return m.phase === 'play' ? (Defender.mode[m.defender] as DefenderMode) : null
   }
 
   private publishIfChanged() {
     const m = this.match
-    const grades = ROLES.flatMap((role) => gradeKeys(role).map((key) => getGrade(m, role, key)))
+    const grades = TEAM_NAMES.flatMap((team) => ROLES.flatMap((role) => gradeKeys(role).map((key) => getGrade(m, team, role, key))))
     const challenge = this.recentChallenge()
+    const event = this.recentEvent()
     const key = [
       m.phase,
-      m.outcome,
-      m.stats.shots,
-      m.stats.lost,
-      m.stats.setPieces,
-      m.autoReset,
-      m.defenderActive,
+      m.possession,
+      event && `${event.kind}:${event.team}:${m.event?.time}`,
+      m.restart?.kind,
+      ...m.stats.flatMap((s) => Object.values(s)),
       this.defenderMode(),
       this.strikerShielding(),
       challenge && `${challenge.kind}:${challenge.result}:${m.lastChallenge?.time}`,

@@ -1,9 +1,8 @@
-import { createMatch, stepMatch, type MatchOptions, type MatchStats } from './match'
+import { createMatch, stepMatch, type MatchOptions, type TeamStats } from './match'
 
-/** Plays `attacks` attacks headlessly and returns the tally. */
-export function simulateAttacks(attacks: number, options: MatchOptions): MatchStats {
+/** Plays `minutes` of match time headlessly and returns each team's tally. */
+export function simulateMatch(minutes: number, options: MatchOptions): [TeamStats, TeamStats] {
   const match = createMatch({ seed: 1, ...options })
-  const played = () => match.stats.shots + match.stats.lost + match.stats.setPieces
-  while (played() < attacks || match.phase !== 'approach') stepMatch(match)
+  while (match.time < minutes * 60) stepMatch(match)
   return match.stats
 }

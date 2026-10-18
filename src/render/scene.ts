@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Body, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, TouchStyle, Velocity } from '../sim/components'
+import { Body, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, Team, TouchStyle, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
   CIRCLE_RADIUS,
@@ -16,8 +16,9 @@ import {
   PITCH_HALF_WIDTH,
   POST_WIDTH,
 } from '../sim/constants'
-import { currentSpread, type Match, type Outcome } from '../sim/match'
+import { currentSpread, type Match, type ShotOutcome } from '../sim/match'
 import { chooseAim, type GoalPoint, type Vec3 } from '../sim/shooting'
+import { attackedGoalX } from '../sim/teams'
 import type { Batch, Color } from './batch'
 import type { Camera } from './cameras'
 
@@ -42,21 +43,23 @@ const LARGE_TOUCH: Color = [1, 0.6, 0.25, 1]
 /** Seconds a touch ring stays on screen. */
 const TOUCH_RING_LIFE = 0.45
 
-const STRIKER_KIT = { shirt: [0.84, 0.2, 0.22, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.84, 0.2, 0.22, 1] } as const
-const DEFENDER_KIT = { shirt: [0.22, 0.42, 0.9, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.22, 0.42, 0.9, 1] } as const
-const KEEPER_KIT = { shirt: [0.78, 0.9, 0.2, 1], shorts: [0.1, 0.1, 0.12, 1], socks: [0.78, 0.9, 0.2, 1] } as const
 type Kit = { shirt: Color; shorts: Color; socks: Color }
+/** Outfield and keeper kits for each team, by team id: red then blue. */
+const KITS: { outfield: Kit; keeper: Kit }[] = [
+  {
+    outfield: { shirt: [0.84, 0.2, 0.22, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.84, 0.2, 0.22, 1] },
+    keeper: { shirt: [0.78, 0.9, 0.2, 1], shorts: [0.1, 0.1, 0.12, 1], socks: [0.78, 0.9, 0.2, 1] },
+  },
+  {
+    outfield: { shirt: [0.22, 0.42, 0.9, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.22, 0.42, 0.9, 1] },
+    keeper: { shirt: [0.98, 0.55, 0.15, 1], shorts: [0.1, 0.1, 0.12, 1], socks: [0.98, 0.55, 0.15, 1] },
+  },
+]
 
-const OUTCOME_COLOR: Record<Outcome, Color> = {
+const SHOT_COLOR: Record<ShotOutcome, Color> = {
   goal: [0.25, 0.9, 0.4, 1],
   save: [0.35, 0.65, 1, 1],
-  claimed: [0.35, 0.65, 1, 1],
-  intercepted: [0.35, 0.65, 1, 1],
-  tackled: [0.35, 0.65, 1, 1],
-  outOfPlay: [0.7, 0.7, 0.7, 1],
-  setPiece: [1, 0.8, 0.3, 1],
   blocked: [1, 0.35, 0.3, 1],
-  abandoned: [0.7, 0.7, 0.7, 1],
   wide: [1, 0.35, 0.3, 1],
   over: [1, 0.35, 0.3, 1],
 }
@@ -76,9 +79,10 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
   drawGround(batch)
   drawMarkings(batch)
   for (const end of ENDS) drawGoal(batch, end)
-  drawPlayer(batch, cam, world, world.striker, STRIKER_KIT)
-  if (world.defenderActive) drawPlayer(batch, cam, world, world.defender, DEFENDER_KIT)
-  drawPlayer(batch, cam, world, world.keeper, KEEPER_KIT)
+  for (const team of world.teams) {
+    drawPlayer(batch, cam, world, team.outfielder, KITS[Team.id[team.outfielder]].outfield)
+    drawPlayer(batch, cam, world, team.keeper, KITS[Team.id[team.keeper]].keeper)
+  }
   drawTouchRing(batch, world)
   drawBall(batch, cam, world.ball)
   drawShotGuide(batch, world)
@@ -279,38 +283,44 @@ function drawBall(b: Batch, cam: Camera, eid: number) {
 }
 
 /**
- * The spread circle sits on the goal plane: the goal camera sees it face-on,
- * while overhead it is projected to a wedge from the ball to the goal line.
+ * The spread circle sits on the plane of the goal being attacked: the goal
+ * camera sees it face-on, while overhead it is projected to a wedge from the
+ * ball to the goal line.
  */
 function drawShotGuide(b: Batch, world: Match) {
   let aim: GoalPoint
   let radius: number
   let origin: Vec3
+  let goalX: number
   if (world.shot) {
-    ;({ aim, radius, origin } = world.shot)
+    ;({ aim, radius, origin, goalX } = world.shot)
   } else {
+    if (world.phase !== 'play') return
     const ball = world.ball
     origin = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
     aim = chooseAim(origin.y, Position.y[world.keeper], world.aimHigh)
     radius = currentSpread(world)
+    goalX = attackedGoalX(Team.id[world.striker])
   }
+  const end = Math.sign(goalX)
 
-  const centre = { x: GOAL_X - 0.05, y: aim.y, z: aim.z }
+  const centre = { x: goalX - end * 0.05, y: aim.y, z: aim.z }
   b.disc(centre, Y, Z, radius, AIM_FILL, 40)
   b.arc(centre, Y, Z, radius, 0.05, 0, Math.PI * 2, AIM, 48)
-  b.disc({ ...centre, x: centre.x - 0.01 }, Y, Z, 0.05, AIM, 10)
+  b.disc({ ...centre, x: centre.x - end * 0.01 }, Y, Z, 0.05, AIM, 10)
 
   b.tri(
     { x: origin.x, y: origin.y, z: 0.02 },
-    { x: GOAL_X, y: aim.y - radius, z: 0.02 },
-    { x: GOAL_X, y: aim.y + radius, z: 0.02 },
+    { x: goalX, y: aim.y - radius, z: 0.02 },
+    { x: goalX, y: aim.y + radius, z: 0.02 },
     AIM_FILL,
   )
 
   const crossing = world.shot?.crossing
-  if (crossing && world.outcome) {
-    const color = OUTCOME_COLOR[world.outcome]
-    b.disc({ x: GOAL_X - 0.1, y: crossing.y, z: crossing.z }, Y, Z, 0.14, color, 16)
-    b.disc({ x: GOAL_X, y: crossing.y, z: 0.03 }, X, Y, 0.3, color, 16)
+  const outcome = world.event?.kind
+  if (crossing && outcome && outcome in SHOT_COLOR) {
+    const color = SHOT_COLOR[outcome as ShotOutcome]
+    b.disc({ x: goalX - end * 0.1, y: crossing.y, z: crossing.z }, Y, Z, 0.14, color, 16)
+    b.disc({ x: goalX, y: crossing.y, z: 0.03 }, X, Y, 0.3, color, 16)
   }
 }

@@ -34,14 +34,16 @@ export function ballSystem(world: Match, dt: number) {
       }
     }
 
-    if (world.outcome === 'goal') containInNet(eid)
+    if (world.phase === 'stopped' && world.event?.kind === 'goal') containInNet(eid)
   }
 }
 
+/** After a goal, the net holds the ball. */
 function containInNet(eid: number) {
+  const end = Math.sign(Position.x[eid])
   const back = GOAL_X + GOAL_DEPTH - BALL_RADIUS
-  if (Position.x[eid] > back) {
-    Position.x[eid] = back
+  if (Position.x[eid] * end > back) {
+    Position.x[eid] = end * back
     Velocity.x[eid] *= -0.1
     Velocity.y[eid] *= 0.4
     Velocity.z[eid] *= 0.4

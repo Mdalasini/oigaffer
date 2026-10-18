@@ -1,7 +1,7 @@
 import { hasComponent, query } from 'bitecs'
 import { Body, Position, Sliding, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
-import { endAttack, type Match } from '../match'
+import { endShot, type Match } from '../match'
 
 /** Share of the ball's speed into a body that it keeps when it bounces off. */
 const BODY_RESTITUTION = 0.3
@@ -30,7 +30,7 @@ export function collisionSystem(world: Match, _dt: number) {
  * checks the whole path it took this step, so a fast shot can't skip through.
  */
 export function ballBodySystem(world: Match, _dt: number) {
-  if (world.defenderActive && world.phase !== 'result') ballOffBody(world, world.defender)
+  if (world.phase !== 'stopped') ballOffBody(world, world.defender)
 }
 
 /** Pushes two overlapping bodies apart and cancels their closing speed. Returns whether they overlapped. */
@@ -75,7 +75,7 @@ function ballOffBody(world: Match, eid: number) {
   Position.y[ball] = Position.y[eid] + ny * minimum
   Position.z[ball] = z
   world.lastTouchedBy = eid
-  if (world.phase === 'shot') endAttack(world, 'blocked', null)
+  if (world.phase === 'shot') endShot(world, 'blocked', null)
 }
 
 /**

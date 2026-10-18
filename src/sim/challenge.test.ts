@@ -4,12 +4,13 @@ import { bodyBetween, resolveBarge, resolveStandingTackle } from './challenge'
 import { Defender, DefenderMode, Dribbler, Facing, OffBalance, Position, Shield, Sliding, TakeOn, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
-import { simulateAttacks } from './simulate'
+import { simulateMatch } from './simulate'
 import { challengeSystem } from './systems/challenge'
 import { ballBodySystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
+import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
 
 /** Striker facing goal at the origin of play, defender `gap` m in front facing back at it, ball `ballAhead` m in front of the striker. */
@@ -50,8 +51,8 @@ describe('standing tackles', () => {
   })
 
   test('better tackling beats better dribbling more often', () => {
-    const strong = standingTackleSuccess(1.9, FOOT_OFFSET + 0.9, { defender: { tackling: 20 }, striker: { dribbling: 5 } })
-    const weak = standingTackleSuccess(1.9, FOOT_OFFSET + 0.9, { defender: { tackling: 5 }, striker: { dribbling: 20 } })
+    const strong = standingTackleSuccess(1.9, FOOT_OFFSET + 0.9, { blue: { outfielder: { tackling: 20 } }, red: { outfielder: { dribbling: 5 } } })
+    const weak = standingTackleSuccess(1.9, FOOT_OFFSET + 0.9, { blue: { outfielder: { tackling: 5 } }, red: { outfielder: { dribbling: 20 } } })
     expect(strong).toBeGreaterThan(weak + 0.3)
   })
 
@@ -76,7 +77,7 @@ describe('barging', () => {
   const bargeWins = (defenderStrength: number, strikerStrength: number) => {
     let wins = 0
     for (let seed = 1; seed <= 300; seed++) {
-      const world = setup(seed, 0.7, FOOT_OFFSET, { defender: { strength: defenderStrength }, striker: { strength: strikerStrength } })
+      const world = setup(seed, 0.7, FOOT_OFFSET, { blue: { outfielder: { strength: defenderStrength } }, red: { outfielder: { strength: strikerStrength } } })
       resolveBarge(world, world.defender)
       if (world.lastChallenge?.result === 'won') wins++
     }
@@ -89,7 +90,7 @@ describe('barging', () => {
   })
 
   test('the loser is knocked off balance and cannot play the ball', () => {
-    const world = setup(3, 0.7, FOOT_OFFSET + 0.1, { defender: { strength: 20 }, striker: { strength: 1 } })
+    const world = setup(3, 0.7, FOOT_OFFSET + 0.1, { blue: { outfielder: { strength: 20 } }, red: { outfielder: { strength: 1 } } })
     resolveBarge(world, world.defender)
     expect(world.lastChallenge?.result).toBe('won')
     const { striker, ball } = world
@@ -133,7 +134,7 @@ describe('challenges across the end of an attack', () => {
     Defender.readX[defender] = Position.x[ball]
     Defender.readY[defender] = Position.y[ball]
     startSlide(world, defender)
-    world.phase = 'shot'
+    shotUnderway(world)
     const startX = Position.x[defender]
     for (let i = 0; i < 120 * 3; i++) challengeSystem(world, FIXED_DT)
     expect(Position.x[defender] - startX).toBeGreaterThan(2)
@@ -146,7 +147,7 @@ describe('challenges across the end of an attack', () => {
     setVec(Position, ball, Position.x[defender] - FOOT_OFFSET - 0.3, 0, BALL_RADIUS)
     OffBalance.timer[defender] = 0.3
     contestSystem(world, FIXED_DT)
-    expect(world.outcome).toBeNull()
+    expect(world.event).toBeNull()
   })
 
   test('a shot passes over a defender on the ground', () => {
@@ -155,12 +156,12 @@ describe('challenges across the end of an attack', () => {
     Defender.readX[defender] = Position.x[ball]
     Defender.readY[defender] = Position.y[ball]
     startSlide(world, defender)
-    world.phase = 'shot'
+    shotUnderway(world)
     world.prevBall = { x: Position.x[defender] - 0.5, y: Position.y[defender], z: 1 }
     setVec(Position, ball, Position.x[defender] + 0.2, Position.y[defender], 1)
     setVec(Velocity, ball, 25, 0, 0)
     ballBodySystem(world, FIXED_DT)
-    expect(world.outcome).toBeNull()
+    expect(world.event).toBeNull()
   })
 })
 
@@ -194,9 +195,10 @@ describe('shielding', () => {
 
 describe('outcomes', () => {
   test('a better tackler wins the ball more often over many attacks', () => {
+    /** Share of Red's spells on the ball that end with Blue winning it back. */
     const lostRate = (tackling: number, dribbling: number) => {
-      const s = simulateAttacks(150, { seed: 5, grades: { defender: { tackling }, striker: { dribbling } } })
-      return s.lost / (s.shots + s.lost)
+      const [red, blue] = simulateMatch(30, { seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
+      return blue.won / red.attacks
     }
     expect(lostRate(20, 5)).toBeGreaterThan(lostRate(5, 20) + 0.2)
   })

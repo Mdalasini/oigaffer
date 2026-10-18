@@ -1,5 +1,5 @@
-import { Velocity } from '../components'
-import { endAttack, type Match } from '../match'
+import { Team, Velocity } from '../components'
+import { winBall, type Match } from '../match'
 import { ballAtFeet, canPlayBall, CONTROL_RADIUS, footDistance } from '../touch'
 
 /** Beyond the carrier's control, the defender must be at least this much nearer to call it theirs. */
@@ -13,7 +13,7 @@ const MAX_GATHER_SPEED = 6
  * under their control has to be tackled for.
  */
 export function contestSystem(world: Match, _dt: number) {
-  if (!world.defenderActive || world.phase !== 'approach') return
+  if (world.phase !== 'play') return
   const { ball, striker, defender } = world
   if (!canPlayBall(world, defender) || !ballAtFeet(defender, ball)) return
   const carrierDistance = footDistance(striker, ball)
@@ -22,6 +22,6 @@ export function contestSystem(world: Match, _dt: number) {
   if (loose && relativeSpeed <= MAX_GATHER_SPEED) {
     Velocity.x[ball] = Velocity.x[defender]
     Velocity.y[ball] = Velocity.y[defender]
-    endAttack(world, 'intercepted', null)
+    winBall(world, Team.id[defender], 'intercepted')
   }
 }

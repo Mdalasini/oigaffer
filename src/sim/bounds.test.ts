@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test'
-import { Position, Velocity } from './components'
+import { hasComponent } from 'bitecs'
+import { Attacking, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from './constants'
 import { createMatch, setVec, stepMatch, type Match } from './match'
-import { roomAhead } from './touch'
+import { ballAtFeet, roomAhead } from './touch'
 
-/** Open play with the ball rolling from (x, y) at (vx, vy), last touched by `toucher`. */
+const RED = 0
+const BLUE = 1
+
+/**
+ * Open play, Red on the ball attacking +x, with the ball rolling from (x, y)
+ * at (vx, vy), last touched by Red's or Blue's outfielder.
+ */
 function rolling(x: number, y: number, vx: number, vy: number, toucher: 'striker' | 'defender'): Match {
   const world = createMatch({ seed: 1 })
   // Keep the players well away so nobody can play the ball.
@@ -17,60 +24,90 @@ function rolling(x: number, y: number, vx: number, vy: number, toucher: 'striker
 }
 
 function playOut(world: Match) {
-  for (let i = 0; i < 120 * 3 && world.phase === 'approach'; i++) stepMatch(world)
+  for (let i = 0; i < 120 * 3 && world.phase === 'play'; i++) stepMatch(world)
 }
 
 describe('out of play', () => {
-  test('over the touchline off the striker: throw-in to the defence', () => {
+  test('over the touchline off Red: throw-in to Blue', () => {
     const world = rolling(0, PITCH_HALF_WIDTH - 1, 0, 6, 'striker')
     playOut(world)
-    expect(world.outcome).toBe('outOfPlay')
-    expect(world.restart).toBe('throw-in')
-    expect(world.stats.lost).toBe(1)
+    expect(world.event?.kind).toBe('out')
+    expect(world.restart).toMatchObject({ kind: 'throw-in', team: BLUE })
   })
 
-  test('over the touchline off the defender: throw-in to the attack', () => {
+  test('over the touchline off Blue: throw-in to Red', () => {
     const world = rolling(0, -PITCH_HALF_WIDTH + 1, 0, -6, 'defender')
     playOut(world)
-    expect(world.outcome).toBe('setPiece')
-    expect(world.restart).toBe('throw-in')
-    expect(world.stats.setPieces).toBe(1)
+    expect(world.restart).toMatchObject({ kind: 'throw-in', team: RED })
   })
 
-  test('over the goal line wide, off the striker: goal kick', () => {
+  test('over the goal line wide, off the attacker: goal kick to the defending team', () => {
     const world = rolling(GOAL_X - 2, 10, 8, 0, 'striker')
     playOut(world)
-    expect(world.outcome).toBe('outOfPlay')
-    expect(world.restart).toBe('goal-kick')
+    expect(world.restart).toMatchObject({ kind: 'goal-kick', team: BLUE })
   })
 
-  test('over the goal line wide, off the defender: corner', () => {
+  test('over the goal line wide, off the defender: corner to the attacking team', () => {
     const world = rolling(GOAL_X - 2, -10, 8, 0, 'defender')
     playOut(world)
-    expect(world.outcome).toBe('setPiece')
-    expect(world.restart).toBe('corner')
+    expect(world.restart).toMatchObject({ kind: 'corner', team: RED })
+  })
+
+  test('over the other goal line it is the other way round', () => {
+    const corner = rolling(-GOAL_X + 2, 10, -8, 0, 'striker')
+    playOut(corner)
+    expect(corner.restart).toMatchObject({ kind: 'corner', team: BLUE })
+    const goalKick = rolling(-GOAL_X + 2, 10, -8, 0, 'defender')
+    playOut(goalKick)
+    expect(goalKick.restart).toMatchObject({ kind: 'goal-kick', team: RED })
   })
 
   test('the ball must be wholly over the line', () => {
     const world = rolling(0, PITCH_HALF_WIDTH, 0, 0, 'striker')
     stepMatch(world)
-    expect(world.phase).toBe('approach')
+    expect(world.phase).toBe('play')
   })
 
-  test('a ball rolled into the net in open play is a goal', () => {
+  test('a ball rolled into the net in open play is a goal, and the other team kicks off', () => {
     const world = rolling(GOAL_X - 3, 0, 9, 0, 'defender')
     // Move the keeper aside so it can't claim the ball.
     setVec(Position, world.keeper, GOAL_X - 0.5, 3, 0)
     playOut(world)
-    expect(world.outcome).toBe('goal')
-    expect(world.stats.shots).toBe(1)
+    expect(world.event).toMatchObject({ kind: 'goal', team: RED })
+    expect(world.stats[RED]).toMatchObject({ goals: 1, shots: 1 })
+    expect(world.restart).toMatchObject({ kind: 'kick-off', team: BLUE })
+  })
+
+  test('an own goal counts for the other team', () => {
+    const world = rolling(-GOAL_X + 3, 0, -9, 0, 'striker')
+    setVec(Position, world.teams[RED].keeper, -GOAL_X + 0.5, 3, 0)
+    playOut(world)
+    expect(world.event).toMatchObject({ kind: 'goal', team: BLUE })
+    expect(world.stats[BLUE].goals).toBe(1)
+  })
+
+  test('after the pause the restart is taken by the team given it, ball at their feet', () => {
+    const world = rolling(5, PITCH_HALF_WIDTH - 1, 0, 6, 'striker')
+    playOut(world)
+    for (let i = 0; i < 120 * 3 && world.phase === 'stopped'; i++) stepMatch(world)
+    expect(world.phase).toBe('play')
+    expect(world.possession).toBe(BLUE)
+    const taker = world.teams[BLUE].outfielder
+    expect(world.striker).toBe(taker)
+    expect(hasComponent(world, taker, Attacking)).toBe(true)
+    expect(ballAtFeet(taker, world.ball)).toBe(true)
+    // Taken from where it went out, just inside the line.
+    expect(Position.x[world.ball]).toBeCloseTo(5, 3)
+    expect(Math.abs(Position.y[world.ball])).toBeLessThan(PITCH_HALF_WIDTH)
   })
 })
 
 describe('room ahead', () => {
-  test('measures the run to the nearest line, but not into the goal mouth', () => {
+  test('measures the run to the nearest line, but not into either goal mouth', () => {
     expect(roomAhead(GOAL_X - 10, 10, 1, 0)).toBeCloseTo(10, 6)
+    expect(roomAhead(-GOAL_X + 10, 10, -1, 0)).toBeCloseTo(10, 6)
     expect(roomAhead(0, PITCH_HALF_WIDTH - 4, 0, 1)).toBeCloseTo(4, 6)
     expect(roomAhead(GOAL_X - 10, 0, 1, 0)).toBe(Infinity)
+    expect(roomAhead(-GOAL_X + 10, 0, -1, 0)).toBe(Infinity)
   })
 })

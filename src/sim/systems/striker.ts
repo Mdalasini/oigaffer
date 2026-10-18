@@ -1,10 +1,11 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, TouchStyle, Velocity } from '../components'
-import { GOAL_X, PITCH_HALF_WIDTH } from '../constants'
+import { Attacking, Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { PITCH_HALF_WIDTH } from '../constants'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
+import { attackedGoalX } from '../teams'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
 const SHOT_SPEED = 25
@@ -55,10 +56,10 @@ const SHIELD_PACE = 1.2
 
 /** The striker's decisions: dribble at goal with touches, then shoot. */
 export function strikerSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Outfielder, MoveIntent, Dribbler])) {
+  for (const eid of query(world, [Attacking, Outfielder, MoveIntent, Dribbler])) {
     MoveIntent.faceX[eid] = 0
     MoveIntent.faceY[eid] = 0
-    if (world.phase !== 'approach') {
+    if (world.phase !== 'play') {
       MoveIntent.vx[eid] = 0
       MoveIntent.vy[eid] = 0
       Dribbler.style[eid] = TouchStyle.None
@@ -66,21 +67,22 @@ export function strikerSystem(world: Match, dt: number) {
     }
 
     const ball = world.ball
-    const toGoalX = GOAL_X - Position.x[ball]
+    const goalX = attackedGoalX(Team.id[eid])
+    const toGoalX = goalX - Position.x[ball]
     const toGoalY = -Position.y[ball]
     const distance = Math.hypot(toGoalX, toGoalY)
     const dirX = toGoalX / distance
     const dirY = toGoalY / distance
 
-    const chased = world.defenderActive && isChased(world, dirX, dirY)
+    const chased = isChased(world, dirX, dirY)
     const shootDistance = world.shootDistance + (chased ? CHASED_SHOOT_EARLIER : 0)
-    if (canPlayBall(world, eid) && wantsToShoot(world, eid, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
-      shoot(world, eid)
+    if (canPlayBall(world, eid) && wantsToShoot(world, eid, goalX, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+      shoot(world, eid, goalX)
       continue
     }
 
-    if (world.defenderActive && shield(world, eid, dirX, dirY, dt)) continue
-    if (world.defenderActive && takeOn(world, eid, dirX, dirY, dt)) continue
+    if (shield(world, eid, dirX, dirY, dt)) continue
+    if (takeOn(world, eid, dirX, dirY, dt)) continue
     TakeOn.side[eid] = 0
 
     // Knock it long while the next contact would still come before shooting range,
@@ -92,11 +94,11 @@ export function strikerSystem(world: Match, dt: number) {
   }
 }
 
-function wantsToShoot(world: Match, eid: number, distance: number, shootDistance: number) {
+function wantsToShoot(world: Match, eid: number, goalX: number, distance: number, shootDistance: number) {
   if (!world.shootRequested && distance > shootDistance) return false
-  const facingGoal = Math.atan2(-Position.y[eid], GOAL_X - Position.x[eid])
+  const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
   if (Math.abs(angleDelta(Facing.angle[eid], facingGoal)) > MAX_SHOT_TURN) return false
-  return world.shootRequested || !world.defenderActive || laneClear(world)
+  return world.shootRequested || laneClear(world, goalX)
 }
 
 /** Whether a defender who has been beaten is close behind. */
@@ -107,7 +109,7 @@ function isChased(world: Match, gx: number, gy: number) {
 }
 
 /** Whether the defender is out of the way of a shot at this attack's aim point. */
-function laneClear(world: Match) {
+function laneClear(world: Match, goalX: number) {
   const { ball, defender, keeper } = world
   const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
   return distanceToSegment(
@@ -115,7 +117,7 @@ function laneClear(world: Match) {
     Position.y[defender],
     Position.x[ball],
     Position.y[ball],
-    GOAL_X,
+    goalX,
     aim.y,
   ) > LANE_CLEARANCE
 }
@@ -251,21 +253,22 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
   return Math.hypot(px - (ax + dx * t), py - (ay + dy * t))
 }
 
-function shoot(world: Match, striker: number) {
+function shoot(world: Match, striker: number, goalX: number) {
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
   const aim = chooseAim(from.y, Position.y[keeper], world.aimHigh)
   const radius = shotSpreadRadius(Outfielder.shooting[striker])
   const target = sampleShotTarget(world.rng, aim, radius)
-  const v = launchVelocity(from, target, SHOT_SPEED)
+  const v = launchVelocity(from, target, SHOT_SPEED, goalX)
   setVec(Velocity, ball, v.x, v.y, v.z)
 
   Goalkeeper.reactTimer[keeper] = reactionDelay(Goalkeeper.reaction[keeper])
   Dribbler.style[striker] = TouchStyle.None
-  world.shot = { origin: from, aim, radius, target, crossing: null }
+  const team = Team.id[striker]
+  world.shot = { team, goalX, origin: from, aim, radius, target, crossing: null }
   world.shootRequested = false
   world.lastTouch = null
   world.lastTouchedBy = striker
-  world.stats.shots++
+  world.stats[team].shots++
   setPhase(world, 'shot')
 }

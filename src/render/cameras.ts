@@ -1,4 +1,4 @@
-import { GOAL_DEPTH, GOAL_HALF_WIDTH, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../sim/constants'
+import { GOAL_DEPTH, GOAL_HALF_WIDTH, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../sim/constants'
 import type { Vec3 } from '../sim/shooting'
 import { cross, lookAt, multiply, ortho, type Mat4 } from './mat4'
 
@@ -41,13 +41,13 @@ const GOAL_VIEW_DISTANCE = 12
 /** Only draw what is this close to the goal line, so the striker never blocks the view. */
 const GOAL_VIEW_DEPTH = 8
 
-/** The inset: the goal mouth face-on, as the striker sees it. */
-export function goalCamera(aspect: number): Camera {
+/** The inset: the goal mouth at `goalX` face-on, as the striker attacking it sees it. */
+export function goalCamera(aspect: number, goalX: number): Camera {
   const halfW = GOAL_HALF_WIDTH + 1.9
   const halfH = halfW / aspect
   const centreZ = halfH - 0.45
-  const eye = { x: GOAL_X - GOAL_VIEW_DISTANCE, y: 0, z: centreZ }
-  const { view, right, up } = lookAt(eye, { x: GOAL_X, y: 0, z: centreZ }, { x: 0, y: 0, z: 1 })
+  const eye = { x: goalX - Math.sign(goalX) * GOAL_VIEW_DISTANCE, y: 0, z: centreZ }
+  const { view, right, up } = lookAt(eye, { x: goalX, y: 0, z: centreZ }, { x: 0, y: 0, z: 1 })
   const projection = ortho(-halfW, halfW, -halfH, halfH, GOAL_VIEW_DISTANCE - GOAL_VIEW_DEPTH, 40)
   return { viewProjection: multiply(projection, view), right, up, forward: cross(up, right), ballScale: 1.6 }
 }

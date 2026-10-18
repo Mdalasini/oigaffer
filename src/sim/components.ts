@@ -43,6 +43,17 @@ export const MoveIntent = {
 
 export const Ball = {}
 
+/** Which side a player is on: team 0 attacks the goal at +x, team 1 the goal at -x. */
+export const Team = {
+  id: new Uint8Array(MAX_ENTITIES),
+}
+
+/** The outfielder whose team has the ball: carries it, takes the defender on and shoots. */
+export const Attacking = {}
+
+/** The outfielder whose team is without the ball: jockeys, challenges and tries to win it back. */
+export const Defending = {}
+
 export const Outfielder = {
   shooting: new Uint8Array(MAX_ENTITIES),
   /** Touch accuracy: how true the ball goes where the player meant it to. */
@@ -125,6 +136,8 @@ export const Defender = {
   actionDirY: new Float32Array(MAX_ENTITIES),
   /** Whether the current challenge has already met the ball or player. */
   contacted: new Uint8Array(MAX_ENTITIES),
+  /** Seconds before they may challenge: a player who has just lost the ball needs a moment to turn. */
+  challengeDelay: new Float32Array(MAX_ENTITIES),
 }
 
 /** The ball carrier's plan for beating the defender in front of them. */

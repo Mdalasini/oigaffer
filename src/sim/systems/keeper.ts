@@ -1,7 +1,8 @@
 import { query } from 'bitecs'
-import { Facing, Goalkeeper, Position, Velocity } from '../components'
-import { GOAL_HALF_WIDTH, GOAL_X } from '../constants'
+import { Facing, Goalkeeper, Position, Team, Velocity } from '../components'
+import { GOAL_HALF_WIDTH } from '../constants'
 import type { Match } from '../match'
+import { ownGoalX } from '../teams'
 
 /** How far off the line the keeper comes to narrow the angle. */
 const ADVANCE = 1.5
@@ -11,18 +12,18 @@ const DIVE_ACCEL = 26
 /** Furthest the keeper's centre goes beyond a post. */
 const POST_OVERRUN = 0.4
 
+/** Each keeper guards their own goal; the one facing a shot dives for it. */
 export function keeperSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Goalkeeper, Position, Velocity, Facing])) {
+  for (const eid of query(world, [Goalkeeper, Position, Velocity, Facing, Team])) {
     // Keepers stay square to the ball; their dives are lateral, so they move
     // outside the locomotion model.
     Facing.angle[eid] = Math.atan2(Position.y[world.ball] - Position.y[eid], Position.x[world.ball] - Position.x[eid])
-    if (world.phase === 'approach') setPosition(world, eid, dt)
-    else if (world.phase === 'shot') dive(world, eid, dt)
-    else {
+    if (world.phase === 'shot' && eid === world.keeper) dive(world, eid, dt)
+    else if (world.phase === 'stopped') {
       const decay = Math.exp(-6 * dt)
       Velocity.x[eid] *= decay
       Velocity.y[eid] *= decay
-    }
+    } else setPosition(world, eid, dt)
     Position.x[eid] += Velocity.x[eid] * dt
     Position.y[eid] += Velocity.y[eid] * dt
     const limit = GOAL_HALF_WIDTH + POST_OVERRUN
@@ -33,13 +34,14 @@ export function keeperSystem(world: Match, dt: number) {
   }
 }
 
-/** Stand on the line between the ball and the centre of goal. */
+/** Stand just off the line, between the ball and the centre of goal. */
 function setPosition(world: Match, eid: number, dt: number) {
   const ball = world.ball
-  const bx = Position.x[ball] - GOAL_X
+  const lineX = ownGoalX(Team.id[eid])
+  const bx = Position.x[ball] - lineX
   const by = Position.y[ball]
   const len = Math.hypot(bx, by) || 1
-  const tx = GOAL_X + (bx / len) * ADVANCE
+  const tx = lineX + (bx / len) * ADVANCE
   const ty = clamp((by / len) * ADVANCE * 2, -(GOAL_HALF_WIDTH - 0.5), GOAL_HALF_WIDTH - 0.5)
   const dx = tx - Position.x[eid]
   const dy = ty - Position.y[eid]
@@ -59,7 +61,8 @@ function dive(world: Match, eid: number, dt: number) {
   }
   const ball = world.ball
   const vx = Velocity.x[ball]
-  const t = vx > 0 ? Math.max(0, (Position.x[eid] - Position.x[ball]) / vx) : 0
+  // Time until the ball reaches the keeper's line, if it's coming towards it.
+  const t = vx !== 0 ? Math.max(0, (Position.x[eid] - Position.x[ball]) / vx) : 0
   const predictedY = Position.y[ball] + Velocity.y[ball] * t
   const desired = clamp((predictedY - Position.y[eid]) * 10, -DIVE_SPEED, DIVE_SPEED)
   const change = clamp(desired - Velocity.y[eid], -DIVE_ACCEL * dt, DIVE_ACCEL * dt)

@@ -1,5 +1,5 @@
-import { query } from 'bitecs'
-import { Body, Defender, DefenderMode, Position, Velocity } from '../components'
+import { hasComponent, query } from 'bitecs'
+import { Body, Defender, DefenderMode, Defending, Position, Velocity } from '../components'
 import { getUp, resolveBarge, resolveSlideTackle, resolveStandingTackle, slideReachesBall } from '../challenge'
 import type { Match } from '../match'
 
@@ -13,13 +13,14 @@ const GROUND_TIME = 1.1
 const BARGE_DURATION = 0.35
 
 /**
- * Plays out the defender's tackles, slides and barges once they've committed
- * to them. Contact only counts in open play, but a slide still runs out and a
- * grounded defender still gets up after the attack ends.
+ * Plays out tackles, slides and barges once a player has committed to them.
+ * Contact only counts in open play and while still defending, but a slide
+ * still runs out and a grounded player still gets up after play stops or the
+ * ball changes hands.
  */
 export function challengeSystem(world: Match, dt: number) {
-  const live = world.phase === 'approach'
   for (const eid of query(world, [Defender, Position, Velocity])) {
+    const live = world.phase === 'play' && hasComponent(world, eid, Defending)
     const mode = Defender.mode[eid]
     if (mode === DefenderMode.Jockey || mode === DefenderMode.Run) continue
     const t = (Defender.actionTime[eid] += dt)
@@ -30,7 +31,7 @@ export function challengeSystem(world: Match, dt: number) {
       Velocity.x[eid] = Velocity.y[eid] = 0
       if (t >= GROUND_TIME) getUp(world, eid)
     } else if (!live) {
-      // A tackle or barge still in its windup when the attack ends is called off.
+      // A tackle or barge still in its windup when play stops, or the ball changes hands, is called off.
       Defender.mode[eid] = DefenderMode.Jockey
     } else if (mode === DefenderMode.StandTackle) {
       if (!Defender.contacted[eid] && t >= STAND_WINDUP) {

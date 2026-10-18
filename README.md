@@ -3,8 +3,14 @@
 A football match simulation. The simulation is fully 3D (metres, z-up, ballistic
 ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 
-Currently: a striker runs at goal against a defender and a goalkeeper, over and over,
-on a small-sided 44 m × 28 m pitch with full-size goals.
+Currently: a 1v1 match between two teams, Red and Blue, each with one outfielder and a
+goalkeeper, on a small-sided 44 m × 28 m pitch with full-size goals. Red attacks the
+goal at +x, Blue the one at -x.
+
+- **Possession** — whichever outfielder's team has the ball attacks (dribbles, takes
+  the other on, shoots); the other defends. Win the ball back with a tackle or an
+  interception and the roles swap on the spot: the new attacker turns and goes the
+  other way, while the player who lost it needs a moment before challenging again.
 
 - **Shooting grade (1–20)** — the striker aims at a corner, and the ball lands
   uniformly inside a circle around that aim point on the goal plane. Better
@@ -41,17 +47,20 @@ on a small-sided 44 m × 28 m pitch with full-size goals.
   under its sole on the far side, and tackles through its body rarely work.
   **Strength (1–20)** decides barges.
 
-- **Out of play** — once the whole ball is over a touchline or the goal line,
-  open play ends with the restart going against whoever touched it last:
-  goal kick or a defence throw-in off the striker (counted as *lost*), corner
-  or an attack throw-in off the defender (counted as a *set piece*). A ball
-  that rolls into the net is still a goal. The striker only knocks the ball
-  long when there's room on the pitch for it, and takes defenders on the
-  infield side near a touchline.
+- **Out of play and restarts** — once the whole ball is over a touchline or a
+  goal line, play stops and the restart goes against whoever touched it last:
+  a throw-in, a corner, or a goal kick. After a goal the other team kicks off.
+  Restarts are taken by the outfielder starting with the ball at their feet,
+  with the opponent standing off goal-side. A ball that rolls into a net is a
+  goal, own goals included. A save or a keeper gathering a loose ball also
+  gives the keeper's team the restart. The carrier only knocks the ball long
+  when there's room on the pitch for it, and takes defenders on the infield
+  side near a touchline.
 
-The main view fits the whole pitch: lengthways across a landscape screen, up a
-portrait one. The inset "striker's view" is a second camera on the same 3D scene, looking at
-the goal mouth face-on so you can see the spread circle and where shots go.
+The scoreboard shows goals, shots, shots saved and times each team won the
+ball back. The main view fits the whole pitch: lengthways across a landscape screen, up a
+portrait one. The inset goal view is a second camera on the same 3D scene, looking face-on at
+the goal under attack so you can see the spread circle and where shots go.
 
 ## Stack
 
@@ -64,12 +73,13 @@ bun install
 bun run dev
 ```
 
-Space shoots early, R restarts the attack. `bun test` runs the simulation tests;
+Space makes whoever has the ball shoot early, R starts a new match. Each team's
+grades are set from its tab in the control panel. `bun test` runs the simulation tests;
 `bun run build` typechecks and builds.
 
 ## Layout
 
-- `src/sim` — the ECS world: components, systems (striker and defender decisions, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
+- `src/sim` — the ECS world: components, teams, systems (attacking and defending decisions, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
 - `src/render` — WebGL renderer, cameras (top-down and goal-face orthographic) and the scene built from the world.
 - `src/game` — fixed-step loop tying the simulation to the renderer, plus a store for the UI.
 - `src/ui` — React HUD and controls.
