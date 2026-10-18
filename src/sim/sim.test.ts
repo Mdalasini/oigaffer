@@ -6,7 +6,7 @@ import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
 import { OffBall, OnBall, Position, Pressing } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
-import { createMatch, stepMatch, winBall } from './match'
+import { createMatch, resetMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
 
 describe('grades', () => {
@@ -108,6 +108,16 @@ describe('match outcomes', () => {
     for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
       if (eid !== blue && eid !== red) expect(OffBall.decideIn[eid]).toBeGreaterThanOrEqual(0.2)
     }
+  })
+
+  test('a restart while a pass is being shaped calls the pass off', () => {
+    const world = createMatch({ outfielders: 4, seed: 3 })
+    const cues: string[] = []
+    while (!world.windup) stepMatch(world)
+    world.onCue = (c) => cues.push(c.kind)
+    resetMatch(world)
+    expect(world.windup).toBeNull()
+    expect(cues[0]).toBe('passCalledOff')
   })
 
   test('a shot blocked straight back to the shooter is not struck again and again', () => {

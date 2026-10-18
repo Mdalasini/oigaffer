@@ -690,6 +690,7 @@ export function takeRestart(world: Match) {
 
   world.shot = null
   world.pass = null
+  if (world.windup) cue(world, { kind: 'passCalledOff', option: world.windup.option })
   world.windup = null
   // Nobody can be offside from a throw-in, a corner or a goal kick.
   clearOffside(world)
