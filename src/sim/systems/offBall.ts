@@ -4,6 +4,7 @@ import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
 import { attackingIntent, endRun, tickRun } from '../attacking'
 import { coverSpot, lineTarget, pressCue, trapping } from './defending'
 import type { Match } from '../match'
+import { view, type View } from '../perception'
 import { setTarget, steer } from '../movement'
 import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
@@ -48,6 +49,9 @@ const MARK_BALL_SHADE = 1
  */
 const MARK_WHEN_AHEAD = 2
 const MARK_FROM_BEHIND = 5
+
+/** Scratch for where a marker reckons their man is. */
+const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
 
 /**
  * The outfielders without a job on the ball: the carrier's teammates hold
@@ -98,7 +102,10 @@ function nextLook(world: Match, eid: number): number {
   const by = Position.y[ball]
   let distance = Math.hypot(Position.x[eid] - bx, Position.y[eid] - by)
   const man = Mark.target[eid]
-  if (man !== -1) distance = Math.min(distance, Math.hypot(Position.x[man] - bx, Position.y[man] - by))
+  if (man !== -1) {
+    view(world, eid, man, seen)
+    distance = Math.min(distance, Math.hypot(seen.x - bx, seen.y - by))
+  }
   if (Run.phase[eid] !== RunPhase.None || OffBall.showing[eid]) distance = 0
   const far = clamp((distance - NEAR_BALL) / (FAR_FROM_BALL - NEAR_BALL), 0, 1)
   const every = DECIDE_EVERY + (FAR_EVERY - DECIDE_EVERY) * far
@@ -113,7 +120,9 @@ function nextLook(world: Match, eid: number): number {
  * with the ball and keeps the team compact. A defender with a man moves off
  * that place to pick him up as he becomes a threat: goal-side of him once
  * he's nearer goal than the ball, tighter the nearer he is to it. A man well
- * behind the ball is watched from the zone, not followed.
+ * behind the ball is watched from the zone, not followed. They mark him
+ * where they reckon he is: a man who has slipped out of sight is marked where
+ * he was last seen, heading the way he was going, until they look again.
  */
 function defend(world: Match, eid: number) {
   const ball = world.ball
@@ -124,8 +133,9 @@ function defend(world: Match, eid: number) {
   let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : homePosition(world, eid)
   const man = Mark.target[eid]
   if (man !== -1) {
-    const mx = Position.x[man]
-    const my = Position.y[man]
+    view(world, eid, man, seen)
+    const mx = seen.x
+    const my = seen.y
     if (Mark.cover[eid]) {
       // Covering and marking at once: shade across towards the side the man is on.
       const toGoal = unit(goalX - bx, -by)

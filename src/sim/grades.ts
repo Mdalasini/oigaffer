@@ -139,9 +139,13 @@ export function offsideMisjudgement(decisions: number): number {
   return lerp(1, 0.2, gradeT(decisions))
 }
 
-/** Seconds a marker takes to pick up a run made behind their back. */
-export function blindSideDelay(positioning: number): number {
-  return lerp(0.8, 0.15, gradeT(positioning))
+/**
+ * How often (per second) a marker checks where their man is, between scans.
+ * The best keep him in mind several times a second; the worst lose him
+ * whenever he's out of sight.
+ */
+export function manCheckRate(positioning: number): number {
+  return lerp(0.4, 3, gradeT(positioning))
 }
 
 /** Seconds between choosing a pass and striking it: the look, the set and the backswing. */
