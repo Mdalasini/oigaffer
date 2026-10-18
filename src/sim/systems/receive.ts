@@ -3,6 +3,7 @@ import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
 import { cleanTakeSpeed, firstTouchError, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { rollDistanceIn, rollStopTime } from '../passing'
+import { offsideOffence, playedBy } from '../offside'
 import { gaussian } from '../rng'
 import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
@@ -94,6 +95,7 @@ export function receiveSystem(world: Match, _dt: number) {
   const eid = pass.to
   const ball = world.ball
   if (!canPlayBall(world, eid) || !ballAtFeet(eid, ball)) return
+  if (offsideOffence(world, eid)) return
 
   const firstTouch = Outfielder.firstTouch[eid]
   const rx = Velocity.x[ball] - Velocity.x[eid]
@@ -116,6 +118,7 @@ export function receiveSystem(world: Match, _dt: number) {
   world.lastTouch = { by: eid, style, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true
+  playedBy(world, eid)
   world.stats[world.possession].completed++
   world.pass = null
 }

@@ -5,6 +5,7 @@ import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
+import { playedBy } from '../offside'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
 import { attackedGoalX } from '../teams'
 import { choosePass, strikePass } from '../playmaking'
@@ -279,6 +280,7 @@ function shoot(world: Match, carrier: number, goalX: number) {
   world.lastTouch = null
   world.lastTouchedBy = carrier
   world.lastTouchDeliberate = true
+  playedBy(world, carrier)
   world.stats[team].shots++
   setPhase(world, 'shot')
 }

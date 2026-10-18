@@ -72,6 +72,14 @@ export const Outfielder = {
   decisions: new Uint8Array(MAX_ENTITIES),
 }
 
+/**
+ * Set when a teammate last played the ball while this player was in an
+ * offside position. Getting involved while it's set is an offence.
+ */
+export const Offside = {
+  flagged: new Uint8Array(MAX_ENTITIES),
+}
+
 /** A player on the ball looking for a pass: the match time at which they next weigh their options. */
 export const Passer = {
   nextLook: new Float32Array(MAX_ENTITIES),

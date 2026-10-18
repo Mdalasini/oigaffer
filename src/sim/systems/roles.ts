@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Defender, DefenderMode, Position, Sliding, Velocity } from '../components'
+import { Defender, DefenderMode, Offside, Position, Sliding, Velocity } from '../components'
 import { engage, handOver, quickestTo, type Match } from '../match'
 import { arrivalTime } from '../space/arrival'
 import { opponent } from '../teams'
@@ -51,6 +51,7 @@ export function rolesSystem(world: Match, _dt: number) {
   // the keeper's roll-out; only a ball that's got away is anyone's.
   if (!world.pass && footDistance(carrier, ball) > CONTROL_RADIUS && !comingTo(world, carrier)) {
     const mate = quickestTo(world, world.possession, bx, by, carrier)
-    if (time(mate) < time(carrier) - LOOSE_HANDOVER) handOver(world, mate)
+    // A teammate who'd be offside leaves it.
+    if (!Offside.flagged[mate] && time(mate) < time(carrier) - LOOSE_HANDOVER) handOver(world, mate)
   }
 }

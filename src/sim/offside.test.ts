@@ -1,0 +1,133 @@
+import { describe, expect, test } from 'bun:test'
+import { Facing, Offside, Position, Velocity } from './components'
+import { BALL_RADIUS, GOAL_X } from './constants'
+import { createMatch, setVec, stepMatch, type Match } from './match'
+import { inOffsidePosition } from './offside'
+import { passOptions, strikePass, type PassOption } from './playmaking'
+import { FOOT_OFFSET } from './touch'
+
+const RED = 0
+const BLUE = 1
+
+function place(eid: number, x: number, y: number, facing = 0) {
+  setVec(Position, eid, x, y, 0)
+  setVec(Velocity, eid, 0, 0, 0)
+  Facing.angle[eid] = facing
+}
+
+/**
+ * Red on the ball at (x, 0) attacking +x, Red's teammate at (mx, my), Blue's
+ * two outfielders out wide at (d1, -10) and (d2, 10), out of the way of a
+ * pass, and Blue's keeper on their line.
+ */
+function scene(x: number, mx: number, my: number, d1: number, d2: number): Match {
+  const world = createMatch({ seed: 1 })
+  const [carrier, mate] = world.teams[RED].outfielders
+  const [blueA, blueB] = world.teams[BLUE].outfielders
+  world.carrier = carrier
+  place(carrier, x, 0)
+  setVec(Position, world.ball, x + FOOT_OFFSET, 0, BALL_RADIUS)
+  setVec(Velocity, world.ball, 0, 0, 0)
+  place(mate, mx, my, Math.PI)
+  place(blueA, d1, -10, Math.PI)
+  place(blueB, d2, 10, Math.PI)
+  place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+  return world
+}
+
+/** A pass to feet from the carrier to their teammate, as if it had been chosen. */
+function passTo(world: Match, mate: number): PassOption {
+  const x = Position.x[mate]
+  const y = Position.y[mate]
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  return { receiver: mate, kind: 'feet', x, y, speed: 6 + Math.hypot(x - bx, y - by) * 0.35, safety: 1, value: 1 }
+}
+
+function play(world: Match, seconds: number) {
+  for (let i = 0; i < seconds * 120 && world.phase === 'play'; i++) stepMatch(world)
+}
+
+describe('offside position', () => {
+  test('beyond the second-last defender and the ball, in the opponents’ half', () => {
+    const world = scene(0, 12, 3, 8, 10)
+    expect(inOffsidePosition(world, world.teams[RED].outfielders[1])).toBe(true)
+  })
+
+  test('level with the second-last defender, behind the ball, or in their own half, is onside', () => {
+    const world = scene(0, 10, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    expect(inOffsidePosition(world, mate)).toBe(false)
+    place(mate, -3, 3)
+    place(world.teams[BLUE].outfielders[0], -8, -6)
+    expect(inOffsidePosition(world, mate)).toBe(false)
+    // Ahead of everyone but behind the ball.
+    place(world.carrier, 15, 0)
+    setVec(Position, world.ball, 15.3, 0, BALL_RADIUS)
+    place(mate, 13, 3)
+    expect(inOffsidePosition(world, mate)).toBe(false)
+  })
+})
+
+describe('the offence', () => {
+  test('receiving a pass from an offside position stops play for an indirect free kick where they were', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    let offsides = 0
+    world.onEvent = (e) => e.kind === 'offside' && offsides++
+    strikePass(world, world.carrier, passTo(world, mate))
+    expect(Offside.flagged[mate]).toBe(1)
+    play(world, 4)
+    expect(offsides).toBe(1)
+    expect(world.stats[RED].offsides).toBe(1)
+    expect(world.phase).toBe('stopped')
+    expect(world.restart?.kind).toBe('free-kick')
+    expect(world.restart?.team).toBe(BLUE)
+    expect(Math.abs((world.restart?.x ?? 0) - Position.x[mate])).toBeLessThan(1)
+  })
+
+  test('a player onside when it is played can run beyond the line to take it', () => {
+    const world = scene(-5, 7, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    strikePass(world, world.carrier, { ...passTo(world, mate), kind: 'through', x: 14, y: 2, speed: 13 })
+    expect(Offside.flagged[mate]).toBe(0)
+    play(world, 3)
+    expect(world.stats[RED].offsides).toBe(0)
+  })
+
+  test('there is no offside from a throw-in', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    world.restart = { kind: 'throw-in', team: RED, x: 5, y: 15 }
+    world.phase = 'stopped'
+    world.phaseTime = 10
+    stepMatch(world)
+    expect(world.phase as string).toBe('play')
+    expect(world.offsideExempt).toBe(true)
+    // The taker's first touch judges nobody.
+    const mate = world.teams[RED].outfielders[1]
+    place(mate, 20, 3)
+    for (let i = 0; i < 120 && world.offsideExempt; i++) stepMatch(world)
+    expect(world.offsideExempt).toBe(false)
+    expect(Offside.flagged[mate]).toBe(0)
+  })
+
+  test('the other team playing the ball ends it', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    strikePass(world, world.carrier, passTo(world, mate))
+    expect(Offside.flagged[mate]).toBe(1)
+    // Blue cuts it out.
+    place(world.teams[BLUE].outfielders[0], Position.x[world.ball] + 1, Position.y[world.ball], Math.PI)
+    play(world, 1)
+    expect(world.possession).toBe(BLUE)
+    expect(Offside.flagged[mate]).toBe(0)
+  })
+})
+
+describe('players who know the law', () => {
+  test('the carrier doesn’t pass to a teammate standing offside', () => {
+    const world = scene(-5, 12, 3, 8, 10)
+    const mate = world.teams[RED].outfielders[1]
+    expect(passOptions(world, world.carrier).some((o) => o.receiver === mate)).toBe(false)
+  })
+})

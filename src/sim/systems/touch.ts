@@ -3,6 +3,7 @@ import { OnBall, Dribbler, Facing, Outfielder, Position, TouchStyle, Velocity } 
 import { BALL_RADIUS } from '../constants'
 import { touchAngleError, touchWeightError } from '../grades'
 import type { Match } from '../match'
+import { offsideOffence, playedBy } from '../offside'
 import { gaussian } from '../rng'
 import { ballAtFeet, canPlayBall, touchAngle, TOUCH_SPECS } from '../touch'
 
@@ -20,6 +21,7 @@ export function touchSystem(world: Match, _dt: number) {
     const style = Dribbler.style[eid] as TouchStyle
     if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0 || !canPlayBall(world, eid)) continue
     if (!ballAtFeet(eid, world.ball)) continue
+    if (offsideOffence(world, eid)) return
     playTouch(world, eid, style)
   }
 }
@@ -47,4 +49,5 @@ function playTouch(world: Match, eid: number, style: Exclude<TouchStyle, 0>) {
   world.lastTouch = { by: eid, style, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true
+  playedBy(world, eid)
 }

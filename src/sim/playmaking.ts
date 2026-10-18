@@ -4,6 +4,7 @@ import { BALL_RADIUS, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './cons
 import { gradeT, judgementError, passAngleError, passWeightError, spotChance } from './grades'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
+import { inOffsidePosition, playedBy } from './offside'
 import { gaussian } from './rng'
 import { arrivalTime } from './space/arrival'
 import { passSafety, teamArrival, timeOnBall } from './space/control'
@@ -121,7 +122,8 @@ export function passOptions(world: Match, carrier: number): PassOption[] {
   const team = Team.id[carrier]
   const options: PassOption[] = []
   for (const mate of world.teams[team].outfielders) {
-    if (mate === carrier || !sees(world, carrier, mate)) continue
+    // A teammate in an offside position now would be offside the moment it's played.
+    if (mate === carrier || inOffsidePosition(world, mate) || !sees(world, carrier, mate)) continue
     const feet = toFeet(world, carrier, mate)
     if (feet) options.push(feet)
     for (const lead of THROUGH_LEADS) {
@@ -235,6 +237,7 @@ export function strikePass(world: Match, carrier: number, option: PassOption) {
   world.lastTouch = null
   world.lastTouchedBy = carrier
   world.lastTouchDeliberate = true
+  playedBy(world, carrier)
   const team = Team.id[carrier]
   world.stats[team].passes++
   world.pass = { from: carrier, to: option.receiver, kind: option.kind, x: option.x, y: option.y, time: world.time }

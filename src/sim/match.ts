@@ -13,6 +13,7 @@ import {
   MoveIntent,
   OffBall,
   OffBalance,
+  Offside,
   Passer,
   Outfielder,
   Physical,
@@ -28,6 +29,7 @@ import {
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
+import { clearOffside } from './offside'
 import { homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
 import type { GoalPoint, Vec3 } from './shooting'
@@ -56,7 +58,7 @@ export type ShotOutcome = 'goal' | 'caught' | 'parried' | 'wide' | 'over' | 'blo
  * ball. `tackled` / `intercepted`: the defending team won the ball back.
  * `out`: the ball left the pitch.
  */
-export type MatchEventKind = ShotOutcome | 'claimed' | 'tackled' | 'intercepted' | 'out'
+export type MatchEventKind = ShotOutcome | 'claimed' | 'tackled' | 'intercepted' | 'out' | 'offside'
 
 export interface MatchEvent {
   kind: MatchEventKind
@@ -65,7 +67,8 @@ export interface MatchEvent {
   time: number
 }
 
-export type RestartKind = 'kick-off' | 'throw-in' | 'corner' | 'goal-kick'
+/** A free kick here is always indirect: the only kind awarded is for offside. */
+export type RestartKind = 'kick-off' | 'throw-in' | 'corner' | 'goal-kick' | 'free-kick'
 
 /** How and where play starts again once the ball is dead, and which team takes it. */
 export interface Restart {
@@ -113,6 +116,8 @@ export interface TeamStats {
   missed: number
   /** Times the team won the ball back in open play. */
   won: number
+  /** Times a player of theirs was caught offside. */
+  offsides: number
   /** Spells on the ball: from winning it or a restart until losing it or a stoppage. */
   attacks: number
 }
@@ -198,6 +203,8 @@ export interface MatchContext {
   shot: ShotInfo | null
   /** The pass on its way, until it's received or broken up. Its receiver is the carrier meanwhile. */
   pass: PassInfo | null
+  /** The restart just taken can't produce an offside, so the next touch takes no offside snapshot. */
+  offsideExempt: boolean
   /** The latest notable moment. */
   event: MatchEvent | null
   /** How play will restart, while the ball is dead. */
@@ -230,10 +237,12 @@ export interface MatchOptions {
 const CHALLENGE_DELAY_ON_LOSS = 0.6
 /** Players take this long, plus up to as long again, to react to the ball changing hands. */
 const TURNOVER_REACTION = 0.2
+/** How far (m) opponents stand from a free kick: 9.15 m scaled to this pitch. */
+const FREE_KICK_DISTANCE = 5
 /** Reach (m) that counts as getting to the ball. */
 const CONTROL_REACH = 0.9
 
-const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, attacks: 0 })
+const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, offsides: 0, attacks: 0 })
 
 export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
@@ -255,6 +264,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     shootRequested: false,
     shot: null,
     pass: null,
+    offsideExempt: false,
     event: null,
     restart: null,
     stats: [emptyStats(), emptyStats()],
@@ -294,7 +304,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -357,6 +367,8 @@ export function kickOff(world: Match, team: number) {
 export function setPossession(world: Match, team: number, carrier: number) {
   const lost = world.carrier
   world.pass = null
+  // The other team has played it on purpose, which ends any offside.
+  clearOffside(world)
   world.possession = team
   world.keeper = world.teams[opponent(team)].keeper
   world.stats[team].attacks++
@@ -515,7 +527,15 @@ function takeInHands(world: Match, keeper: number) {
 }
 
 /** The ball has gone out: play stops, and `team` restarts from about (x, y). */
-export function ballOut(world: Match, kind: Exclude<RestartKind, 'kick-off'>, team: number, x: number, y: number) {
+/** `offender` was offside and got involved: the other team has an indirect free kick where they were. */
+export function offsideCalled(world: Match, offender: number) {
+  const team = Team.id[offender]
+  world.stats[team].offsides++
+  stopPlay(world, 'free-kick', opponent(team), Position.x[offender], Position.y[offender])
+  record(world, 'offside', team)
+}
+
+export function ballOut(world: Match, kind: Exclude<RestartKind, 'kick-off' | 'free-kick'>, team: number, x: number, y: number) {
   stopPlay(world, kind, team, x, y)
   record(world, 'out', team)
 }
@@ -569,6 +589,10 @@ export function takeRestart(world: Match) {
     bx = ownGoalX(team) + dir * GOAL_AREA_DEPTH
     by = (rng() < 0.5 ? -1 : 1) * 3
     standOff = 12
+  } else if (kind === 'free-kick') {
+    bx = clamp(restart.x, -L + 1, L - 1)
+    by = clamp(restart.y, -W + 1, W - 1)
+    standOff = FREE_KICK_DISTANCE
   }
   const faceLen = Math.hypot(faceX, faceY)
   faceX /= faceLen
@@ -629,6 +653,9 @@ export function takeRestart(world: Match) {
 
   world.shot = null
   world.pass = null
+  // Nobody can be offside from a throw-in, a corner or a goal kick.
+  clearOffside(world)
+  world.offsideExempt = kind === 'throw-in' || kind === 'corner' || kind === 'goal-kick'
   world.lastTouch = null
   world.lastChallenge = null
   world.lastTouchedBy = taker
