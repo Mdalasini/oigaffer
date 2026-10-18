@@ -37,7 +37,7 @@ export interface GameSnapshot {
   grades: Grades
   /** What the defending outfielder is doing, in open play. */
   defenderMode: DefenderMode | null
-  strikerShielding: boolean
+  carrierShielding: boolean
   /** The latest tackle or barge, for a moment after it happens. */
   challenge: { kind: ChallengeKind; result: ChallengeResult } | null
 }
@@ -131,7 +131,7 @@ export class Game {
   /** The goal under attack, or the one a shot went at until play restarts. */
   private goalInView() {
     const m = this.match
-    return m.shot ? m.shot.goalX : attackedGoalX(Team.id[m.striker])
+    return m.shot ? m.shot.goalX : attackedGoalX(Team.id[m.carrier])
   }
 
   private takeSnapshot(): GameSnapshot {
@@ -149,14 +149,14 @@ export class Game {
         ]),
       ) as Grades,
       defenderMode: this.defenderMode(),
-      strikerShielding: this.strikerShielding(),
+      carrierShielding: this.carrierShielding(),
       challenge: this.recentChallenge(),
     }
   }
 
-  private strikerShielding() {
+  private carrierShielding() {
     const m = this.match
-    return m.phase === 'play' && Shield.active[m.striker] === 1
+    return m.phase === 'play' && Shield.active[m.carrier] === 1
   }
 
   private recentChallenge() {
@@ -174,7 +174,7 @@ export class Game {
 
   private defenderMode(): DefenderMode | null {
     const m = this.match
-    return m.phase === 'play' ? (Defender.mode[m.defender] as DefenderMode) : null
+    return m.phase === 'play' ? (Defender.mode[m.presser] as DefenderMode) : null
   }
 
   private publishIfChanged() {
@@ -189,7 +189,7 @@ export class Game {
       m.restart?.kind,
       ...m.stats.flatMap((s) => Object.values(s)),
       this.defenderMode(),
-      this.strikerShielding(),
+      this.carrierShielding(),
       challenge && `${challenge.kind}:${challenge.result}:${m.lastChallenge?.time}`,
       ...grades,
     ].join('|')

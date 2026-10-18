@@ -88,7 +88,7 @@ export function App() {
           <div className="flex items-center gap-2 rounded-md bg-black/55 px-2.5 py-1 text-xs backdrop-blur">
             <span className={`size-2 rounded-full ${TEAM_STYLE[defending].dot}`} />
             {TEAM_STYLE[defending].name} defending: <span className="font-semibold">{DEFENDER_MODE_LABEL[snapshot.defenderMode]}</span>
-            {snapshot.strikerShielding && <span className={TEAM_STYLE[snapshot.possession].text}>· {TEAM_STYLE[snapshot.possession].name} shielding</span>}
+            {snapshot.carrierShielding && <span className={TEAM_STYLE[snapshot.possession].text}>· {TEAM_STYLE[snapshot.possession].name} shielding</span>}
           </div>
         )}
       </div>

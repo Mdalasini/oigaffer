@@ -1,7 +1,7 @@
 import { addComponent, query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { bodyBetween, EXPOSED_DISTANCE, STAND_CONE, STAND_REACH } from '../challenge'
-import { Defender, DefenderMode, Defending, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from '../components'
+import { Defender, DefenderMode, Pressing, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from '../components'
 import { gradeT, readLag, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { attackedGoalX } from '../teams'
@@ -49,7 +49,7 @@ const BARGE_DRIVE = 1.5
  * Running is fast but reads late and turns wide.
  */
 export function defenderSystem(world: Match, dt: number) {
-  for (const eid of query(world, [Defending, Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
+  for (const eid of query(world, [Pressing, Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
     const ball = world.ball
     if (world.phase === 'held') {
       // A slide, get-up or challenge already under way plays out first; the challenge system owns it.
@@ -63,7 +63,7 @@ export function defenderSystem(world: Match, dt: number) {
     }
 
     // The goal being attacked, which this defender is protecting.
-    const goalX = attackedGoalX(Team.id[world.striker])
+    const goalX = attackedGoalX(Team.id[world.carrier])
     Defender.challengeDelay[eid] = Math.max(0, Defender.challengeDelay[eid] - dt)
     updateRead(world, eid, dt)
     const mode = Defender.mode[eid] as DefenderMode
@@ -92,14 +92,14 @@ export function defenderSystem(world: Match, dt: number) {
  * whether they connect is settled against where the ball really is.
  */
 function maybeChallenge(world: Match, eid: number, dt: number) {
-  const { ball, striker, rng } = world
+  const { ball, carrier, rng } = world
   const toBallX = Defender.readX[eid] - Position.x[eid]
   const toBallY = Defender.readY[eid] - Position.y[eid]
   const ballDistance = Math.hypot(toBallX, toBallY)
   const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
-  const carrierDistance = Math.hypot(Position.x[striker] - Position.x[eid], Position.y[striker] - Position.y[eid])
-  const exposed = footDistance(striker, ball) > EXPOSED_DISTANCE
-  const shielded = Shield.active[striker] === 1 || bodyBetween(striker, eid, ball)
+  const carrierDistance = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
+  const exposed = footDistance(carrier, ball) > EXPOSED_DISTANCE
+  const shielded = Shield.active[carrier] === 1 || bodyBetween(carrier, eid, ball)
   const skill = gradeT(Outfielder.tackling[eid])
   const chance = (rate: number) => rng() < rate * dt
 
@@ -107,10 +107,10 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
     const rate = exposed ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
     if (chance(rate)) return startStandingTackle(eid)
   }
-  if (carrierDistance <= BARGE_RANGE && footDistance(striker, ball) < CONTROL_RADIUS) {
+  if (carrierDistance <= BARGE_RANGE && footDistance(carrier, ball) < CONTROL_RADIUS) {
     // Shoulder in on a carrier who is shielding, or who has the ball alongside.
-    const rate = Shield.active[striker] || Defender.mode[eid] === DefenderMode.Run ? BARGE_RATE : 0
-    if (chance(rate)) return startBarge(eid, striker)
+    const rate = Shield.active[carrier] || Defender.mode[eid] === DefenderMode.Run ? BARGE_RATE : 0
+    if (chance(rate)) return startBarge(eid, carrier)
   }
   const beaten = Defender.mode[eid] === DefenderMode.Run
   if (beaten && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
@@ -137,13 +137,13 @@ function startStandingTackle(eid: number) {
 }
 
 /** Drive a shoulder into the carrier. */
-function startBarge(eid: number, striker: number) {
+function startBarge(eid: number, carrier: number) {
   startAction(eid, DefenderMode.Barge)
-  const dx = Position.x[striker] - Position.x[eid]
-  const dy = Position.y[striker] - Position.y[eid]
+  const dx = Position.x[carrier] - Position.x[eid]
+  const dy = Position.y[carrier] - Position.y[eid]
   const len = Math.hypot(dx, dy) || 1
-  MoveIntent.vx[eid] = Velocity.x[striker] + (dx / len) * BARGE_DRIVE
-  MoveIntent.vy[eid] = Velocity.y[striker] + (dy / len) * BARGE_DRIVE
+  MoveIntent.vx[eid] = Velocity.x[carrier] + (dx / len) * BARGE_DRIVE
+  MoveIntent.vy[eid] = Velocity.y[carrier] + (dy / len) * BARGE_DRIVE
   MoveIntent.faceX[eid] = 0
   MoveIntent.faceY[eid] = 0
 }
@@ -213,7 +213,7 @@ function run(eid: number, goalX: number) {
 
 /** The carrier has lost control of the ball and the defender can get there first. */
 function looseAndNearer(world: Match, eid: number) {
-  const carrierDistance = footDistance(world.striker, world.ball)
+  const carrierDistance = footDistance(world.carrier, world.ball)
   return carrierDistance > CONTROL_RADIUS && footDistance(eid, world.ball) < carrierDistance
 }
 
@@ -231,7 +231,7 @@ function goForBall(eid: number) {
 
 /** Drop off goal-side of the player the keeper will roll it out to, ready to step in when it comes. */
 function markReceiver(world: Match, eid: number) {
-  const receiver = world.striker
+  const receiver = world.carrier
   const goalX = attackedGoalX(Team.id[receiver])
   const gx = goalX - Position.x[receiver]
   const gy = -Position.y[receiver]

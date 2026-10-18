@@ -38,10 +38,10 @@ export function pitchCamera(aspect: number): Camera {
 }
 
 const GOAL_VIEW_DISTANCE = 12
-/** Only draw what is this close to the goal line, so the striker never blocks the view. */
+/** Only draw what is this close to the goal line, so the attacker never blocks the view. */
 const GOAL_VIEW_DEPTH = 8
 
-/** The inset: the goal mouth at `goalX` face-on, as the striker attacking it sees it. */
+/** The inset: the goal mouth at `goalX` face-on, as a player attacking it sees it. */
 export function goalCamera(aspect: number, goalX: number): Camera {
   const halfW = GOAL_HALF_WIDTH + 1.9
   const halfH = halfW / aspect

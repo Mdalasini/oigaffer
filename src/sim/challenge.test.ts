@@ -13,14 +13,14 @@ import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
 
-/** Striker facing goal at the origin of play, defender `gap` m in front facing back at it, ball `ballAhead` m in front of the striker. */
+/** Carrier facing goal at the origin of play, defender `gap` m in front facing back at it, ball `ballAhead` m in front of the carrier. */
 function setup(seed: number, gap: number, ballAhead: number, grades: GradeOverrides = {}): Match {
   const world = createMatch({ seed, grades })
-  const { striker, defender, ball } = world
+  const { carrier, presser: defender, ball } = world
   const x = GOAL_X - 20
-  setVec(Position, striker, x, 0, 0)
-  setVec(Velocity, striker, 0, 0, 0)
-  Facing.angle[striker] = 0
+  setVec(Position, carrier, x, 0, 0)
+  setVec(Velocity, carrier, 0, 0, 0)
+  Facing.angle[carrier] = 0
   setVec(Position, defender, x + gap, 0, 0)
   setVec(Velocity, defender, 0, 0, 0)
   Facing.angle[defender] = Math.PI
@@ -36,7 +36,7 @@ function standingTackleSuccess(gap: number, ballAhead: number, grades: GradeOver
   for (let seed = 1; seed <= tries; seed++) {
     const world = setup(seed, gap, ballAhead, grades)
     place?.(world)
-    resolveStandingTackle(world, world.defender)
+    resolveStandingTackle(world, world.presser)
     const result = world.lastChallenge?.result
     if (result === 'won' || result === 'poked') successes++
   }
@@ -57,9 +57,9 @@ describe('standing tackles', () => {
   })
 
   test("tackling through the carrier's body rarely works", () => {
-    // Ball behind the striker, striker between it and the defender.
+    // Ball behind the carrier, carrier between it and the defender.
     const shielded = standingTackleSuccess(0.75, -0.45, {}, (world) => {
-      Facing.angle[world.defender] = Math.PI
+      Facing.angle[world.presser] = Math.PI
     })
     const open = standingTackleSuccess(1.9, FOOT_OFFSET + 0.9)
     expect(shielded).toBeLessThan(open / 2)
@@ -67,18 +67,18 @@ describe('standing tackles', () => {
 
   test('a ball out of reach is a miss that leaves the tackler off balance', () => {
     const world = setup(1, 4, FOOT_OFFSET)
-    resolveStandingTackle(world, world.defender)
+    resolveStandingTackle(world, world.presser)
     expect(world.lastChallenge?.result).toBe('missed')
-    expect(OffBalance.timer[world.defender]).toBeGreaterThan(0)
+    expect(OffBalance.timer[world.presser]).toBeGreaterThan(0)
   })
 })
 
 describe('barging', () => {
-  const bargeWins = (defenderStrength: number, strikerStrength: number) => {
+  const bargeWins = (defenderStrength: number, carrierStrength: number) => {
     let wins = 0
     for (let seed = 1; seed <= 300; seed++) {
-      const world = setup(seed, 0.7, FOOT_OFFSET, { blue: { outfielder: { strength: defenderStrength } }, red: { outfielder: { strength: strikerStrength } } })
-      resolveBarge(world, world.defender)
+      const world = setup(seed, 0.7, FOOT_OFFSET, { blue: { outfielder: { strength: defenderStrength } }, red: { outfielder: { strength: carrierStrength } } })
+      resolveBarge(world, world.presser)
       if (world.lastChallenge?.result === 'won') wins++
     }
     return wins / 300
@@ -91,13 +91,13 @@ describe('barging', () => {
 
   test('the loser is knocked off balance and cannot play the ball', () => {
     const world = setup(3, 0.7, FOOT_OFFSET + 0.1, { blue: { outfielder: { strength: 20 } }, red: { outfielder: { strength: 1 } } })
-    resolveBarge(world, world.defender)
+    resolveBarge(world, world.presser)
     expect(world.lastChallenge?.result).toBe('won')
-    const { striker, ball } = world
-    expect(OffBalance.timer[striker]).toBeGreaterThan(0)
-    Dribbler.style[striker] = TouchStyle.Small
-    Dribbler.dirX[striker] = 1
-    Dribbler.dirY[striker] = 0
+    const { carrier, ball } = world
+    expect(OffBalance.timer[carrier]).toBeGreaterThan(0)
+    Dribbler.style[carrier] = TouchStyle.Small
+    Dribbler.dirX[carrier] = 1
+    Dribbler.dirY[carrier] = 0
     touchSystem(world, FIXED_DT)
     expect(Velocity.x[ball]).toBe(0)
   })
@@ -106,7 +106,7 @@ describe('barging', () => {
 describe('sliding tackles', () => {
   test('a slide covers ground on momentum, goes to ground, then gets up', () => {
     const world = setup(1, -2, 6)
-    const { defender, ball } = world
+    const { presser: defender, ball } = world
     setVec(Velocity, defender, 6, 0, 0)
     Facing.angle[defender] = 0
     Defender.readX[defender] = Position.x[ball]
@@ -129,7 +129,7 @@ describe('sliding tackles', () => {
 describe('challenges across the end of an attack', () => {
   test('a defender sliding when the shot goes in still slides out and gets up', () => {
     const world = setup(1, -2, 6)
-    const { defender, ball } = world
+    const { presser: defender, ball } = world
     setVec(Velocity, defender, 6, 0, 0)
     Defender.readX[defender] = Position.x[ball]
     Defender.readY[defender] = Position.y[ball]
@@ -143,7 +143,7 @@ describe('challenges across the end of an attack', () => {
 
   test('an off-balance defender cannot gather a loose ball', () => {
     const world = setup(1, 5, FOOT_OFFSET)
-    const { ball, defender } = world
+    const { ball, presser: defender } = world
     setVec(Position, ball, Position.x[defender] - FOOT_OFFSET - 0.3, 0, BALL_RADIUS)
     OffBalance.timer[defender] = 0.3
     contestSystem(world, FIXED_DT)
@@ -152,7 +152,7 @@ describe('challenges across the end of an attack', () => {
 
   test('a shot passes over a defender on the ground', () => {
     const world = setup(1, 4, FOOT_OFFSET)
-    const { ball, defender } = world
+    const { ball, presser: defender } = world
     Defender.readX[defender] = Position.x[ball]
     Defender.readY[defender] = Position.y[ball]
     startSlide(world, defender)
@@ -166,30 +166,30 @@ describe('challenges across the end of an attack', () => {
 })
 
 describe('shielding', () => {
-  test('with the defender tight and the ball on the far side, the striker shields it', () => {
+  test('with the defender tight and the ball on the far side, the carrier shields it', () => {
     const world = setup(2, 1.1, -0.3)
-    const { striker, defender, ball } = world
-    // Ball tucked on the striker's far side from the defender.
-    Facing.angle[striker] = Math.PI
+    const { carrier, presser: defender, ball } = world
+    // Ball tucked on the carrier's far side from the defender.
+    Facing.angle[carrier] = Math.PI
     for (let i = 0; i < 20; i++) stepMatch(world)
-    expect(Shield.active[striker]).toBe(1)
-    expect(bodyBetween(striker, defender, ball)).toBe(true)
+    expect(Shield.active[carrier]).toBe(1)
+    expect(bodyBetween(carrier, defender, ball)).toBe(true)
   })
 
   test('turning away after a shield keeps to the chosen side', () => {
     const world = setup(2, 1.1, -0.3)
-    const { striker, defender } = world
-    Facing.angle[striker] = Math.PI
-    // Defender just to the left of the striker's line, so the turn away is to the right.
+    const { carrier, presser: defender } = world
+    Facing.angle[carrier] = Math.PI
+    // Defender just to the left of the carrier's line, so the turn away is to the right.
     Position.y[defender] = 0.2
-    TakeOn.checkBackTimer[striker] = 0
+    TakeOn.checkBackTimer[carrier] = 0
     for (let i = 0; i < 20; i++) stepMatch(world)
-    expect(Shield.active[striker]).toBe(1)
-    Shield.timer[striker] = 0
+    expect(Shield.active[carrier]).toBe(1)
+    Shield.timer[carrier] = 0
     stepMatch(world)
-    expect(Shield.active[striker]).toBe(0)
-    expect(TakeOn.side[striker]).toBe(-1)
-    expect(TakeOn.checkBackTimer[striker]).toBeGreaterThan(0)
+    expect(Shield.active[carrier]).toBe(0)
+    expect(TakeOn.side[carrier]).toBe(-1)
+    expect(TakeOn.checkBackTimer[carrier]).toBeGreaterThan(0)
   })
 })
 

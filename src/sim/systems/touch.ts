@@ -1,5 +1,5 @@
 import { query } from 'bitecs'
-import { Attacking, Dribbler, Facing, Outfielder, Position, TouchStyle, Velocity } from '../components'
+import { OnBall, Dribbler, Facing, Outfielder, Position, TouchStyle, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { touchAngleError, touchWeightError } from '../grades'
 import type { Match } from '../match'
@@ -16,7 +16,7 @@ export function touchCooldownSystem(world: Match, dt: number) {
 
 /** Plays each dribbler's chosen touch once the ball is at their feet. */
 export function touchSystem(world: Match, _dt: number) {
-  for (const eid of query(world, [Attacking, Dribbler, Outfielder, Position, Velocity, Facing])) {
+  for (const eid of query(world, [OnBall, Dribbler, Outfielder, Position, Velocity, Facing])) {
     const style = Dribbler.style[eid] as TouchStyle
     if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0 || !canPlayBall(world, eid)) continue
     if (!ballAtFeet(eid, world.ball)) continue

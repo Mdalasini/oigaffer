@@ -1,4 +1,4 @@
-import { Team, Velocity } from '../components'
+import { Velocity } from '../components'
 import { winBall, type Match } from '../match'
 import { ballAtFeet, canPlayBall, CONTROL_RADIUS, footDistance } from '../touch'
 
@@ -14,14 +14,14 @@ const MAX_GATHER_SPEED = 6
  */
 export function contestSystem(world: Match, _dt: number) {
   if (world.phase !== 'play') return
-  const { ball, striker, defender } = world
+  const { ball, carrier, presser: defender } = world
   if (!canPlayBall(world, defender) || !ballAtFeet(defender, ball)) return
-  const carrierDistance = footDistance(striker, ball)
+  const carrierDistance = footDistance(carrier, ball)
   const loose = carrierDistance > CONTROL_RADIUS && carrierDistance - footDistance(defender, ball) >= LOOSE_MARGIN
   const relativeSpeed = Math.hypot(Velocity.x[ball] - Velocity.x[defender], Velocity.y[ball] - Velocity.y[defender])
   if (loose && relativeSpeed <= MAX_GATHER_SPEED) {
     Velocity.x[ball] = Velocity.x[defender]
     Velocity.y[ball] = Velocity.y[defender]
-    winBall(world, Team.id[defender], 'intercepted')
+    winBall(world, defender, 'intercepted')
   }
 }

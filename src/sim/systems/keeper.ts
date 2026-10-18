@@ -103,8 +103,8 @@ function dive(world: Match, eid: number, dt: number) {
  */
 function holdAndRollOut(world: Match, eid: number) {
   const { ball } = world
-  const receiver = world.teams[Team.id[eid]].outfielder
-  const opponent = world.defender
+  const receiver = world.teams[Team.id[eid]].outfielders[0]
+  const opponent = world.presser
   setVec(Velocity, eid, 0, 0, 0)
   Facing.angle[eid] = Math.atan2(Position.y[receiver] - Position.y[eid], Position.x[receiver] - Position.x[eid])
   const fx = Math.cos(Facing.angle[eid])
@@ -132,7 +132,7 @@ function passTarget(receiver: number) {
  */
 export function passToOutfielder(world: Match, keeper: number, fromX: number, fromY: number) {
   const { ball, rng } = world
-  const receiver = world.teams[Team.id[keeper]].outfielder
+  const receiver = world.teams[Team.id[keeper]].outfielders[0]
   const { x, y } = passTarget(receiver)
   const angle = Math.atan2(y - fromY, x - fromX) + gaussian(rng) * PASS_ERROR
   const dx = Math.cos(angle)

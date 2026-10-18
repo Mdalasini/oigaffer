@@ -48,11 +48,11 @@ export const Team = {
   id: new Uint8Array(MAX_ENTITIES),
 }
 
-/** The outfielder whose team has the ball: carries it, takes the defender on and shoots. */
-export const Attacking = {}
+/** The outfielder on the ball: carries it, takes the defender on and shoots. */
+export const OnBall = {}
 
-/** The outfielder whose team is without the ball: jockeys, challenges and tries to win it back. */
-export const Defending = {}
+/** The opponent engaging the carrier: jockeys, challenges and tries to win the ball back. */
+export const Pressing = {}
 
 export const Outfielder = {
   shooting: new Uint8Array(MAX_ENTITIES),
