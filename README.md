@@ -14,9 +14,12 @@ two outfielders a side.
   stays deep and the other plays on the opposition's last line, on a diagonal.
   Without it, the block is compact and sits back from the ball. The player on
   the ball is the *carrier*. The defender quickest to the ball *presses* it.
-  The other defender covers behind the presser, sliding across to mark the
-  free attacker once that attacker gets nearer goal than the ball. The
-  presser hands over to the cover once beaten. A loose ball goes to
+  The rest share out jobs several times a second: one *covers* behind the
+  presser, between the ball and goal, and the others pick up the attackers
+  in and around their zones, goal-side of them once they're nearer goal than
+  the ball. A spare defender holds their zone in the block. With only one
+  defender behind the presser, they cover and mark at once. The presser
+  hands over to whoever is clearly quicker to the ball. A loose ball goes to
   whichever player gets there first, teammates included.
 - **Moving like footballers** — players without the ball decide a few times a
   second, at staggered moments. Each decision picks a target area, not an exact
@@ -50,10 +53,11 @@ two outfielders a side.
   passer misjudges a teammate's position against the line by up to about a
   metre, less with better decisions.
 - **Defending as a unit** — the defender quickest to the ball presses it. The
-  rest are given an attacker each, by an optimal assignment, so no two take
-  the same man and none is left free while a defender is spare. A defender
-  keeps their man unless another is clearly better placed to take him: half a
-  second quicker to get goal-side. The back line moves as one. It drops off
+  rest share out the other jobs by an optimal assignment: one covers behind
+  the presser, and the others pick up the attackers in and around their zones,
+  the more dangerous first, so no two take the same man. A spare defender
+  holds their zone. A defender keeps their job unless another is clearly
+  better placed to take it: half a second quicker to get there. The back line moves as one. It drops off
   when the carrier has time to play forward, and steps up on a pressing cue:
   the carrier facing their own goal, pinned on a touchline, or the ball played
   backwards. On a pressing cue markers also get tight. The covering defender

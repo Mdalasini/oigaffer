@@ -164,11 +164,11 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       <p className="text-xs leading-relaxed text-neutral-400">
         Red attacks to the right, Blue to the left, four outfielders and a keeper a side; outfield grades apply to all of a
         team's outfielders. Whoever has the ball takes the nearest defender on, shields when they get tight, and knocks it
-        past once clear. Their teammate holds the line, shows for it when the carrier is closed down, and runs in behind when
-        the carrier has time to play forward; a yellow ring means they're calling for it, with a line to the space they
+        past once clear. Their teammates hold their places in the shape, show for it when the carrier is closed down, and run in behind when
+        the carrier has time to play forward; a yellow ring means one is calling for it, with a line to the space they
         want it in. When a pass is the better bet it's played: a white ring marks where it's aimed, dashed for a through
-        ball. The other defender covers, and steps in once the first is
-        beaten. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
+        ball. Without the ball, one defender presses, one covers behind them, and the rest pick up the attackers around
+        their zones. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
         <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Space makes
         whoever has the ball shoot.
       </p>

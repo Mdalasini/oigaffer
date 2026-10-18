@@ -76,9 +76,14 @@ export const Outfielder = {
   positioning: new Uint8Array(MAX_ENTITIES),
 }
 
-/** The attacker a defender is responsible for (-1 for none), as their team has shared the jobs out. */
+/**
+ * A defender's job, as their team has shared the jobs out: the attacker
+ * they're responsible for (-1 for none), or covering behind the presser.
+ * With neither, they hold their zone.
+ */
 export const Mark = {
   target: new Int16Array(MAX_ENTITIES),
+  cover: new Uint8Array(MAX_ENTITIES),
 }
 
 export const RunPhase = {
