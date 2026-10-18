@@ -5,6 +5,7 @@ import {
   Ball,
   Body,
   Call,
+  Carry,
   Defender,
   DefenderMode,
   Dribbler,
@@ -347,7 +348,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call, Mark]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Carry, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call, Mark]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -438,6 +439,7 @@ export function handOver(world: Match, eid: number) {
   TakeOn.side[eid] = 0
   TakeOn.feintTimer[eid] = 0
   TakeOn.checkBackTimer[eid] = 0
+  Carry.nextLook[eid] = 0
   Shield.active[eid] = 0
   Shield.timer[eid] = 0
 }

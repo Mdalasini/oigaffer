@@ -88,6 +88,8 @@ export function ballAtFeet(player: number, ball: number): boolean {
 export const CONTROL_RADIUS = 1.5
 /** How quickly a dribbler closes the gap to where it wants its feet. */
 const CHASE_GAIN = 3
+/** Slower than this (m/s), a dribbler turns on the spot to face the way they're taking the ball. */
+const TURN_ON_BALL_BELOW = 1.5
 /** Seconds ahead a dribbler reads the ball's roll. */
 const BALL_LOOKAHEAD = 0.15
 
@@ -117,4 +119,9 @@ export function dribble(eid: number, ball: number, style: TouchStyle, dirX: numb
   }
   MoveIntent.vx[eid] = vx
   MoveIntent.vy[eid] = vy
+  // Barely moving, they turn to face the way they mean to take it, so they can get the ball onto their foot.
+  if (Math.hypot(Velocity.x[eid], Velocity.y[eid]) < TURN_ON_BALL_BELOW) {
+    MoveIntent.faceX[eid] = dirX
+    MoveIntent.faceY[eid] = dirY
+  }
 }

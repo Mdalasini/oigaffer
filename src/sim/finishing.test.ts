@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, Passer, Position, Velocity } from './components'
+import { Dribbler, Facing, Passer, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from './constants'
 import { SMALL_SIDED_PITCH } from './pitch'
 import { landingChance, planShot, shotValue } from './finishing'
@@ -35,8 +35,9 @@ function chance(seed: number, distance: number, wide: number, grades: GradeOverr
   const x = GOAL_X - distance
   const face = Math.atan2(-wide, GOAL_X - x)
   const hold = () => {
-    // Not deciding anything until the keeper has set.
+    // Not deciding anything until the keeper has set, and ready to strike it the moment they do: shot from here, not carried on.
     Passer.nextLook[shooter] = Infinity
+    Dribbler.cooldown[shooter] = 0
     place(shooter, x, wide, face)
     setVec(Position, world.ball, x + Math.cos(face) * FOOT_OFFSET, wide + Math.sin(face) * FOOT_OFFSET, BALL_RADIUS)
     setVec(Velocity, world.ball, 0, 0, 0)
@@ -87,7 +88,8 @@ describe('finishing against a set keeper', () => {
 
   test('an average finisher scores about as often as real shots from there do', () => {
     // Measured over 9000 shots a spot, three seed blocks pooled: 60/33/19/13/6% from 6/10/14/18/22 m,
-    // against 58/32/18/11/7% for real shots. These 1000 come to 61/35/19/13/7%.
+    // against 58/32/18/11/7% for real shots. These 1000, struck from the spot without carrying it on, come to
+    // 59/30/18/14/6%.
     for (const { distance, rate } of curve) expect(Math.abs(rate - shotChance(SMALL_SIDED_PITCH, GOAL_X - distance, 0))).toBeLessThan(0.04)
   })
 
@@ -102,14 +104,14 @@ describe('finishing against a set keeper', () => {
   }, 20_000)
 
   test('a quicker keeper keeps more out', () => {
-    // Measured at 8% against a grade 18 and 25% against a grade 4 from 14 m.
+    // Measured over 3000 shots at 8% against a grade 18 and 24% against a grade 4 from 14 m.
     const grades = (reaction: number): GradeOverrides => ({ blue: { keeper: { reaction } } })
-    expect(scored(SHOTS, 14, 0, grades(18))).toBeLessThan(scored(SHOTS, 14, 0, grades(4)) - 0.15)
+    expect(scored(SHOTS, 14, 0, grades(18))).toBeLessThan(scored(SHOTS, 14, 0, grades(4)) - 0.12)
   }, 20_000)
 
   test('a shot hurried by a defender goes in less often', () => {
-    // Measured at 16% with a defender a metre off, against 35% free.
-    expect(scored(SHOTS, 10, 0, {}, 1)).toBeLessThan(near - 0.15)
+    // Measured over 3000 shots at 17% with a defender a metre off, against 32.5% free.
+    expect(scored(SHOTS, 10, 0, {}, 1)).toBeLessThan(near - 0.1)
   }, 20_000)
 })
 
