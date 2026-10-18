@@ -28,15 +28,16 @@ const STAND_RATE_BASE = 0.3
 const STAND_RATE_SKILL = 1
 const STAND_RATE_SHIELDED = 0.4
 const BARGE_RATE = 1.2
-const SLIDE_RATE_BASE = 0.8
-const SLIDE_RATE_SKILL = 2
+const SLIDE_RATE_BASE = 0.2
+const SLIDE_RATE_SKILL = 0.6
 /** Barge from this close (m between centres). */
 const BARGE_RANGE = 1.05
 /** Slide in for a ball between these distances (m) from the body. */
 const SLIDE_MIN = 1.3
 const SLIDE_MAX = 3
-/** Slides start at least this fast (m/s). */
-const SLIDE_SPEED = 6.5
+/** Only a defender running at least this fast (m/s) slides in, and the slide carries them this much (m/s) faster. */
+const SLIDE_FROM_SPEED = 4
+const SLIDE_LUNGE = 1
 /** A standing tackle stretches towards the ball at this speed (m/s); a barge drives in at this much (m/s) over the carrier. */
 const LUNGE_SPEED = 1.5
 const BARGE_DRIVE = 1.5
@@ -106,8 +107,10 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
     const rate = Shield.active[carrier] || Defender.mode[eid] === DefenderMode.Run ? BARGE_RATE : 0
     if (chance(rate)) return startBarge(eid, carrier)
   }
+  // A slide is the last resort of a beaten defender at full tilt, for a ball the carrier has let out of their feet.
   const beaten = Defender.mode[eid] === DefenderMode.Run
-  if (beaten && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
+  const running = Math.hypot(Velocity.x[eid], Velocity.y[eid]) >= SLIDE_FROM_SPEED
+  if (beaten && running && exposed && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
     if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
   }
 }
@@ -151,7 +154,7 @@ export function startSlide(world: Match, eid: number) {
   Defender.actionDirX[eid] = tx / len
   Defender.actionDirY[eid] = ty / len
   Facing.angle[eid] = Math.atan2(ty, tx)
-  const speed = Math.max(Math.hypot(Velocity.x[eid], Velocity.y[eid]), SLIDE_SPEED)
+  const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid]) + SLIDE_LUNGE
   Velocity.x[eid] = Defender.actionDirX[eid] * speed
   Velocity.y[eid] = Defender.actionDirY[eid] * speed
   addComponent(world, eid, Sliding)

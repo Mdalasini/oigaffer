@@ -8,7 +8,7 @@ import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from 
 import { challengeSystem } from './systems/challenge'
 import { ballBodySystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
-import { startSlide } from './systems/defender'
+import { defenderSystem, startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
@@ -110,6 +110,44 @@ describe('barging', () => {
 })
 
 describe('sliding tackles', () => {
+  /**
+   * Share of 100 seeds in which a beaten defender, coming from behind and to
+   * the side of the carrier at `speed`, goes to ground within a second,
+   * with the ball `ballAhead` m in front of the carrier.
+   */
+  function slides(speed: number, ballAhead: number) {
+    let n = 0
+    for (let seed = 1; seed <= 100; seed++) {
+      const world = setup(seed, 0, ballAhead)
+      const { presser: defender, ball, carrier } = world
+      setVec(Position, defender, Position.x[carrier] - 0.8, 1.2, 0)
+      const angle = Math.atan2(Position.y[ball] - 1.2, Position.x[ball] - Position.x[defender])
+      setVec(Velocity, defender, Math.cos(angle) * speed, Math.sin(angle) * speed, 0)
+      Facing.angle[defender] = angle
+      Defender.mode[defender] = DefenderMode.Run
+      Defender.readX[defender] = Position.x[ball]
+      Defender.readY[defender] = Position.y[ball]
+      Defender.challengeDelay[defender] = 0
+      for (let i = 0; i < 120 && !hasComponent(world, defender, Sliding); i++) defenderSystem(world, FIXED_DT)
+      if (hasComponent(world, defender, Sliding)) n++
+    }
+    return n / 100
+  }
+
+  test('a beaten defender stays on their feet while the carrier has the ball at their feet', () => {
+    expect(slides(7, FOOT_OFFSET + 0.1)).toBe(0)
+  })
+
+  test('a beaten defender at full tilt can go to ground for a ball knocked out of the carrier’s reach, but only sometimes', () => {
+    const share = slides(7, 1.3)
+    expect(share).toBeGreaterThan(0)
+    expect(share).toBeLessThan(0.6)
+  })
+
+  test('nobody slides in from a standstill', () => {
+    expect(slides(1, 1.3)).toBe(0)
+  })
+
   test('a slide covers ground on momentum, goes to ground, then gets up', () => {
     const world = setup(1, -2, 6)
     const { presser: defender, ball } = world
