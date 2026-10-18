@@ -79,8 +79,8 @@ describe('defender', () => {
   })
 
   test('better marking and agility are harder to get past', () => {
-    const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 120)
-    const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 120)
+    const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 300)
+    const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 300)
     expect(strong).toBeLessThan(weak - 0.25)
   })
 
@@ -123,6 +123,16 @@ describe('defender', () => {
     setVec(Position, world.ball, GOAL_X - 20 + 0.8, 0, BALL_RADIUS)
     contestSystem(world, FIXED_DT)
     expect(world.event).toBeNull()
+  })
+
+  test('a blocked shot is settled, so play goes on without it', () => {
+    const world = faceOff(4)
+    shotUnderway(world)
+    setVec(Position, world.ball, GOAL_X - 16.5, 0, 0.5)
+    setVec(Velocity, world.ball, 25, 0, 0)
+    for (let i = 0; i < 10 && world.phase === 'shot'; i++) stepMatch(world)
+    expect(world.phase).toBe('play')
+    expect(world.shot).toBeNull()
   })
 
   test('a shot into the defender is blocked', () => {

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { hasComponent } from 'bitecs'
 import { Attacking, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from './constants'
-import { createMatch, setVec, stepMatch, type Match } from './match'
+import { createMatch, setVec, stepMatch, winBall, type Match } from './match'
 import { ballAtFeet, roomAhead } from './touch'
 
 const RED = 0
@@ -109,5 +109,14 @@ describe('room ahead', () => {
     expect(roomAhead(0, PITCH_HALF_WIDTH - 4, 0, 1)).toBeCloseTo(4, 6)
     expect(roomAhead(GOAL_X - 10, 0, 1, 0)).toBe(Infinity)
     expect(roomAhead(-GOAL_X + 10, 0, -1, 0)).toBe(Infinity)
+  })
+})
+
+describe('after a turnover', () => {
+  test('a ball that runs out straight off the winning tackle goes against the tackler', () => {
+    const world = rolling(0, PITCH_HALF_WIDTH - 1, 0, 6, 'striker')
+    winBall(world, BLUE, 'tackled')
+    playOut(world)
+    expect(world.restart).toMatchObject({ kind: 'throw-in', team: RED })
   })
 })

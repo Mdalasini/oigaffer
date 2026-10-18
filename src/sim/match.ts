@@ -318,6 +318,8 @@ export function setPossession(world: Match, team: number) {
 /** The defending team wins the ball in open play and goes the other way. */
 export function winBall(world: Match, team: number, kind: 'tackled' | 'intercepted') {
   world.stats[team].won++
+  // The winner played it last, so a ball that runs out straight away goes against them.
+  world.lastTouchedBy = world.teams[team].outfielder
   setPossession(world, team)
   record(world, kind, team)
 }
@@ -334,7 +336,11 @@ export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint 
 
   const defending = opponent(shot.team)
   if (outcome === 'goal') stopPlay(world, 'kick-off', defending, 0, 0)
-  else if (outcome === 'blocked') setPhase(world, 'play')
+  else if (outcome === 'blocked') {
+    // Play goes on, so the shot is history: guides and the goal view follow the live attack again.
+    world.shot = null
+    setPhase(world, 'play')
+  }
   else stopPlay(world, 'goal-kick', defending, 0, 0)
   record(world, outcome, shot.team)
 }
