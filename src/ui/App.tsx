@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Game } from '../game/Game'
+import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
 import { DefenderMode } from '../sim/components'
 import type { Outcome } from '../sim/match'
 import { ControlPanel } from './ControlPanel'
@@ -7,6 +8,18 @@ import { ControlPanel } from './ControlPanel'
 const DEFENDER_MODE_LABEL: Record<DefenderMode, string> = {
   [DefenderMode.Jockey]: 'Jockeying',
   [DefenderMode.Run]: 'Running',
+  [DefenderMode.StandTackle]: 'Standing tackle',
+  [DefenderMode.SlideTackle]: 'Sliding tackle',
+  [DefenderMode.Barge]: 'Barging',
+  [DefenderMode.Grounded]: 'Getting up',
+}
+
+const CHALLENGE_LABEL: Record<ChallengeKind, string> = { stand: 'Standing tackle', slide: 'Sliding tackle', barge: 'Barge' }
+const CHALLENGE_RESULT: Record<ChallengeResult, string> = {
+  won: 'won the ball',
+  poked: 'poked it loose',
+  missed: 'missed',
+  held: 'held off',
 }
 
 const OUTCOME_BANNER: Record<Outcome, { text: string; className: string }> = {
@@ -15,6 +28,7 @@ const OUTCOME_BANNER: Record<Outcome, { text: string; className: string }> = {
   claimed: { text: 'CLAIMED', className: 'text-sky-300' },
   intercepted: { text: 'WON BY DEFENDER', className: 'text-sky-300' },
   blocked: { text: 'BLOCKED', className: 'text-rose-300' },
+  tackled: { text: 'TACKLED', className: 'text-sky-300' },
   abandoned: { text: 'PLAY STALLED', className: 'text-neutral-300' },
   wide: { text: 'WIDE', className: 'text-rose-300' },
   over: { text: 'OVER THE BAR', className: 'text-rose-300' },
@@ -66,6 +80,15 @@ export function App() {
         <div className="absolute top-[5.25rem] left-4 flex items-center gap-2 rounded-md bg-black/55 px-2.5 py-1 text-xs backdrop-blur">
           <span className="size-2 rounded-full bg-blue-500" />
           Defender: <span className="font-semibold">{DEFENDER_MODE_LABEL[snapshot.defenderMode]}</span>
+          {snapshot.strikerShielding && <span className="text-red-300">· Striker shielding</span>}
+        </div>
+      )}
+
+      {snapshot.challenge && (
+        <div className="pointer-events-none absolute inset-x-0 top-36 text-center">
+          <span className="rounded-md bg-black/60 px-3 py-1.5 text-sm font-semibold backdrop-blur">
+            {CHALLENGE_LABEL[snapshot.challenge.kind]}: {CHALLENGE_RESULT[snapshot.challenge.result]}
+          </span>
         </div>
       )}
 

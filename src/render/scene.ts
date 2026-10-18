@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { Body, Facing, Goalkeeper, Position, TouchStyle, Velocity } from '../sim/components'
+import { Body, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, TouchStyle, Velocity } from '../sim/components'
 import {
   BALL_RADIUS,
   CIRCLE_RADIUS,
@@ -32,6 +32,7 @@ const SHADOW: Color = [0, 0, 0, 0.28]
 const SKIN: Color = [0.86, 0.68, 0.53, 1]
 const HAIR: Color = [0.18, 0.12, 0.08, 1]
 const BOOT: Color = [0.08, 0.08, 0.08, 1]
+const OFF_BALANCE_RING: Color = [1, 0.85, 0.2, 0.85]
 const BALL_FILL: Color = [1, 1, 1, 1]
 const BALL_EDGE: Color = [0.1, 0.1, 0.1, 1]
 const AIM: Color = [1, 0.85, 0.25, 1]
@@ -51,6 +52,7 @@ const OUTCOME_COLOR: Record<Outcome, Color> = {
   save: [0.35, 0.65, 1, 1],
   claimed: [0.35, 0.65, 1, 1],
   intercepted: [0.35, 0.65, 1, 1],
+  tackled: [0.35, 0.65, 1, 1],
   blocked: [1, 0.35, 0.3, 1],
   abandoned: [0.7, 0.7, 0.7, 1],
   wide: [1, 0.35, 0.3, 1],
@@ -175,9 +177,22 @@ function drawPlayer(b: Batch, cam: Camera, world: Match, eid: number, kit: Kit) 
       color,
     )
 
+  if (OffBalance.timer[eid] > 0) b.arc({ x, y, z: 0.02 }, X, Y, r + 0.25, 0.07, 0, Math.PI * 2, OFF_BALANCE_RING, 24)
+  if (hasComponent(world, eid, Sliding)) {
+    drawLying(b, cam, x, y, cos, sin, part, kit)
+    return
+  }
+
   b.disc({ x: x + SUN.x * 0.6, y: y + SUN.y * 0.6, z: 0.01 }, X, Y, r * 1.1, SHADOW, 16)
 
+  const stabbing = hasComponent(world, eid, Defender) && Defender.mode[eid] === DefenderMode.StandTackle
   for (const side of [-1, 1]) {
+    // A standing tackle shoots the right leg out at the ball.
+    if (stabbing && side === -1) {
+      part(0.75, side * r * 0.35, 0, 0.1, 0.3, 0.12, BOOT)
+      part(0.35, side * r * 0.35, 0.05, hip * 0.5, 0.6, 0.18, kit.socks)
+      continue
+    }
     const left = side * r * 0.35
     // Boots poke out in front of the body, so facing reads from overhead.
     part(0.1, left, 0, 0.1, 0.3, 0.12, BOOT)
@@ -196,6 +211,20 @@ function drawPlayer(b: Batch, cam: Camera, world: Match, eid: number, kit: Kit) 
   else {
     for (const side of [-1, 1]) part(0, side * (r + 0.07), hip + 0.05, shoulder - 0.02, 0.14, 0.14, kit.shirt)
   }
+}
+
+type Part = (forward: number, left: number, z0: number, z1: number, depth: number, width: number, color: Color) => void
+
+/** A player on the ground, boots first along their facing: sliding in or getting up. */
+function drawLying(b: Batch, cam: Camera, x: number, y: number, cos: number, sin: number, part: Part, kit: Kit) {
+  b.disc({ x: x + SUN.x * 0.2, y: y + SUN.y * 0.2, z: 0.01 }, X, Y, 0.6, SHADOW, 16)
+  for (const side of [-1, 1]) {
+    part(0.95, side * 0.12, 0, 0.12, 0.25, 0.12, BOOT)
+    part(0.55, side * 0.12, 0.02, 0.18, 0.6, 0.16, kit.socks)
+  }
+  part(0.1, 0, 0.02, 0.22, 0.4, 0.42, kit.shorts)
+  part(-0.35, 0, 0.04, 0.3, 0.55, 0.5, kit.shirt)
+  b.disc({ x: x - cos * 0.75, y: y - sin * 0.75, z: 0.18 }, cam.right, cam.up, 0.13, SKIN, 16)
 }
 
 /** Gloves reach out in the direction of the dive. */

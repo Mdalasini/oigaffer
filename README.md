@@ -29,8 +29,16 @@ Currently: a striker runs at goal against a defender and a goalkeeper, over and 
   carries the ball at the defender's shoulder, cuts across (sometimes after a
   dummy, checking back if mirrored) and knocks it past once clear. Players
   can't overlap, shots can be blocked, and a ball that gets away from the
-  striker can be intercepted; a ball still under control needs a tackle
-  (next).
+  striker can be intercepted; a ball still under control needs a tackle.
+- **Challenges** — the defender can make a *standing tackle* (short reach,
+  quick recovery, stumbles if it misses), a *sliding tackle* (long reach, ends
+  up on the ground) or a *barge* (shoulder to shoulder, strength decides who
+  keeps their feet). Tackles don't always win the ball: they may poke it loose
+  instead. **Tackling (1–20)** against the carrier's dribbling sets the odds,
+  and a ball between touches is easier to nick than one at the feet. The
+  striker *shields*: with the defender tight it turns its back, rolls the ball
+  under its sole on the far side, and tackles through its body rarely work.
+  **Strength (1–20)** decides barges.
 
 The inset "striker's view" is a second camera on the same 3D scene, looking at
 the goal mouth face-on so you can see the spread circle and where shots go.
@@ -51,7 +59,7 @@ Space shoots early, R restarts the attack. `bun test` runs the simulation tests;
 
 ## Layout
 
-- `src/sim` — the ECS world: components, systems (striker and defender decisions, touches, locomotion, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
+- `src/sim` — the ECS world: components, systems (striker and defender decisions, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
 - `src/render` — WebGL renderer, cameras (top-down and goal-face orthographic) and the scene built from the world.
 - `src/game` — fixed-step loop tying the simulation to the renderer, plus a store for the UI.
 - `src/ui` — React HUD and controls.

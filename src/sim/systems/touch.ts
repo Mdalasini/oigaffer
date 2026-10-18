@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Outfielder, Position, TouchStyle, Velocity } from '../components'
+import { Dribbler, Facing, OffBalance, Outfielder, Position, TouchStyle, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { touchAngleError, touchWeightError } from '../grades'
 import type { Match } from '../match'
@@ -19,7 +19,7 @@ export function touchCooldownSystem(world: Match, dt: number) {
 export function touchSystem(world: Match, _dt: number) {
   for (const eid of query(world, [Dribbler, Outfielder, Position, Velocity, Facing])) {
     const style = Dribbler.style[eid] as TouchStyle
-    if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0) continue
+    if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0 || OffBalance.timer[eid] > 0) continue
     if (!ballAtFeet(eid, world.ball)) continue
     playTouch(world, eid, style)
   }
