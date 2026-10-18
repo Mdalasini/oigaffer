@@ -5,7 +5,7 @@ import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollStopTime, rollTime } from './passing'
 import { lookAround } from './perception'
-import { choosePass, passOptions, strikePass } from './playmaking'
+import { choosePass, passOptions, returnCost, strikePass } from './playmaking'
 import { passToOutfielder } from './systems/keeper'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from './touch'
 
@@ -287,6 +287,20 @@ describe('choosing a pass', () => {
     }
     expect(passes).toBeGreaterThan(50)
     expect(back / passes).toBeLessThan(0.2)
+  })
+
+  test('every pass back to whoever just played it is marked down alike, so a worse one never looks better', () => {
+    const world = scene(1, 0, 0, -5, 7)
+    const [carrier, from] = world.teams[RED].outfielders
+    Passer.receivedFrom[carrier] = from
+    Passer.receivedAt[carrier] = world.time
+    // Those that move the ball on, as a one-two does, aren't marked down at all.
+    const costs = passOptions(world, carrier)
+      .filter((o) => o.receiver === from)
+      .map((o) => returnCost(world, carrier, o))
+      .filter((cost) => cost > 0)
+    expect(costs.length).toBeGreaterThan(1)
+    for (const cost of costs) expect(cost).toBeCloseTo(costs[0], 9)
   })
 
   test('on a full-size pitch, a free teammate 45 m away is an option', () => {

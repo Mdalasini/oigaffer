@@ -82,8 +82,8 @@ const DECIDE_SPREAD = 0.15
 /**
  * A pass straight back to whoever played it within RETURN_WINDOW seconds,
  * moving the ball on less than RETURN_PROGRESS metres, is worth RETURN_SHARE
- * of its value less: counted against it as much as it would otherwise count
- * for it, so it's played only when nothing else is better.
+ * of what having the ball where it is is worth less, whichever pass back it
+ * is: so it's played only when nothing else is nearly as good.
  */
 const RETURN_WINDOW = 5
 const RETURN_PROGRESS = 5
@@ -139,13 +139,14 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
 /**
  * What it costs to give the ball straight back to whoever just passed it:
  * nothing if it moves the ball on, as a one-two does, but otherwise the two
- * of them are only knocking it between themselves.
+ * of them are only knocking it between themselves. It's the same for every
+ * pass back to them, so it never makes a worse one look better.
  */
-function returnCost(world: Match, carrier: number, option: PassOption): number {
+export function returnCost(world: Match, carrier: number, option: PassOption): number {
   if (option.receiver !== Passer.receivedFrom[carrier] || world.time - Passer.receivedAt[carrier] > RETURN_WINDOW) return 0
   const team = Team.id[carrier]
   if (along(team, option.x) - along(team, Position.x[world.ball]) >= RETURN_PROGRESS) return 0
-  return RETURN_SHARE * Math.abs(option.value)
+  return RETURN_SHARE * threat(world.pitch, team, Position.x[world.ball], Position.y[world.ball])
 }
 
 /**

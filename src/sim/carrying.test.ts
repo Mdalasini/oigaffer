@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Facing, Position, TakeOn, Velocity } from './components'
 import { createMatch, setVec, stepMatch, type GradeOverrides } from './match'
 import { lookAround } from './perception'
+import { planCarry } from './carrying'
 import { attackedGoalX } from './teams'
 import { FOOT_OFFSET } from './touch'
 
@@ -46,5 +47,25 @@ describe('carrying the ball', () => {
   test('isolated against the last defender near goal, a good dribbler against a poor tackler takes him on', () => {
     const grades = { red: { outfielder: { dribbling: 20 } }, blue: { outfielder: { tackling: 3 } } }
     expect(takesOn(20, 5, 0, grades)).toBeGreaterThan(0.5)
+  })
+
+  test('the man to beat is the one the carrier reckons is on them, whoever is really closing in', () => {
+    const world = createMatch({ outfielders: 2, seed: 1 })
+    const { carrier, ball } = world
+    const [seen, unseen] = world.teams[1].outfielders
+    setVec(Position, carrier, 0, 0, 0)
+    setVec(Velocity, carrier, 0, 0, 0)
+    Facing.angle[carrier] = 0
+    setVec(Position, ball, FOOT_OFFSET + 0.1, 0, Position.z[ball])
+    setVec(Velocity, ball, 0, 0, 0)
+    setVec(Position, world.teams[0].outfielders[1], -20, 10, 0)
+    setVec(Position, seen, 4, 1, 0)
+    setVec(Position, unseen, -12, 0, 0)
+    lookAround(world)
+    world.presser = seen
+    const before = { ...planCarry(world, carrier) }
+    // The other has really taken over the press, behind the carrier's back: nothing they know of has changed.
+    world.presser = unseen
+    expect(planCarry(world, carrier)).toEqual(before)
   })
 })

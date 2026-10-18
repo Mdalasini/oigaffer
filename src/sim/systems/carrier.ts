@@ -2,7 +2,8 @@ import { query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { Carry, Dribbler, Facing, Passer, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { distanceToSegment } from '../geometry'
-import { closeControlSpeed, passWindup, reactionDelay } from '../grades'
+import { closeControlSpeed, passWindup, reactionDelay, topSpeed } from '../grades'
+import { rollDistanceIn } from '../passing'
 import { cue } from '../cues'
 import { setPhase, setVec, type Match } from '../match'
 import { playBall } from '../offside'
@@ -19,13 +20,25 @@ import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, 
 /** Seconds after shooting before the shooter can play the ball again. */
 const SHOT_RECOVER = 0.4
 /**
- * Rough distance (m) from the ball to where a large touch is next played, at
- * a given running speed: a stride's worth ahead, plus however far they run
- * before they can touch it again.
+ * Roughly how far (m) the ball rolls from a large touch before `eid` can
+ * play it again: struck a stride's worth faster than they're running, it
+ * runs on until they've run it down at full pace, and they can't touch it
+ * again before the touch has cooled down anyway.
  */
-const largeTouchTravel = (speed: number) => LARGE_TOUCH_LEAD + speed * TOUCH_SPECS[TouchStyle.Large].cooldown
-/** How far (m) ahead of the feet a large touch puts the ball. */
-const LARGE_TOUCH_LEAD = 2.5
+export function largeTouchTravel(eid: number): number {
+  const spec = TOUCH_SPECS[TouchStyle.Large]
+  const ball = Math.hypot(Velocity.x[eid], Velocity.y[eid]) + spec.push
+  const run = topSpeed(Physical.pace[eid])
+  for (let t = spec.cooldown; t < CATCH_WITHIN; t += CATCH_STEP) {
+    const rolled = rollDistanceIn(ball, t)
+    // It's played as it comes into reach, so it starts out as far ahead of the foot as it's caught.
+    if (run * t >= rolled) return rolled
+  }
+  return rollDistanceIn(ball, CATCH_WITHIN)
+}
+/** Steps (s) along a large touch's roll when looking for where it's caught, and how far ahead to look. */
+const CATCH_STEP = 0.05
+const CATCH_WITHIN = 3
 /** Spare room (m) beyond a large touch's run before the line. */
 const LARGE_TOUCH_MARGIN = 3
 /**
@@ -161,8 +174,7 @@ export function carrierSystem(world: Match, dt: number) {
     // or whenever a beaten defender is chasing.
     const cx = Carry.dirX[eid]
     const cy = Carry.dirY[eid]
-    const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
-    const roomToRun = distance - largeTouchTravel(speed) > shootDistance
+    const roomToRun = distance - largeTouchTravel(eid) > shootDistance
     const forward = cx * dirX + cy * dirY > FORWARD_CARRY
     const style = forward && (roomToRun || chased) ? TouchStyle.Large : TouchStyle.Small
     carry(world, eid, ball, style, cx, cy)
@@ -350,7 +362,7 @@ function carry(world: Match, eid: number, ball: number, style: TouchStyle, dirX:
     const angle = touchAngle(eid, style, dirX, dirY)
     const dx = Math.cos(angle)
     const dy = Math.sin(angle)
-    const travel = largeTouchTravel(Math.hypot(Velocity.x[eid], Velocity.y[eid]))
+    const travel = largeTouchTravel(eid)
     const x = Position.x[ball] + dx * travel
     const y = Position.y[ball] + dy * travel
     if (

@@ -2,7 +2,7 @@ import { Carry, Outfielder, Position, Team } from './components'
 import { tackleSkill } from './grades'
 import type { Match } from './match'
 import { seenX, seenY } from './perception'
-import { arrivalTime } from './space/arrival'
+import { arrivalTime, REACTION_TIME } from './space/arrival'
 import { teamArrival } from './space/control'
 import { threat } from './space/threat'
 import { attackedGoalX, opponent } from './teams'
@@ -61,8 +61,8 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
   const them = opponent(team)
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  // The defender closing them down, where they reckon he is, and how likely he'd be to win it if they took him on.
-  const presser = world.presser
+  // The man they'd have to beat, where they reckon he is, and how likely he'd be to win it if they took him on.
+  const presser = theirMan(world, carrier)
   const px = seenX(world, carrier, presser)
   const py = seenY(world, carrier, presser)
   const tackled = TACKLE_SHARE * tackleSkill(Outfielder.tackling[presser], Outfielder.dribbling[carrier])
@@ -98,6 +98,22 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
     plan.kept = kept
   }
   return plan
+}
+
+/** The opponent `carrier` reckons will get to the ball first: the man they'd have to beat. */
+function theirMan(world: Match, carrier: number): number {
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  let man = world.presser
+  let soonest = Infinity
+  for (const eid of world.teams[opponent(Team.id[carrier])].outfielders) {
+    const time = arrivalTime(world, eid, bx, by, CHALLENGE_REACH, REACTION_TIME, carrier)
+    if (time < soonest) {
+      man = eid
+      soonest = time
+    }
+  }
+  return man
 }
 
 /** Scratch for the carrier's plan. */
