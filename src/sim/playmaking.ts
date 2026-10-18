@@ -9,7 +9,8 @@ import { along, onsideLimit } from './shape'
 import { gaussian } from './rng'
 import { arrivalTime } from './space/arrival'
 import { passSafety, teamArrival, timeOnBall } from './space/control'
-import { threat } from './space/threat'
+import { shotValue } from './finishing'
+import { shotChance, threat } from './space/threat'
 import { attackDir, attackedGoalX, opponent } from './teams'
 
 /** A pass the carrier could play, and what it's worth. */
@@ -60,6 +61,15 @@ const MIN_JUDGED = 0.02
 const LOSS_ALONG = 0.35
 /** Carrying it on is worth a little more than where the ball is now. */
 const CARRY_GAIN = 1.15
+/** With this long (s) before they're closed down, a carrier has an even chance of carrying it on. */
+const CARRY_MOMENT = 0.5
+/** How sharply (s) more time than that turns into carrying it on. */
+const CARRY_MOMENT_SCALE = 0.2
+/**
+ * A carrier who can't get anywhere better ends up with about this share of
+ * the chance from here: they're being closed down, and the shot only gets harder.
+ */
+const NOW_SHARE = 0.5
 /** Weigh up options every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD. */
 const DECIDE_EVERY = 0.2
 const DECIDE_SPREAD = 0.15
@@ -68,21 +78,37 @@ const PASSER_RECOVER = 0.4
 /** An opponent within this distance (m) of the passer hurries the pass. */
 const PRESSURE_RANGE = 2
 
-/**
- * The carrier weighs passing against keeping the ball, a few times a second.
- * They consider only teammates they have seen, rate each pass to feet or into
- * space by expected threat, and judge it with an error that shrinks with
- * their decisions grade. Returns the pass to play now, if any.
- */
+/** The pass to play now, if any, weighing passing against keeping the ball only. */
 export function choosePass(world: Match, carrier: number): PassOption | null {
+  const choice = chooseAction(world, carrier, null)
+  return choice === 'shoot' ? null : choice
+}
+
+/**
+ * The carrier weighs keeping the ball, shooting and passing against each
+ * other, a few times a second, all as expected goals. `shot` is what they
+ * reckon a shot from here is worth, or null if there's no shot on. They
+ * consider only teammates they have seen, rate each pass to feet or into
+ * space by expected threat, and judge every option with an error that
+ * shrinks with their decisions grade. Returns the shot or pass to play now,
+ * or null to keep the ball.
+ */
+export function chooseAction(world: Match, carrier: number, shot: number | null): PassOption | 'shoot' | null {
   if (world.time < Passer.nextLook[carrier]) return null
   Passer.nextLook[carrier] = world.time + DECIDE_EVERY + world.rng() * DECIDE_SPREAD
 
   const error = judgementError(Outfielder.decisions[carrier])
   const judged = (value: number) => value + gaussian(world.rng) * error * Math.max(Math.abs(value), MIN_JUDGED)
   const keep = judged(keepValue(world, carrier))
-  let best: PassOption | null = null
+  let best: PassOption | 'shoot' | null = null
   let bestJudged = keep + PASS_MARGIN
+  if (shot !== null) {
+    const v = judged(shot)
+    if (v > bestJudged) {
+      best = 'shoot'
+      bestJudged = v
+    }
+  }
   for (const option of passOptions(world, carrier)) {
     const v = judged(option.value)
     if (v > bestJudged) {
@@ -105,7 +131,12 @@ export function keepValue(world: Match, carrier: number): number {
   const by = Position.y[world.ball]
   const time = timeOnBall(world, carrier)
   const keep = clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97)
-  return keep * threat(team, bx, by) * CARRY_GAIN - (1 - keep) * threat(opponent(team), bx, by)
+  // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to
+  // is worth over a clean one from here, but only if they have a moment on the ball to carry it on at all.
+  const gain = Math.max(0, threat(team, bx, by) * CARRY_GAIN - shotChance(bx * attackDir(team), by))
+  const moment = 1 / (1 + Math.exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
+  const kept = shotValue(world, carrier) * NOW_SHARE + gain * moment
+  return keep * kept - (1 - keep) * threat(opponent(team), bx, by)
 }
 
 /**

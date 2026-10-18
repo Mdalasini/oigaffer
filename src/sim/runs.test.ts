@@ -62,7 +62,7 @@ describe('running in behind', () => {
     const runs = (offTheBall: number) => {
       let count = 0
       for (const seed of [1, 2, 3]) {
-        const world = createMatch({ outfielders: 2, seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
+        const world = createMatch({ seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
         const before = new Map<number, number>()
         for (let i = 0; i < 5 * 60 * 120; i++) {
           stepMatch(world)
@@ -76,9 +76,9 @@ describe('running in behind', () => {
       }
       return count
     }
-    // 35–110% more over five minutes, depending on the seeds.
-    expect(runs(20)).toBeGreaterThan(runs(1) * 1.2)
-  })
+    // Five a side, five minutes a seed: measured at 2.5–2.8 times as many.
+    expect(runs(20)).toBeGreaterThan(runs(1) * 1.5)
+  }, 20_000)
 
   test('the carrier hears a run they can’t see, and can put it into the space being called for', () => {
     const grades = { red: { outfielder: { vision: 1 } } }

@@ -82,9 +82,10 @@ describe('defender', () => {
   test('better marking and agility are harder to get past', () => {
     const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 300)
     const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 300)
-    // About 0.6 against 0.4 on this pitch: a gap of 0.15–0.25 depending on the seed.
+    // About 0.65 against 0.45 on this pitch: a gap of 0.19–0.24 depending on the seed.
     expect(strong).toBeLessThan(weak - 0.1)
-  })
+    // Ninety minutes of one-a-side, twice.
+  }, 20_000)
 
   test('players cannot overlap, even three at once', () => {
     const world = faceOff(0.5)

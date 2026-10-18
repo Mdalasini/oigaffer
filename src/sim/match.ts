@@ -31,7 +31,8 @@ import {
   Velocity,
 } from './components'
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
-import { clampGrade, shotSpreadRadius } from './grades'
+import { clampGrade } from './grades'
+import { planShot } from './finishing'
 import { createRng, type Rng } from './rng'
 import { clearIntentions } from './attacking'
 import { clearOffside, playedBy } from './offside'
@@ -762,9 +763,9 @@ export function requestShot(world: Match) {
   if (world.phase === 'play') world.shootRequested = true
 }
 
-/** The carrier's current spread circle, before or after the shot. */
+/** The carrier's current spread circle, before or after the shot: where most of their shots from here would go. */
 export function currentSpread(world: Match): number {
-  return shotSpreadRadius(Outfielder.shooting[world.carrier])
+  return world.shot ? world.shot.radius : 2 * planShot(world, world.carrier).miss
 }
 
 export function setPhase(world: Match, phase: Phase) {

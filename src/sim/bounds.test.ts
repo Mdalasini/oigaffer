@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { hasComponent } from 'bitecs'
-import { OnBall, Position, Velocity } from './components'
+import { Goalkeeper, OnBall, Position, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from './constants'
 import { createMatch, setVec, stepMatch, winBall, type Match } from './match'
 import { ballAtFeet, roomAhead } from './touch'
@@ -70,8 +70,9 @@ describe('out of play', () => {
 
   test('a ball rolled into the net in open play is a goal, and the other team kicks off', () => {
     const world = rolling(GOAL_X - 3, 0, 9, 0, 'presser')
-    // Move the keeper aside so it can't claim the ball.
+    // Move the keeper aside, still getting up, so it can't claim the ball.
     setVec(Position, world.keeper, GOAL_X - 0.5, 3, 0)
+    Goalkeeper.recover[world.keeper] = 5
     playOut(world)
     expect(world.event).toMatchObject({ kind: 'goal', team: RED })
     expect(world.stats[RED]).toMatchObject({ goals: 1, shots: 1 })

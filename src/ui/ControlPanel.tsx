@@ -12,7 +12,7 @@ import {
   passWeightError,
   reactionDelay,
   readLag,
-  shotSpreadRadius,
+  shotAngleError,
   sideStepSpeed,
   spotChance,
   tackleSkill,
@@ -41,7 +41,7 @@ const ROLE_CONTROLS: RoleControls[] = [
     role: 'outfielder',
     name: 'Outfielders',
     grades: [
-      { key: 'shooting', label: 'Shooting', detail: (g) => `spread radius ${shotSpreadRadius(g).toFixed(2)} m` },
+      { key: 'shooting', label: 'Shooting', detail: (g) => `off line by ±${((shotAngleError(g) * 180) / Math.PI).toFixed(1)}°` },
       { key: 'dribbling', label: 'Dribbling', detail: (g) => `touch error ±${deg(touchAngleError(g))}°` },
       { key: 'marking', label: 'Marking', detail: (g) => `reads a cut in ${Math.round(readLag(g, false) * 1000)} ms jockeying` },
       { key: 'tackling', label: 'Tackling', detail: (g) => `${Math.round(tackleSkill(g, 10) * 100)}% vs a 10 dribbler, before reach` },
@@ -169,7 +169,7 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
         want it in. When a pass is the better bet it's played: a white ring marks where it's aimed, dashed for a through
         ball. Without the ball, one defender presses, one covers behind them, and the rest pick up the attackers around
         their zones. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
-        <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Space makes
+        <span className="text-orange-300">large</span> knocks it ahead. Most shots from here would land inside the yellow circle, which grows with distance and pressure. Space makes
         whoever has the ball shoot.
       </p>
     </aside>
