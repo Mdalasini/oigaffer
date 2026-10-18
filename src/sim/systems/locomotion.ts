@@ -1,12 +1,14 @@
-import { query, type World } from 'bitecs'
+import { Not, query, type World } from 'bitecs'
 import { angleDelta, wrapAngle } from '../angles'
-import { Facing, MoveIntent, Physical, Position, Velocity } from '../components'
+import { Facing, MoveIntent, OffBalance, Physical, Position, Sliding, Velocity } from '../components'
 import { accelerationRate, sideStepSpeed, topSpeed, turnRate } from '../grades'
 
 /** Speed at which the turn rate has halved. */
 const TURN_FALLOFF_SPEED = 2.5
 /** Braking is this much stronger than accelerating. */
 const BRAKE_FACTOR = 1.6
+/** An off-balance player gets this share of their usual acceleration and turn. */
+const OFF_BALANCE_CONTROL = 0.25
 /** Below this desired speed, a player with no facing intent keeps its facing. */
 const MIN_STEER_SPEED = 0.3
 
@@ -16,7 +18,8 @@ const MIN_STEER_SPEED = 0.3
  * slower the faster a player runs, so direction changes cost time.
  */
 export function locomotionSystem(world: World, dt: number) {
-  for (const eid of query(world, [Position, Velocity, Facing, MoveIntent, Physical])) {
+  for (const eid of query(world, [Position, Velocity, Facing, MoveIntent, Physical, Not(Sliding)])) {
+    const control = OffBalance.timer[eid] > 0 ? OFF_BALANCE_CONTROL : 1
     const vx = Velocity.x[eid]
     const vy = Velocity.y[eid]
     const speed = Math.hypot(vx, vy)
@@ -30,7 +33,7 @@ export function locomotionSystem(world: World, dt: number) {
       faceY = dvy
     }
     if (faceX !== 0 || faceY !== 0) {
-      const maxTurn = (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED)) * dt
+      const maxTurn = ((turnRate(Physical.agility[eid]) * control) / (1 + speed / TURN_FALLOFF_SPEED)) * dt
       const delta = angleDelta(Facing.angle[eid], Math.atan2(faceY, faceX))
       Facing.angle[eid] = wrapAngle(Facing.angle[eid] + clamp(delta, -maxTurn, maxTurn))
     }
@@ -51,7 +54,7 @@ export function locomotionSystem(world: World, dt: number) {
       wantLateral *= top / wantSpeed
     }
 
-    const accel = accelerationRate(Physical.acceleration[eid]) * dt
+    const accel = accelerationRate(Physical.acceleration[eid]) * control * dt
     const newForward = approach(forward, wantForward, accel, accel * BRAKE_FACTOR)
     const newLateral = approach(lateral, wantLateral, accel, accel * BRAKE_FACTOR)
 

@@ -1,4 +1,5 @@
-import { Dribbler, Facing, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from './components'
+import { hasComponent, type World } from 'bitecs'
+import { Dribbler, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Sliding, TouchStyle, Velocity } from './components'
 import { closeControlSpeed } from './grades'
 
 export interface TouchSpec {
@@ -17,6 +18,7 @@ export interface TouchSpec {
 export const TOUCH_SPECS: Record<Exclude<TouchStyle, 0>, TouchSpec> = {
   [TouchStyle.Small]: { push: 1.1, maxAngle: 1.75, cooldown: 0.22, stride: 0.9, errorScale: 1 },
   [TouchStyle.Large]: { push: 5.5, maxAngle: 0.8, cooldown: 0.5, stride: 1, errorScale: 1.6 },
+  [TouchStyle.Shield]: { push: 0.25, maxAngle: Math.PI, cooldown: 0.3, stride: 0.8, errorScale: 0.5 },
 }
 
 /** How far in front of a player's centre their feet play the ball. */
@@ -36,6 +38,14 @@ export function footY(eid: number) {
 
 export function footDistance(eid: number, ball: number) {
   return Math.hypot(Position.x[ball] - footX(eid), Position.y[ball] - footY(eid))
+}
+
+/**
+ * Whether a player is in a state to play the ball at all: on their feet and
+ * balanced. Every way of playing it (touch, shot, interception) checks this.
+ */
+export function canPlayBall(world: World, eid: number): boolean {
+  return OffBalance.timer[eid] === 0 && !hasComponent(world, eid, Sliding)
 }
 
 /** Whether `player` can play `ball` right now. */

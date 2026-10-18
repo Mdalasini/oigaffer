@@ -5,7 +5,7 @@ import { BALL_RADIUS } from '../constants'
 import { touchAngleError, touchWeightError } from '../grades'
 import type { Match } from '../match'
 import { gaussian } from '../rng'
-import { ballAtFeet, TOUCH_SPECS } from '../touch'
+import { ballAtFeet, canPlayBall, TOUCH_SPECS } from '../touch'
 
 /**
  * Runs down touch cooldowns. It comes first in the step so that decisions
@@ -19,7 +19,7 @@ export function touchCooldownSystem(world: Match, dt: number) {
 export function touchSystem(world: Match, _dt: number) {
   for (const eid of query(world, [Dribbler, Outfielder, Position, Velocity, Facing])) {
     const style = Dribbler.style[eid] as TouchStyle
-    if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0) continue
+    if (style === TouchStyle.None || Dribbler.cooldown[eid] > 0 || !canPlayBall(world, eid)) continue
     if (!ballAtFeet(eid, world.ball)) continue
     playTouch(world, eid, style)
   }

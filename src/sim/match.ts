@@ -1,4 +1,5 @@
-import { addComponent, addEntity, createWorld, type World } from 'bitecs'
+import { addComponent, addEntity, createWorld, hasComponent, removeComponent, type World } from 'bitecs'
+import type { LastChallenge } from './challenge'
 import {
   Ball,
   Body,
@@ -8,9 +9,12 @@ import {
   Facing,
   Goalkeeper,
   MoveIntent,
+  OffBalance,
   Outfielder,
   Physical,
   Position,
+  Shield,
+  Sliding,
   TakeOn,
   TouchStyle,
   Velocity,
@@ -19,7 +23,9 @@ import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
 import type { GoalPoint, Vec3 } from './shooting'
+import { balanceSystem } from './systems/balance'
 import { ballSystem } from './systems/ball'
+import { challengeSystem } from './systems/challenge'
 import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
@@ -41,6 +47,8 @@ export type Outcome =
   | 'claimed'
   /** The defender won a loose ball. */
   | 'intercepted'
+  /** The defender tackled the striker and came away with the ball. */
+  | 'tackled'
   /** Open play ran on too long without a shot. */
   | 'abandoned'
 
@@ -74,8 +82,20 @@ export interface LastTouch {
 
 /** Every adjustable 1–20 grade, by role, and the store that holds it. */
 export const GRADE_FIELDS = {
-  striker: { shooting: Outfielder.shooting, dribbling: Outfielder.dribbling, pace: Physical.pace, agility: Physical.agility },
-  defender: { marking: Outfielder.marking, pace: Physical.pace, agility: Physical.agility },
+  striker: {
+    shooting: Outfielder.shooting,
+    dribbling: Outfielder.dribbling,
+    pace: Physical.pace,
+    agility: Physical.agility,
+    strength: Physical.strength,
+  },
+  defender: {
+    marking: Outfielder.marking,
+    tackling: Outfielder.tackling,
+    pace: Physical.pace,
+    agility: Physical.agility,
+    strength: Physical.strength,
+  },
   keeper: { reaction: Goalkeeper.reaction },
 } as const
 export type Role = keyof typeof GRADE_FIELDS
@@ -84,8 +104,8 @@ export type Grades = { [R in Role]: Record<GradeKey<R>, number> }
 export type GradeOverrides = { [R in Role]?: Partial<Grades[R]> }
 
 export const DEFAULT_GRADES: Grades = {
-  striker: { shooting: 14, dribbling: 13, pace: 14, agility: 14 },
-  defender: { marking: 12, pace: 13, agility: 12 },
+  striker: { shooting: 14, dribbling: 13, pace: 14, agility: 14, strength: 12 },
+  defender: { marking: 12, tackling: 12, pace: 13, agility: 12, strength: 13 },
   keeper: { reaction: 12 },
 }
 export const ROLES = Object.keys(GRADE_FIELDS) as Role[]
@@ -114,6 +134,7 @@ export interface MatchContext {
   stats: MatchStats
   prevBall: Vec3
   lastTouch: LastTouch | null
+  lastChallenge: LastChallenge | null
   onOutcome?: (outcome: Outcome) => void
 }
 
@@ -145,6 +166,7 @@ export function createMatch({ seed = Date.now(), grades = {}, defender = true }:
     stats: { shots: 0, goals: 0, saves: 0, misses: 0, lost: 0 },
     prevBall: { x: 0, y: 0, z: 0 },
     lastTouch: null,
+    lastChallenge: null,
   })
 
   world.ball = addEntity(world)
@@ -155,6 +177,7 @@ export function createMatch({ seed = Date.now(), grades = {}, defender = true }:
   world.striker = addOutfielder(world)
   addComponent(world, world.striker, Dribbler)
   addComponent(world, world.striker, TakeOn)
+  addComponent(world, world.striker, Shield)
 
   world.defender = addOutfielder(world)
   addComponent(world, world.defender, Defender)
@@ -180,11 +203,10 @@ export function createMatch({ seed = Date.now(), grades = {}, defender = true }:
 
 function addOutfielder(world: Match): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance]) {
     addComponent(world, eid, component)
   }
   Physical.acceleration[eid] = 14
-  Physical.strength[eid] = 12
   Body.radius[eid] = 0.35
   Body.height[eid] = 1.8
   return eid
@@ -221,6 +243,9 @@ export function resetPlay(world: Match) {
   TakeOn.side[striker] = 0
   TakeOn.feintTimer[striker] = 0
   TakeOn.checkBackTimer[striker] = 0
+  Shield.active[striker] = 0
+  Shield.timer[striker] = 0
+  OffBalance.timer[striker] = 0
   placeDefender(world)
   setVec(Position, keeper, GOAL_X - 0.5, 0, 0)
   setVec(Velocity, keeper, 0, 0, 0)
@@ -235,6 +260,7 @@ export function resetPlay(world: Match) {
   world.shot = null
   world.outcome = null
   world.lastTouch = null
+  world.lastChallenge = null
 }
 
 /** The defender starts goal-side of the striker, ready to step up. */
@@ -248,6 +274,10 @@ function placeDefender(world: Match) {
   setVec(Velocity, defender, 0, 0, 0)
   Facing.angle[defender] = Math.atan2(Position.y[striker] - Position.y[defender], Position.x[striker] - Position.x[defender])
   Defender.mode[defender] = DefenderMode.Jockey
+  Defender.actionTime[defender] = 0
+  Defender.contacted[defender] = 0
+  OffBalance.timer[defender] = 0
+  if (hasComponent(world, defender, Sliding)) removeComponent(world, defender, Sliding)
   Defender.readX[defender] = Position.x[world.ball]
   Defender.readY[defender] = Position.y[world.ball]
   Defender.readVx[defender] = 0
@@ -276,6 +306,7 @@ const OUTCOME_STAT: Record<Outcome, keyof MatchStats> = {
   blocked: 'misses',
   claimed: 'lost',
   intercepted: 'lost',
+  tackled: 'lost',
   abandoned: 'lost',
 }
 
@@ -292,10 +323,12 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.time += dt
   world.phaseTime += dt
   touchCooldownSystem(world, dt)
+  balanceSystem(world, dt)
   strikerSystem(world, dt)
   defenderSystem(world, dt)
   touchSystem(world, dt)
   locomotionSystem(world, dt)
+  challengeSystem(world, dt)
   keeperSystem(world, dt)
   collisionSystem(world, dt)
   ballSystem(world, dt)

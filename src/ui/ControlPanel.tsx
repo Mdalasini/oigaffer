@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Game, GameSnapshot } from '../game/Game'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
-import { reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, topSpeed, touchAngleError } from '../sim/grades'
+import { reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, tackleSkill, topSpeed, touchAngleError } from '../sim/grades'
 import type { GradeKey, Role } from '../sim/match'
 
 interface Props {
@@ -19,6 +19,12 @@ const agility: GradeControl<'striker' | 'defender'> = {
   detail: (g) => `sidestep ${sideStepSpeed(g).toFixed(1)} m/s`,
 }
 
+const strength: GradeControl<'striker' | 'defender'> = {
+  key: 'strength',
+  label: 'Strength',
+  detail: () => 'wins barges, holds off when shielding',
+}
+
 const PLAYERS: PlayerControls[] = [
   {
     role: 'striker',
@@ -29,6 +35,7 @@ const PLAYERS: PlayerControls[] = [
       { key: 'dribbling', label: 'Dribbling', detail: (g) => `touch error ±${deg(touchAngleError(g))}°` },
       pace,
       agility,
+      strength,
     ],
   },
   {
@@ -37,8 +44,10 @@ const PLAYERS: PlayerControls[] = [
     swatch: 'bg-blue-500',
     grades: [
       { key: 'marking', label: 'Marking', detail: (g) => `reads a cut in ${Math.round(readLag(g, false) * 1000)} ms jockeying` },
+      { key: 'tackling', label: 'Tackling', detail: (g) => `${Math.round(tackleSkill(g, 10) * 100)}% vs a 10 dribbler, before reach` },
       pace,
       agility,
+      strength,
     ],
   },
   {
@@ -131,7 +140,7 @@ export function ControlPanel({ game, snapshot }: Props) {
       </label>
 
       <p className="text-xs leading-relaxed text-neutral-400">
-        The striker takes on the defender with small touches and knocks it past once clear. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
+        The striker takes on the defender with small touches, shields when they get tight, and knocks it past once clear. The defender jockeys, tackles, slides and barges. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
         <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Conversion:{' '}
         <span className="font-semibold text-neutral-200">{conversion}%</span>
       </p>

@@ -49,6 +49,23 @@ export const Outfielder = {
   dribbling: new Uint8Array(MAX_ENTITIES),
   /** How quickly a defender reads the ball carrier's changes of direction. */
   marking: new Uint8Array(MAX_ENTITIES),
+  /** How often a tackle comes away with the ball. */
+  tackling: new Uint8Array(MAX_ENTITIES),
+}
+
+/** Knocked off balance: can't play the ball and barely accelerates until the timer runs out. */
+export const OffBalance = {
+  timer: new Float32Array(MAX_ENTITIES),
+}
+
+/** On the deck: slid in or brought down. Moves under its own momentum, not by choice. */
+export const Sliding = {}
+
+/** The carrier putting their body between the defender and the ball. */
+export const Shield = {
+  active: new Uint8Array(MAX_ENTITIES),
+  /** While shielding: seconds left before turning away. Otherwise: seconds before shielding again. */
+  timer: new Float32Array(MAX_ENTITIES),
 }
 
 export const TouchStyle = {
@@ -57,6 +74,8 @@ export const TouchStyle = {
   Small: 1,
   /** Ball knocked ahead to run onto: only roughly forwards, but no loss of stride. */
   Large: 2,
+  /** Ball rolled under the sole, kept tight at the feet while shielding. */
+  Shield: 3,
 } as const
 export type TouchStyle = (typeof TouchStyle)[keyof typeof TouchStyle]
 
@@ -76,6 +95,14 @@ export const DefenderMode = {
   Jockey: 0,
   /** Facing where they're going: fast, but slow to read and to turn. */
   Run: 1,
+  /** A stab at the ball from on their feet: short reach, quick to recover. */
+  StandTackle: 2,
+  /** Sliding in: long reach, but they end up on the ground. */
+  SlideTackle: 3,
+  /** A shoulder into the carrier, to knock them off the ball. */
+  Barge: 4,
+  /** Getting back up after a slide. */
+  Grounded: 5,
 } as const
 export type DefenderMode = (typeof DefenderMode)[keyof typeof DefenderMode]
 
@@ -91,6 +118,13 @@ export const Defender = {
   readY: new Float32Array(MAX_ENTITIES),
   readVx: new Float32Array(MAX_ENTITIES),
   readVy: new Float32Array(MAX_ENTITIES),
+  /** Seconds into the current tackle, barge or recovery. */
+  actionTime: new Float32Array(MAX_ENTITIES),
+  /** Direction of a slide. */
+  actionDirX: new Float32Array(MAX_ENTITIES),
+  actionDirY: new Float32Array(MAX_ENTITIES),
+  /** Whether the current challenge has already met the ball or player. */
+  contacted: new Uint8Array(MAX_ENTITIES),
 }
 
 /** The ball carrier's plan for beating the defender in front of them. */

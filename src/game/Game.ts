@@ -2,7 +2,8 @@ import { Batch } from '../render/batch'
 import { goalCamera, topDownCamera, topDownExtent } from '../render/cameras'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
-import { Defender, DefenderMode, Position } from '../sim/components'
+import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
+import { Defender, DefenderMode, Position, Shield } from '../sim/components'
 import { FIXED_DT, GOAL_DEPTH, GOAL_X } from '../sim/constants'
 import {
   createMatch,
@@ -32,7 +33,13 @@ export interface GameSnapshot {
   defenderActive: boolean
   /** What the defender is doing, while it is in play. */
   defenderMode: DefenderMode | null
+  strikerShielding: boolean
+  /** The latest tackle or barge, for a moment after it happens. */
+  challenge: { kind: ChallengeKind; result: ChallengeResult } | null
 }
+
+/** How long (s) a challenge result stays on screen. */
+const CHALLENGE_SHOWN_FOR = 1.4
 
 const PITCH_SKY: readonly [number, number, number, number] = [0.08, 0.1, 0.14, 1]
 const GOAL_SKY: readonly [number, number, number, number] = [0.16, 0.2, 0.28, 1]
@@ -151,7 +158,19 @@ export class Game {
       autoReset: m.autoReset,
       defenderActive: m.defenderActive,
       defenderMode: this.defenderMode(),
+      strikerShielding: this.strikerShielding(),
+      challenge: this.recentChallenge(),
     }
+  }
+
+  private strikerShielding() {
+    const m = this.match
+    return m.defenderActive && m.phase === 'approach' && Shield.active[m.striker] === 1
+  }
+
+  private recentChallenge() {
+    const c = this.match.lastChallenge
+    return c && this.match.time - c.time < CHALLENGE_SHOWN_FOR ? { kind: c.kind, result: c.result } : null
   }
 
   private defenderMode(): DefenderMode | null {
@@ -162,7 +181,19 @@ export class Game {
   private publishIfChanged() {
     const m = this.match
     const grades = ROLES.flatMap((role) => gradeKeys(role).map((key) => getGrade(m, role, key)))
-    const key = [m.phase, m.outcome, m.stats.shots, m.stats.lost, m.autoReset, m.defenderActive, this.defenderMode(), ...grades].join('|')
+    const challenge = this.recentChallenge()
+    const key = [
+      m.phase,
+      m.outcome,
+      m.stats.shots,
+      m.stats.lost,
+      m.autoReset,
+      m.defenderActive,
+      this.defenderMode(),
+      this.strikerShielding(),
+      challenge && `${challenge.kind}:${challenge.result}:${m.lastChallenge?.time}`,
+      ...grades,
+    ].join('|')
     if (key === this.snapshotKey) return
     this.snapshotKey = key
     this.snapshot = this.takeSnapshot()

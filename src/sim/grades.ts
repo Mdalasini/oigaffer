@@ -5,7 +5,7 @@ export function clampGrade(grade: number): number {
 }
 
 /** 0 for the worst grade, 1 for the best. */
-function gradeT(grade: number): number {
+export function gradeT(grade: number): number {
   return (clampGrade(grade) - MIN_GRADE) / (MAX_GRADE - MIN_GRADE)
 }
 
@@ -45,6 +45,19 @@ export function closeControlSpeed(pace: number, dribbling: number): number {
  */
 export function readLag(marking: number, running: boolean): number {
   return lerp(0.3, 0.08, gradeT(marking)) * (running ? 2.5 : 1)
+}
+
+/**
+ * Base chance (0–1) that a tackle by a defender with `tackling` gets the
+ * ball off a carrier with `dribbling`, before reach and shielding.
+ */
+export function tackleSkill(tackling: number, dribbling: number): number {
+  return Math.min(0.9, Math.max(0.1, 0.42 + (clampGrade(tackling) - clampGrade(dribbling)) * 0.025))
+}
+
+/** Chance (0–1) that a barge by a player with `strength` knocks one with `opponentStrength` off the ball. */
+export function bargeWinChance(strength: number, opponentStrength: number): number {
+  return Math.min(0.9, Math.max(0.1, 0.5 + (clampGrade(strength) - clampGrade(opponentStrength)) * 0.04))
 }
 
 /** Flat-out running speed (m/s). */

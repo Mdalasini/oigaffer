@@ -1,11 +1,11 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Goalkeeper, MoveIntent, Outfielder, Physical, Position, TakeOn, TouchStyle, Velocity } from '../components'
+import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, TouchStyle, Velocity } from '../components'
 import { GOAL_X } from '../constants'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { ballAtFeet, dribble } from '../touch'
+import { ballAtFeet, canPlayBall, dribble, footDistance } from '../touch'
 
 const SHOT_SPEED = 25
 /**
@@ -39,6 +39,16 @@ const CHECK_BACK_SPREAD = 0.6
 /** A beaten defender this close behind is chasing: shoot this much earlier, and run with it. */
 const CHASED_WITHIN = 7
 const CHASED_SHOOT_EARLIER = 5
+/** Shield when the defender is this close (m) and the ball is this tight (m) to the feet. */
+const SHIELD_RANGE = 1.4
+const SHIELD_CONTROL = 0.9
+/** Hold the shield for SHIELD_HOLD plus up to SHIELD_SPREAD seconds, then turn away; not again for SHIELD_REST. */
+const SHIELD_HOLD = 0.5
+const SHIELD_SPREAD = 0.8
+const SHIELD_REST = 1.5
+/** Barely move while shielding (m/s). */
+const SHIELD_PACE = 1.2
+
 /** The striker's decisions: dribble at goal with touches, then shoot. */
 export function strikerSystem(world: Match, dt: number) {
   for (const eid of query(world, [Outfielder, MoveIntent, Dribbler])) {
@@ -60,11 +70,12 @@ export function strikerSystem(world: Match, dt: number) {
 
     const chased = world.defenderActive && isChased(world, dirX, dirY)
     const shootDistance = world.shootDistance + (chased ? CHASED_SHOOT_EARLIER : 0)
-    if (wantsToShoot(world, eid, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+    if (canPlayBall(world, eid) && wantsToShoot(world, eid, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
       shoot(world, eid)
       continue
     }
 
+    if (world.defenderActive && shield(world, eid, dirX, dirY, dt)) continue
     if (world.defenderActive && takeOn(world, eid, dirX, dirY, dt)) continue
     TakeOn.side[eid] = 0
 
@@ -106,6 +117,47 @@ function laneClear(world: Match) {
 }
 
 /**
+ * With the defender tight and the ball at the feet, put the body between them
+ * and the ball: turn away, roll it under the sole, and hold them off for a
+ * moment before spinning away from them. Returns false when not shielding.
+ */
+function shield(world: Match, eid: number, gx: number, gy: number, dt: number): boolean {
+  const { ball, defender, rng } = world
+  Shield.timer[eid] -= dt
+  const awayX = Position.x[eid] - Position.x[defender]
+  const awayY = Position.y[eid] - Position.y[defender]
+  const gap = Math.hypot(awayX, awayY)
+  // How far the ball sits towards the defender's side of the striker's body:
+  // shielding only works with the ball on the far side.
+  const ballTowardDefender = -((Position.x[ball] - Position.x[eid]) * awayX + (Position.y[ball] - Position.y[eid]) * awayY) / (gap || 1)
+
+  if (!Shield.active[eid]) {
+    const goalSide = (Position.x[defender] - Position.x[ball]) * gx + (Position.y[defender] - Position.y[ball]) * gy > -0.3
+    const tight = footDistance(eid, ball) < SHIELD_CONTROL
+    if (Shield.timer[eid] > 0 || gap > SHIELD_RANGE || !goalSide || !tight || ballTowardDefender > 0.1) return false
+    Shield.active[eid] = 1
+    Shield.timer[eid] = SHIELD_HOLD + rng() * SHIELD_SPREAD
+  }
+
+  const exposed = ballTowardDefender > 0.3
+  if (Shield.timer[eid] <= 0 || gap > SHIELD_RANGE + 0.8 || OffBalance.timer[defender] > 0 || exposed) {
+    // Turn away from the side the defender is on and take them on from there.
+    Shield.active[eid] = 0
+    Shield.timer[eid] = SHIELD_REST
+    const lateral = -(Position.x[defender] - Position.x[ball]) * gy + (Position.y[defender] - Position.y[ball]) * gx
+    beginTakeOn(world, eid, lateral > 0 ? -1 : 1, false)
+    return false
+  }
+
+  const nx = awayX / (gap || 1)
+  const ny = awayY / (gap || 1)
+  dribble(eid, ball, TouchStyle.Shield, nx, ny, SHIELD_PACE)
+  MoveIntent.faceX[eid] = nx
+  MoveIntent.faceY[eid] = ny
+  return true
+}
+
+/**
  * Beating the defender: carry the ball at their outside shoulder, cut across
  * them up close (sometimes after a dummy the other way), and once clear of
  * their body knock it past and run. Returns false when the defender isn't in
@@ -123,9 +175,8 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
 
   if (TakeOn.side[eid] === 0) {
     // Go round the side the defender is leaning away from.
-    TakeOn.side[eid] = lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
-    TakeOn.feintTimer[eid] = rng() < FEINT_CHANCE ? FEINT_TIME : 0
-    TakeOn.checkBackTimer[eid] = CHECK_BACK_AFTER + rng() * CHECK_BACK_SPREAD
+    const side = lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
+    beginTakeOn(world, eid, side, rng() < FEINT_CHANCE)
   }
   let side = TakeOn.side[eid]
   // How far the defender sits off to the far side of our path: positive once we're getting round them.
@@ -159,6 +210,13 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
     dribble(eid, ball, TouchStyle.Small, tx / len, ty / len, pace)
   }
   return true
+}
+
+/** Commits to going round the defender on `side`, with or without a dummy first. */
+function beginTakeOn(world: Match, eid: number, side: number, dummy: boolean) {
+  TakeOn.side[eid] = side
+  TakeOn.feintTimer[eid] = dummy ? FEINT_TIME : 0
+  TakeOn.checkBackTimer[eid] = CHECK_BACK_AFTER + world.rng() * CHECK_BACK_SPREAD
 }
 
 const rotate = (x: number, y: number, a: number): [number, number] => [
