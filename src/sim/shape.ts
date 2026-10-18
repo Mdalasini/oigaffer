@@ -5,7 +5,10 @@ import { seenX } from './perception'
 import { perPitch, type Pitch } from './pitch'
 import { attackDir, opponent } from './teams'
 
-// Sizes are shares of the pitch's length and width, so the shape suits any pitch.
+// With the ball, sizes are shares of the pitch's length and width: an attack
+// stretches whatever pitch it has. Without it, the back line and the block are
+// set in metres from the ball and the goal: how close a defence has to be to
+// the ball, and how compact it is, don't grow with the pitch.
 const dimensions = perPitch(({ halfLength: L, halfWidth: W }: Pitch) => {
   const LENGTH = 2 * L
   return {
@@ -19,15 +22,21 @@ const dimensions = perPitch(({ halfLength: L, halfWidth: W }: Pitch) => {
     FRONT_FROM_GOAL: 0.08 * LENGTH,
     MIN_BLOCK_LENGTH: 0.16 * LENGTH,
     ATTACK_HALF_WIDTH: W - 3,
-    // Without the ball: the back line sits this far behind the ball, between these
-    // limits, and the block is this long and this wide.
-    LINE_BEHIND_BALL: 0.25 * LENGTH,
-    LINE_DEEPEST: -L + 0.15 * LENGTH,
+    // Without the ball: the back line sits LINE_BEHIND_BALL behind the ball, no
+    // deeper than LINE_DEEPEST_FROM_GOAL off its own goal line and no higher
+    // than this, and the block is this wide.
+    LINE_DEEPEST: -L + LINE_DEEPEST_FROM_GOAL,
     LINE_HIGHEST: -0.05 * LENGTH,
-    DEFEND_LENGTH: 0.3 * LENGTH,
     DEFEND_HALF_WIDTH: 0.55 * W,
   }
 })
+
+/** Without the ball, the back line sits this far (m) behind the ball... */
+const LINE_BEHIND_BALL = 15
+/** ...and no nearer its own goal line than this (m): about the edge of the six-yard box on a full-size pitch. */
+const LINE_DEEPEST_FROM_GOAL = 9
+/** From the back line to the front of the block without the ball (m). */
+const DEFEND_LENGTH = 18
 
 const ONSIDE_MARGIN = 1
 const ATTACK_BALL_SHIFT = 0.25
@@ -69,7 +78,7 @@ export function onsideLimit(world: Match, team: number, by = -1): number {
  * stepping up and dropping off.
  */
 export function baseLine(world: Match, team: number): number {
-  const { LINE_BEHIND_BALL, LINE_DEEPEST, LINE_HIGHEST } = dimensions(world.pitch)
+  const { LINE_DEEPEST, LINE_HIGHEST } = dimensions(world.pitch)
   return clamp(along(team, Position.x[world.ball]) - LINE_BEHIND_BALL, LINE_DEEPEST, LINE_HIGHEST)
 }
 
@@ -91,7 +100,7 @@ export function block(world: Match, team: number) {
   }
   const back = world.lines[team]
   const room = d.W - d.DEFEND_HALF_WIDTH
-  return { back, front: back + d.DEFEND_LENGTH, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: d.DEFEND_HALF_WIDTH }
+  return { back, front: back + DEFEND_LENGTH, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: d.DEFEND_HALF_WIDTH }
 }
 
 /**

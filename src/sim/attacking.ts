@@ -5,7 +5,6 @@ import { gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
 import { seenFacing } from './perception'
-import type { Pitch } from './pitch'
 import { rateFeetPass } from './playmaking'
 import { gaussian } from './rng'
 import { along, homePosition, onsideLimit } from './shape'
@@ -22,7 +21,7 @@ export interface Intent {
 }
 
 /** Attackers keep at least this far (m) from the carrier, so they offer a pass rather than crowd them. */
-const spacing = (pitch: Pitch) => 0.16 * 2 * pitch.halfLength
+const SPACING = 9.6
 
 // Showing for it: when the carrier has less than PRESSURED seconds on the
 // ball, or is facing their own goal, a teammate goes to the spot around them
@@ -186,7 +185,6 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = Math.hypot(dx, dy)
-    const SPACING = spacing(world.pitch)
     if (gap < SPACING) {
       // Slide away from the carrier, keeping on the side they're already on.
       const ux = gap > 0.5 ? dx / gap : 0
