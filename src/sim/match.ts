@@ -201,6 +201,8 @@ export interface MatchContext {
   teams: [TeamPlayers, TeamPlayers]
   /** What each player knows of the others. */
   memory: Memory
+  /** Times a player has been warned of an opponent closing in unseen. */
+  manOnShouts: number
   /** The team on the ball. */
   possession: number
   /**
@@ -284,6 +286,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
       { outfielders: [], keeper: 0 },
     ],
     memory: createMemory([], 0),
+    manOnShouts: 0,
     possession: 0,
     carrier: 0,
     presser: 0,

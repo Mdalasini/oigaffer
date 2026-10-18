@@ -199,16 +199,21 @@ describe('outcomes', () => {
   test('a better tackler wins the ball more often over many attacks', () => {
     /** Tackles Blue wins per Red spell on the ball, over half an hour. */
     const tackledRate = (tackling: number, dribbling: number) => {
-      const world = createMatch({ outfielders: 2, seed: 5, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
       let tackled = 0
-      world.onEvent = (e) => {
-        if (e.team === BLUE && e.kind === 'tackled') tackled++
+      let attacks = 0
+      // One match alone varies a lot with how its attacks go, so three are pooled.
+      for (const seed of [4, 5, 6]) {
+        const world = createMatch({ outfielders: 2, seed, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
+        world.onEvent = (e) => {
+          if (e.team === BLUE && e.kind === 'tackled') tackled++
+        }
+        while (world.time < 30 * 60) stepMatch(world)
+        attacks += world.stats[RED].attacks
       }
-      while (world.time < 30 * 60) stepMatch(world)
-      return tackled / world.stats[RED].attacks
+      return tackled / attacks
     }
-    // Measured at 0.15–0.19 against 0.02–0.04 across seeds. Counting interceptions too, as this once did, mostly
+    // Measured at 0.12–0.22 against 0.01–0.07 for single seeds. Counting interceptions too, as this once did, mostly
     // measures how attacks end, which shifted once players stopped shooting at the first chance.
     expect(tackledRate(20, 5)).toBeGreaterThan(tackledRate(5, 20) + 0.08)
-  }, 20_000)
+  }, 40_000)
 })

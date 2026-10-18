@@ -46,7 +46,9 @@ without it, still on the small pitch for now.
   last seen, carried on the way they were going. A look over the
   shoulder takes in everyone at once: **vision** sets how often they scan
   (every 7 s at 1, under 2 s at 20) and how often they check before a pass
-  reaches them. A teammate calling for it is heard wherever they are. So a
+  reaches them. A teammate calling for it is heard wherever they are, and
+  one who sees an opponent closing in on the ball unseen shouts "man on".
+  Defenders share out their marking from what they've seen between them. So a
   carrier who hasn't scanned doesn't count the defender closing in from
   behind, a receiver who hasn't checked may touch it straight into them, and
   a teammate out of sight for a few seconds drops out of mind as an option.
