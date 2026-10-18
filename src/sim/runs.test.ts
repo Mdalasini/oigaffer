@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
-import { attackingIntent } from './attacking'
+import { attackingIntent, restDefender } from './attacking'
 import { passOptions } from './playmaking'
-import { along, onsideLimit } from './shape'
+import { along, homePosition, onsideLimit } from './shape'
 import { passSafety } from './space/control'
 import { FOOT_OFFSET } from './touch'
 
@@ -167,5 +167,92 @@ describe('run bookkeeping', () => {
     stepMatch(world)
     expect(along(RED, OffBall.targetX[mate])).toBeGreaterThan(onsideLimit(world, RED) - 0.5)
     expect(along(RED, OffBall.targetX[mate])).toBeLessThanOrEqual(onsideLimit(world, RED) + 1e-4)
+  })
+})
+
+describe('five a side: complementary support', () => {
+  /** Red's four with the first on the ball at (x, y), closed down by Blue's presser, and the rest where given. */
+  function closedDown(x: number, y: number, mates: [number, number][], blue: [number, number][]): Match {
+    const world = createMatch({ seed: 3 })
+    const reds = world.teams[RED].outfielders
+    handOver(world, reds[0])
+    place(reds[0], x, y)
+    setVec(Position, world.ball, x + FOOT_OFFSET, y, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    mates.forEach(([mx, my], i) => place(reds[i + 1], mx, my))
+    world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, blue[i][0], blue[i][1], Math.PI))
+    place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+    world.phase = 'play'
+    world.possession = RED
+    return world
+  }
+
+  test('with the carrier closed down, the two who show for it offer different angles, and the deepest stays back', () => {
+    // The carrier is pressed in midfield with the right side blocked; both teammates are up on the left,
+    // where the best spot is the same for both of them.
+    const world = closedDown(-5, 0, [[-16, 0], [-6, 9], [-3, 11]], [[-3.8, 0], [0, -5], [-2, -9], [6, 2]])
+    const [, deep, a, b] = world.teams[RED].outfielders
+    expect(restDefender(world)).toBe(deep)
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    const first = attackingIntent(world, a)
+    const second = attackingIntent(world, b)
+    const rest = attackingIntent(world, deep)
+    expect(OffBall.showing[a] && OffBall.showing[b]).toBeTruthy()
+    expect(OffBall.showing[deep]).toBe(0)
+    expect(along(RED, rest.x)).toBeLessThan(along(RED, bx))
+    const angle = (spot: { x: number; y: number }) => Math.atan2(spot.y - by, spot.x - bx)
+    const apart = Math.abs(Math.atan2(Math.sin(angle(first) - angle(second)), Math.cos(angle(first) - angle(second))))
+    // Without allowing for each other, both pick the same spot.
+    expect(apart).toBeGreaterThan(0.4)
+  })
+
+  test('the rest defence is whoever plays deepest, and changes when they have the ball', () => {
+    const world = createMatch({ seed: 3 })
+    const reds = world.teams[RED].outfielders
+    handOver(world, reds[1])
+    world.possession = RED
+    const deepest = (exclude: number) =>
+      reds.filter((eid) => eid !== exclude).reduce((a, b) => (along(RED, homePosition(world, a).x) <= along(RED, homePosition(world, b).x) ? a : b))
+    expect(restDefender(world)).toBe(deepest(reds[1]))
+    handOver(world, restDefender(world))
+    expect(restDefender(world)).not.toBe(world.carrier)
+    expect(restDefender(world)).toBe(deepest(world.carrier))
+  })
+
+  test('two or fewer outfielders a side spare nobody for rest defence', () => {
+    expect(restDefender(createMatch({ outfielders: 2, seed: 1 }))).toBe(-1)
+  })
+
+  describe('over five minutes of play', () => {
+    const world = createMatch({ seed: 11 })
+    let settled = 0
+    let restBehind = 0
+    let tooManyRunning = 0
+    let possession = world.possession
+    let carrier = world.carrier
+    let changed = 0
+    for (let tick = 0; world.time < 300; tick++) {
+      stepMatch(world)
+      if (world.possession !== possession || world.carrier !== carrier) changed = world.time
+      possession = world.possession
+      carrier = world.carrier
+      if (tick % 12 || world.phase !== 'play') continue
+      const squad = world.teams[possession].outfielders
+      if (squad.filter((eid) => Run.phase[eid] !== RunPhase.None).length > 1) tooManyRunning++
+      // Right after the ball changes hands, or while it's travelling, the shape is still reforming.
+      if (world.pass || world.time - changed < 3) continue
+      settled++
+      if (along(possession, Position.x[restDefender(world)]) <= along(possession, Position.x[world.ball]) + 1) restBehind++
+    }
+
+    test('in settled possession, the rest defence is behind the ball', () => {
+      // Measured at 90%: the rest are moments the ball has been played back past them.
+      expect(restBehind / settled).toBeGreaterThan(0.85)
+    })
+
+    test('one runs in behind at a time', () => {
+      expect(tooManyRunning).toBe(0)
+    })
   })
 })

@@ -39,12 +39,16 @@ two outfielders a side.
   towards goal and away from pressure. **First touch** sets how fast a ball
   they can take dead and how true the touch goes. A faster ball bounces off
   them. Anyone can cut a pass out.
-- **Off the ball (1–20)** — the carrier's teammate holds their place in the
-  shape and calls for it when free. When the carrier is closed down or facing
-  their own goal, they *show for it*: they go to the spot around the carrier
-  where a pass would be worth most, and stay there until a clearly better spot
-  appears. When the carrier has time and is facing forward, they *run in
-  behind*. First they check towards the ball, then sprint for the space beyond
+- **Off the ball (1–20)** — the carrier's teammates hold their places in the
+  shape and call for it when free. When the carrier is closed down or facing
+  their own goal, the one or two nearest *show for it*: each goes to the spot
+  around the carrier where a pass would be worth most, away from the angles
+  their teammates already offer, and stays there until a clearly better spot
+  appears. In a side of three or more, whoever plays deepest stays behind the
+  ball as *rest defence*, the outlet to play back to and the first line
+  against the counter; when they get the ball, the next deepest takes over.
+  When the carrier has time and is facing forward, one at a time *runs in
+  behind* (about one runner for every four outfielders). First they check towards the ball, then sprint for the space beyond
   the line that they'd win the race to, holding the line until the pass and
   calling for it there. The carrier hears a call even from a teammate they
   can't see, and can play into the called space. A run nobody finds is given
