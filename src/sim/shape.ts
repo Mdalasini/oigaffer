@@ -50,6 +50,19 @@ export function onsideLimit(world: Match, team: number): number {
   return Math.max(secondLast, along(team, Position.x[world.ball]), 0)
 }
 
+/**
+ * Where `team`'s defensive line would sit with nothing else going on: a
+ * fixed distance behind the ball, between its deepest and highest limits.
+ * The defending system moves the actual line towards this, adjusted for
+ * stepping up and dropping off.
+ */
+export function baseLine(world: Match, team: number): number {
+  return clamp(along(team, Position.x[world.ball]) - LINE_BEHIND_BALL, LINE_DEEPEST, LINE_HIGHEST)
+}
+
+/** The deepest and highest the line goes, in `along` terms. */
+export const LINE_LIMITS = { deepest: LINE_DEEPEST, highest: LINE_HIGHEST }
+
 /** The rectangle `team`'s outfielders arrange themselves in, in `along` terms for depth. */
 export function block(world: Match, team: number) {
   const ballU = along(team, Position.x[world.ball])
@@ -59,7 +72,7 @@ export function block(world: Match, team: number) {
     const back = Math.min(clamp(ballU - REST_BEHIND_BALL, REST_DEEPEST, 0), front - MIN_BLOCK_LENGTH)
     return { back, front, centreY: ballY * ATTACK_BALL_SHIFT, halfWidth: ATTACK_HALF_WIDTH }
   }
-  const back = clamp(ballU - LINE_BEHIND_BALL, LINE_DEEPEST, LINE_HIGHEST)
+  const back = world.lines[team]
   const room = W - DEFEND_HALF_WIDTH
   return { back, front: back + DEFEND_LENGTH, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: DEFEND_HALF_WIDTH }
 }

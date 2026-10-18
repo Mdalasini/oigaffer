@@ -49,6 +49,20 @@ being built in stages.
   moment, how quickly they go, and how well they judge where to show. A
   passer misjudges a teammate's position against the line by up to about a
   metre, less with better decisions.
+- **Defending as a unit** — the defender quickest to the ball presses it. The
+  rest are given an attacker each, by an optimal assignment, so no two take
+  the same man and none is left free while a defender is spare. A defender
+  keeps their man unless another is clearly better placed to take him: half a
+  second quicker to get goal-side. The back line moves as one. It drops off
+  when the carrier has time to play forward, and steps up on a pressing cue:
+  the carrier facing their own goal, pinned on a touchline, or the ball played
+  backwards. On a pressing cue markers also get tight. The covering defender
+  holds the line rather than following a runner beyond it before the pass.
+  With an attacker lurking on the line as a pass is shaped, the line may step
+  up together to catch them offside. A runner who goes behind their marker's
+  back is picked up late. **Positioning** sets how late, and how often the
+  trap is sprung. Passes take a moment to wind up, and a runner times their
+  burst to the strike: go too early and they're offside.
 - **Offside** — judged each time a team plays the ball on purpose (a touch,
   pass, shot or first touch). Any teammate then in the opponents' half, and
   nearer their goal line than both the ball and the second-last opponent, is

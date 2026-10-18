@@ -72,6 +72,13 @@ export const Outfielder = {
   decisions: new Uint8Array(MAX_ENTITIES),
   /** How well a player finds space and times runs without the ball. */
   offTheBall: new Uint8Array(MAX_ENTITIES),
+  /** How well a defender keeps track of the runner they're marking, even one going behind them. */
+  positioning: new Uint8Array(MAX_ENTITIES),
+}
+
+/** The attacker a defender is responsible for (-1 for none), as their team has shared the jobs out. */
+export const Mark = {
+  target: new Int16Array(MAX_ENTITIES),
 }
 
 export const RunPhase = {
@@ -92,6 +99,8 @@ export const Run = {
   rest: new Float32Array(MAX_ENTITIES),
   targetX: new Float32Array(MAX_ENTITIES),
   targetY: new Float32Array(MAX_ENTITIES),
+  /** Match time at which they burst for a through ball being shaped for them, judged from the passer's shape. */
+  burstAt: new Float32Array(MAX_ENTITIES),
 }
 
 export const CallKind = {

@@ -1,7 +1,8 @@
 import { hasComponent, query } from 'bitecs'
-import { Defender, DefenderMode, Effort, MoveIntent, OffBall, Outfielder, Position, Run, RunPhase, Sliding, Team } from '../components'
+import { Defender, DefenderMode, Effort, Mark, MoveIntent, OffBall, Outfielder, Position, Run, RunPhase, Sliding, Team } from '../components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
 import { attackingIntent, endRun, tickRun } from '../attacking'
+import { lineTarget, pressCue, trapping } from './defending'
 import type { Match } from '../match'
 import { setTarget, steer } from '../movement'
 import { along, onsideLimit } from '../shape'
@@ -88,7 +89,8 @@ function cover(world: Match, eid: number) {
   const goalX = ownGoalX(Team.id[eid])
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  const man = markedBy(world, eid)
+  const team = Team.id[eid]
+  const man = Mark.target[eid]
   const toGoal = unit(goalX - bx, -by)
   let x = bx + toGoal.x * COVER_DEPTH
   let y = by + toGoal.y * COVER_DEPTH
@@ -102,7 +104,8 @@ function cover(world: Match, eid: number) {
     // Marking: goal-side of them, tighter the nearer they are to the ball.
     const manToGoal = unit(goalX - mx, -my)
     const manToBall = unit(bx - mx, by - my)
-    const tightness = clamp(Math.hypot(bx - mx, by - my) / MARK_LOOSE_AT, 0, 1)
+    // On a pressing cue they get tight, to deny the pass.
+    const tightness = pressCue(world) ? 0 : clamp(Math.hypot(bx - mx, by - my) / MARK_LOOSE_AT, 0, 1)
     const depth = MARK_TIGHT + (MARK_LOOSE - MARK_TIGHT) * tightness
     const markX = mx + manToGoal.x * depth + manToBall.x * MARK_BALL_SHADE
     const markY = my + manToGoal.y * depth + manToBall.y * MARK_BALL_SHADE
@@ -112,36 +115,11 @@ function cover(world: Match, eid: number) {
     y += (markY - y) * w
   }
   // Never behind their own goal line.
-  const dir = attackDir(Team.id[eid])
+  const dir = attackDir(team)
   x = clamp(x, -PITCH_HALF_LENGTH + 1, PITCH_HALF_LENGTH - 1)
   if ((x - goalX) * dir < 1) x = goalX + dir
   y = clamp(y, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
   go(world, eid, x, y, effortFor(world, eid, x, y, true))
-}
-
-/**
- * The attacker `eid` is responsible for: defenders pair off with the
- * attackers not already engaged, each with the nearest one left. While the
- * keeper holds the ball nobody is engaged, so every attacker is picked up.
- */
-function markedBy(world: Match, eid: number): number {
-  const team = Team.id[eid]
-  const held = world.phase === 'held'
-  const defenders = world.teams[team].outfielders.filter((d) => held || d !== world.presser)
-  const attackers = world.teams[world.possession].outfielders.filter((a) => held || a !== world.carrier)
-  // Greedy pairing, closest pair first.
-  const pairs: [number, number, number][] = []
-  for (const d of defenders) for (const a of attackers) pairs.push([Math.hypot(Position.x[a] - Position.x[d], Position.y[a] - Position.y[d]), d, a])
-  pairs.sort((p, q) => p[0] - q[0])
-  const takenD = new Set<number>()
-  const takenA = new Set<number>()
-  for (const [, d, a] of pairs) {
-    if (takenD.has(d) || takenA.has(a)) continue
-    if (d === eid) return a
-    takenD.add(d)
-    takenA.add(a)
-  }
-  return -1
 }
 
 /**
@@ -166,15 +144,41 @@ function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   const team = Team.id[eid]
   const attacking = team === world.possession
   const ball = world.ball
-  // A runner wants to be right on the line, and a check away is a short, deliberate step: both need a tight aim.
-  const precise = attacking && Run.phase[eid] !== RunPhase.None
+  // Defenders hold the line rather than drop behind it, unless the ball is already beyond it or a pass is on
+  // its way: a runner who goes past them before the pass is offside. Springing the trap, they make for where
+  // the line is going.
+  const trap = !attacking && trapping(world, team)
+  if (!attacking) {
+    const line = trap ? lineTarget(world, team) : world.lines[team]
+    if (world.phase === 'play' && !world.pass && along(team, x) < line && along(team, Position.x[ball]) > line + 2) {
+      x = line * attackDir(team)
+      // Pinned to the line, they keep clear of teammates by sliding along it instead.
+      for (const mate of world.teams[team].outfielders) {
+        if (mate === eid) continue
+        const onBall = mate === world.presser
+        const mx = onBall ? Position.x[mate] : OffBall.targetX[mate]
+        const my = onBall ? Position.y[mate] : OffBall.targetY[mate]
+        const dx = x - mx
+        if (Math.abs(dx) >= TEAMMATE_GAP) continue
+        const side = Math.sign(y - my) || 1
+        const need = Math.sqrt(TEAMMATE_GAP * TEAMMATE_GAP - dx * dx)
+        if (Math.abs(y - my) < need) y = clamp(my + side * need, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
+      }
+    }
+  }
+  // A runner wants to be right on the line, a check away is a short, deliberate step, and a trap is a step up
+  // together: all need a tight aim, so they move even from standing.
+  const precise = (attacking && Run.phase[eid] !== RunPhase.None) || trap
   const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
-  setTarget(eid, x, y, radius, effort)
+  // The trap is sprung sharply.
+  setTarget(eid, x, y, radius, trap ? Math.max(effort, Effort.Run) as Effort : effort)
   // Whatever the target ends up being, an attacker's stays onside: a runner on the last
-  // defender's shoulder, everyone else a yard short.
+  // defender's shoulder, everyone else a yard short, except a runner bursting for a
+  // through ball being shaped for them.
   if (attacking) {
     const limit = onsideLimit(world, team) - (Run.phase[eid] === RunPhase.Go ? RUNNER_MARGIN : ONSIDE_MARGIN)
-    if (along(team, OffBall.targetX[eid]) > limit) OffBall.targetX[eid] = limit * attackDir(team)
+    const bursting = world.windup?.option.receiver === eid && world.windup.option.kind === 'through' && world.time >= Run.burstAt[eid]
+    if (!bursting && along(team, OffBall.targetX[eid]) > limit) OffBall.targetX[eid] = limit * attackDir(team)
   }
 }
 
