@@ -4,7 +4,7 @@ import { reactionDelay, shotAngleError } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
-import { OffBall, OnBall, Position, Pressing } from './components'
+import { Mark, OffBall, OnBall, Position, Pressing } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { createMatch, resetMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
@@ -118,6 +118,42 @@ describe('match outcomes', () => {
     resetMatch(world)
     expect(world.windup).toBeNull()
     expect(cues[0]).toBe('passCalledOff')
+  })
+
+  test('players far from the ball look again less often, and a pass struck makes everyone look sooner', () => {
+    const world = createMatch({ outfielders: 4, seed: 6 })
+    const near: number[] = []
+    const far: number[] = []
+    let struck = 0
+    let justStruck = false
+    world.onCue = (c) => {
+      if (c.kind === 'passStruck') justStruck = true
+    }
+    const before = new Map<number, number>()
+    while (world.time < 10 * 60) {
+      stepMatch(world)
+      if (justStruck) {
+        struck++
+        justStruck = false
+        for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) expect(OffBall.decideIn[eid]).toBeLessThanOrEqual(0.4)
+      }
+      for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
+        const wait = OffBall.decideIn[eid]
+        // A fresh look sets a new wait, longer than what was left.
+        if (wait > (before.get(eid) ?? Infinity) + 0.05 && world.phase === 'play' && eid !== world.carrier && eid !== world.presser) {
+          const distance = Math.hypot(Position.x[eid] - Position.x[world.ball], Position.y[eid] - Position.y[world.ball])
+          if (distance < 8 && Mark.target[eid] === -1) near.push(wait)
+          if (distance > 28 && Mark.target[eid] === -1 && !OffBall.showing[eid]) far.push(wait)
+        }
+        before.set(eid, wait)
+      }
+    }
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+    expect(struck).toBeGreaterThan(20)
+    expect(near.length).toBeGreaterThan(50)
+    expect(far.length).toBeGreaterThan(20)
+    expect(mean(near)).toBeLessThan(0.5)
+    expect(mean(far)).toBeGreaterThan(0.7)
   })
 
   test('a shot blocked straight back to the shooter is not struck again and again', () => {

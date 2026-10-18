@@ -263,4 +263,8 @@ export const Goalkeeper = {
   reactTimer: new Float32Array(MAX_ENTITIES),
   /** Seconds before the keeper can gather the ball again, after parrying it or rolling it out. */
   recover: new Float32Array(MAX_ENTITIES),
+  /** With the ball in their hands: when they next look for who to roll it to, who that is, and how safe the pass looked. */
+  nextLook: new Float32Array(MAX_ENTITIES),
+  receiver: new Int32Array(MAX_ENTITIES),
+  safety: new Float32Array(MAX_ENTITIES),
 }

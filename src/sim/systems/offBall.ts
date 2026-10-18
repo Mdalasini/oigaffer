@@ -8,9 +8,19 @@ import { setTarget, steer } from '../movement'
 import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
 
-/** Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so the team doesn't move in lockstep. */
+/**
+ * Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so
+ * the team doesn't move in lockstep. That's near the ball; further from it
+ * they're less involved and look again less often, up to FAR_EVERY plus
+ * FAR_SPREAD seconds by FAR_FROM_BALL metres away. Something happening, such
+ * as the ball being played, makes them look sooner (see `cue`).
+ */
 const DECIDE_EVERY = 0.25
 const DECIDE_SPREAD = 0.2
+const FAR_EVERY = 0.7
+const FAR_SPREAD = 0.4
+const NEAR_BALL = 12
+const FAR_FROM_BALL = 30
 
 /** A target counts as reached within BASE_RADIUS, growing by RADIUS_PER_METRE for every metre from the ball. */
 const BASE_RADIUS = 1.2
@@ -65,15 +75,35 @@ export function offBallSystem(world: Match, dt: number) {
     else endRun(world, eid)
     OffBall.decideIn[eid] -= dt
     if (OffBall.decideIn[eid] <= 0) {
-      OffBall.decideIn[eid] = DECIDE_EVERY + world.rng() * DECIDE_SPREAD
       if (attacking) {
         const intent = attackingIntent(world, eid)
         go(world, eid, intent.x, intent.y, intent.effort)
       } else defend(world, eid)
+      // How soon they look again depends on what they've just decided: setting off on a run keeps them alert.
+      OffBall.decideIn[eid] = nextLook(world, eid)
     }
     const face = attacking ? halfTurn(world, eid) : { x: Position.x[ball] - Position.x[eid], y: Position.y[ball] - Position.y[eid] }
     steer(eid, face.x, face.y)
   }
+}
+
+/**
+ * Seconds until `eid` looks again: soon when they're involved, with the ball
+ * near them or their man, or on a run or showing for it; less often the
+ * further away the play is.
+ */
+function nextLook(world: Match, eid: number): number {
+  const ball = world.ball
+  const bx = Position.x[ball]
+  const by = Position.y[ball]
+  let distance = Math.hypot(Position.x[eid] - bx, Position.y[eid] - by)
+  const man = Mark.target[eid]
+  if (man !== -1) distance = Math.min(distance, Math.hypot(Position.x[man] - bx, Position.y[man] - by))
+  if (Run.phase[eid] !== RunPhase.None || OffBall.showing[eid]) distance = 0
+  const far = clamp((distance - NEAR_BALL) / (FAR_FROM_BALL - NEAR_BALL), 0, 1)
+  const every = DECIDE_EVERY + (FAR_EVERY - DECIDE_EVERY) * far
+  const spread = DECIDE_SPREAD + (FAR_SPREAD - DECIDE_SPREAD) * far
+  return every + world.rng() * spread
 }
 
 /**

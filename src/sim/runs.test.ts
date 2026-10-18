@@ -58,6 +58,20 @@ describe('running in behind', () => {
     expect(Call.kind[mate]).toBe(CallKind.Space)
   })
 
+  test('a forward far from the ball who sets off on a run looks again on the quick cadence, not the far one', () => {
+    const grades = { red: { outfielder: { offTheBall: 20 } } }
+    // The carrier is deep, over 30 m from the forward on Blue's line.
+    const world = scene(2, -20, 0, 12, 4, [[14, -4], [14, 8]], grades)
+    const mate = world.teams[RED].outfielders[1]
+    let wait = -1
+    within(world, 6, () => {
+      if (Run.phase[mate] === RunPhase.Prepare && wait === -1) wait = OffBall.decideIn[mate]
+      return wait !== -1
+    })
+    expect(wait).toBeGreaterThan(0)
+    expect(wait).toBeLessThanOrEqual(0.45)
+  })
+
   test('better movers make more runs', () => {
     const runs = (offTheBall: number) => {
       let count = 0

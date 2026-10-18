@@ -101,8 +101,9 @@ without it, still on the small pitch for now.
   1, 4° at 20), so a long shot misses by more. An opponent within 3 m hurries
   it, up to 2.2 times the error, and so does shooting across the body. Close
   in a shot is placed; further out it's driven harder, and less true. An
-  average finisher against a set keeper scores about as often as real shots
-  do: roughly a half from 6 m, a third from 10 m, a tenth from 18 m.
+  average finisher against a set keeper scores roughly a half of shots from
+  6 m, a third from 10 m and a sixth from 18 m: close to real shots, if a
+  few points high from 14–18 m.
 - **Keeper positioning** — the keeper stands on the line splitting the angle
   between the ball and the posts, further off their line the further away the
   ball is (1.2–3 m), and comes out up to 5 m to close down a shooter who is
