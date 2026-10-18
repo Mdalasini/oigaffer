@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Game } from '../game/Game'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
 import { DefenderMode } from '../sim/components'
-import type { Outcome } from '../sim/match'
+import type { Outcome, Restart } from '../sim/match'
 import { ControlPanel } from './ControlPanel'
+
+const RESTART_TEXT: Record<Restart, string> = { 'goal-kick': 'GOAL KICK', corner: 'CORNER', 'throw-in': 'THROW-IN' }
 
 const DEFENDER_MODE_LABEL: Record<DefenderMode, string> = {
   [DefenderMode.Jockey]: 'Jockeying',
@@ -29,6 +31,8 @@ const OUTCOME_BANNER: Record<Outcome, { text: string; className: string }> = {
   intercepted: { text: 'WON BY DEFENDER', className: 'text-sky-300' },
   blocked: { text: 'BLOCKED', className: 'text-rose-300' },
   tackled: { text: 'TACKLED', className: 'text-sky-300' },
+  outOfPlay: { text: 'OUT', className: 'text-neutral-200' },
+  setPiece: { text: 'OUT', className: 'text-amber-300' },
   abandoned: { text: 'PLAY STALLED', className: 'text-neutral-300' },
   wide: { text: 'WIDE', className: 'text-rose-300' },
   over: { text: 'OVER THE BAR', className: 'text-rose-300' },
@@ -61,7 +65,7 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [game])
 
-  const banner = snapshot.phase === 'result' && snapshot.outcome ? OUTCOME_BANNER[snapshot.outcome] : null
+  const banner = snapshot.phase === 'result' && snapshot.outcome ? bannerFor(snapshot.outcome, snapshot.restart) : null
   const { stats } = snapshot
 
   return (
@@ -74,6 +78,7 @@ export function App() {
         <Stat label="Saves" value={stats.saves} className="text-sky-300" />
         <Stat label="Misses" value={stats.misses} className="text-rose-300" />
         <Stat label="Lost" value={stats.lost} className="text-neutral-300" />
+        <Stat label="Set pieces" value={stats.setPieces} className="text-amber-300" />
       </div>
 
       {snapshot.defenderMode !== null && (
@@ -116,6 +121,14 @@ export function App() {
       )}
     </main>
   )
+}
+
+/** When the ball goes out, the banner names the restart; a throw-in also says whose it is. */
+function bannerFor(outcome: Outcome, restart: Restart | null) {
+  const banner = OUTCOME_BANNER[outcome]
+  if (!restart) return banner
+  const team = restart === 'throw-in' ? (outcome === 'setPiece' ? ' · ATTACK' : ' · DEFENCE') : ''
+  return { ...banner, text: RESTART_TEXT[restart] + team }
 }
 
 function Stat({ label, value, className = '' }: { label: string; value: number; className?: string }) {

@@ -53,6 +53,8 @@ const OUTCOME_COLOR: Record<Outcome, Color> = {
   claimed: [0.35, 0.65, 1, 1],
   intercepted: [0.35, 0.65, 1, 1],
   tackled: [0.35, 0.65, 1, 1],
+  outOfPlay: [0.7, 0.7, 0.7, 1],
+  setPiece: [1, 0.8, 0.3, 1],
   blocked: [1, 0.35, 0.3, 1],
   abandoned: [0.7, 0.7, 0.7, 1],
   wide: [1, 0.35, 0.3, 1],

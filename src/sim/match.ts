@@ -49,8 +49,15 @@ export type Outcome =
   | 'intercepted'
   /** The defender tackled the striker and came away with the ball. */
   | 'tackled'
+  /** The striker put the ball out: a goal kick, or a throw-in to the defence. */
+  | 'outOfPlay'
+  /** The defender put the ball out: a corner, or a throw-in to the attack. */
+  | 'setPiece'
   /** Open play ran on too long without a shot. */
   | 'abandoned'
+
+/** How play restarts after the ball goes out. */
+export type Restart = 'throw-in' | 'corner' | 'goal-kick'
 
 export interface ShotInfo {
   /** Where the ball was struck from. */
@@ -69,6 +76,8 @@ export interface MatchStats {
   misses: number
   /** Attacks that ended without a shot: the ball was lost or play stalled. */
   lost: number
+  /** Attacks that ended with the defender putting the ball out: a corner or throw-in to the attack. */
+  setPieces: number
 }
 
 export interface LastTouch {
@@ -135,6 +144,10 @@ export interface MatchContext {
   prevBall: Vec3
   lastTouch: LastTouch | null
   lastChallenge: LastChallenge | null
+  /** Who last played the ball, to decide restarts when it goes out. */
+  lastTouchedBy: number
+  /** How play restarts, when the attack ended with the ball out of play. */
+  restart: Restart | null
   onOutcome?: (outcome: Outcome) => void
 }
 
@@ -163,10 +176,12 @@ export function createMatch({ seed = Date.now(), grades = {}, defender = true }:
     autoReset: true,
     shot: null,
     outcome: null,
-    stats: { shots: 0, goals: 0, saves: 0, misses: 0, lost: 0 },
+    stats: { shots: 0, goals: 0, saves: 0, misses: 0, lost: 0, setPieces: 0 },
     prevBall: { x: 0, y: 0, z: 0 },
     lastTouch: null,
     lastChallenge: null,
+    lastTouchedBy: -1,
+    restart: null,
   })
 
   world.ball = addEntity(world)
@@ -261,6 +276,8 @@ export function resetPlay(world: Match) {
   world.outcome = null
   world.lastTouch = null
   world.lastChallenge = null
+  world.lastTouchedBy = striker
+  world.restart = null
 }
 
 /** The defender starts goal-side of the striker, ready to step up. */
@@ -307,6 +324,8 @@ const OUTCOME_STAT: Record<Outcome, keyof MatchStats> = {
   claimed: 'lost',
   intercepted: 'lost',
   tackled: 'lost',
+  outOfPlay: 'lost',
+  setPiece: 'setPieces',
   abandoned: 'lost',
 }
 

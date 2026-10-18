@@ -74,6 +74,7 @@ function ballOffBody(world: Match, eid: number) {
   Position.x[ball] = Position.x[eid] + nx * minimum
   Position.y[ball] = Position.y[eid] + ny * minimum
   Position.z[ball] = z
+  world.lastTouchedBy = eid
   if (world.phase === 'shot') endAttack(world, 'blocked', null)
 }
 

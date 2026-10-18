@@ -1,5 +1,7 @@
 import { hasComponent, type World } from 'bitecs'
 import { Dribbler, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Sliding, TouchStyle, Velocity } from './components'
+import { angleDelta } from './angles'
+import { GOAL_HALF_WIDTH, GOAL_X, PITCH_HALF_WIDTH } from './constants'
 import { closeControlSpeed } from './grades'
 
 export interface TouchSpec {
@@ -46,6 +48,28 @@ export function footDistance(eid: number, ball: number) {
  */
 export function canPlayBall(world: World, eid: number): boolean {
   return OffBalance.timer[eid] === 0 && !hasComponent(world, eid, Sliding)
+}
+
+/** The angle (rad) a touch towards (dirX, dirY) actually goes, given how far the body lets it turn from the facing. */
+export function touchAngle(eid: number, style: Exclude<TouchStyle, 0>, dirX: number, dirY: number): number {
+  const facing = Facing.angle[eid]
+  const maxAngle = TOUCH_SPECS[style].maxAngle
+  return facing + Math.max(-maxAngle, Math.min(maxAngle, angleDelta(facing, Math.atan2(dirY, dirX))))
+}
+
+/**
+ * How far (m) a ball at (x, y) can travel along the unit direction (dx, dy)
+ * before leaving the pitch over a touchline or the goal line. Heading into
+ * the goal mouth doesn't count as leaving.
+ */
+export function roomAhead(x: number, y: number, dx: number, dy: number): number {
+  let room = Infinity
+  if (dy !== 0) room = Math.min(room, ((dy > 0 ? PITCH_HALF_WIDTH : -PITCH_HALF_WIDTH) - y) / dy)
+  if (dx > 0) {
+    const t = (GOAL_X - x) / dx
+    if (Math.abs(y + dy * t) > GOAL_HALF_WIDTH) room = Math.min(room, t)
+  }
+  return Math.max(0, room)
 }
 
 /** Whether `player` can play `ball` right now. */

@@ -1,7 +1,7 @@
 import { Body, Position, Velocity } from '../components'
 import { ballAtFeet } from '../touch'
-import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X } from '../constants'
-import { endAttack, resetPlay, type Match } from '../match'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
+import { endAttack, resetPlay, type Match, type Restart } from '../match'
 import type { GoalPoint } from '../shooting'
 
 /** Reach beyond the keeper's body when stretching out. */
@@ -21,7 +21,7 @@ export function outcomeSystem(world: Match, _dt: number) {
     if (keeperCanClaim(world)) {
       Velocity.x[world.ball] = Velocity.y[world.ball] = Velocity.z[world.ball] = 0
       endAttack(world, 'claimed', null)
-    } else if (world.phaseTime > PLAY_TIMEOUT) endAttack(world, 'abandoned', null)
+    } else if (!leftThePitch(world) && world.phaseTime > PLAY_TIMEOUT) endAttack(world, 'abandoned', null)
     return
   }
 
@@ -46,6 +46,36 @@ export function outcomeSystem(world: Match, _dt: number) {
   }
 
   if (world.phaseTime > SHOT_TIMEOUT) endAttack(world, 'wide', null)
+}
+
+/**
+ * Ends open play once the whole ball is over a line. Over the goal line
+ * between the posts it's a goal however it got there; elsewhere the restart
+ * goes against whoever touched it last. Shots have their own goal-line check.
+ */
+function leftThePitch(world: Match): boolean {
+  const { ball, prevBall } = world
+  const lineX = GOAL_X + BALL_RADIUS
+  const atLine = prevBall.x < lineX ? crossPlane(world, lineX) : null
+  if (atLine) {
+    if (Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS && atLine.z <= GOAL_HEIGHT - BALL_RADIUS) {
+      // It went in without a shot being struck; count it as one so goals stay a share of shots.
+      world.stats.shots++
+      endAttack(world, 'goal', atLine)
+    } else restartPlay(world, world.lastTouchedBy === world.defender ? 'corner' : 'goal-kick')
+    return true
+  }
+  if (Math.abs(Position.y[ball]) > PITCH_HALF_WIDTH + BALL_RADIUS) {
+    restartPlay(world, 'throw-in')
+    return true
+  }
+  return false
+}
+
+function restartPlay(world: Match, restart: Restart) {
+  Velocity.x[world.ball] = Velocity.y[world.ball] = 0
+  world.restart = restart
+  endAttack(world, world.lastTouchedBy === world.defender ? 'setPiece' : 'outOfPlay', null)
 }
 
 /** A loose ball that runs within the keeper's reach is gathered. */
