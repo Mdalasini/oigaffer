@@ -1,9 +1,8 @@
-import { angleDelta } from './angles'
 import { clearIntentions } from './attacking'
-import { Facing, Goalkeeper, Mark, OffBall, Outfielder, Position, Run } from './components'
-import { blindSideDelay, runTimingError } from './grades'
+import { Goalkeeper, Mark, OffBall, Outfielder, Position, Run } from './components'
+import { runTimingError } from './grades'
 import type { Match } from './match'
-import { maybeScanBeforeReceiving } from './perception'
+import { inSight, maybeScanBeforeReceiving } from './perception'
 import type { PassOption } from './playmaking'
 import { gaussian } from './rng'
 import { maybeSpringTrap } from './systems/defending'
@@ -42,8 +41,8 @@ export type Cue =
 const TURNOVER_REACTION = 0.2
 /** Players take this long, plus up to as long again, to react to a pass being struck. */
 const BALL_MOVED_REACTION = 0.2
-/** A marker sees runners within this angle (rad) either side of where they face. */
-const MARKER_VIEW = 1.75
+/** A marker who sees their man set off takes this long, plus up to as long again, to go with him. */
+const RUN_REACTION = 0.1
 /** Seconds before defenders react to the trap being sprung. */
 const TRAP_REACTION = 0.08
 
@@ -78,7 +77,7 @@ export function cue(world: Match, c: Cue) {
       maybeScanBeforeReceiving(world, c.receiver)
       return
     case 'run':
-      blindSide(world, c.runner)
+      seeRunGo(world, c.runner)
       return
     case 'passShaped':
       passShaped(world, c.option, c.windup)
@@ -114,15 +113,15 @@ function stepOffBall(world: Match, eid: number) {
 }
 
 /**
- * A run starting behind a marker's back: a marker who can't see the runner
- * is slow to pick the run up, the slower the worse their positioning.
+ * A run starting: a marker watching their man sees him go and goes with him.
+ * One who has lost sight of him, as when he's gone off behind their back,
+ * finds out only when they next look (see `perception`), and is left
+ * marking where he was.
  */
-function blindSide(world: Match, runner: number) {
+function seeRunGo(world: Match, runner: number) {
   for (const marker of world.teams[opponent(world.possession)].outfielders) {
-    if (Mark.target[marker] !== runner) continue
-    const toRunner = Math.atan2(Position.y[runner] - Position.y[marker], Position.x[runner] - Position.x[marker])
-    if (Math.abs(angleDelta(Facing.angle[marker], toRunner)) <= MARKER_VIEW) continue
-    OffBall.decideIn[marker] = Math.max(OffBall.decideIn[marker], blindSideDelay(Outfielder.positioning[marker]))
+    if (Mark.target[marker] !== runner || !inSight(world, marker, runner)) continue
+    OffBall.decideIn[marker] = Math.min(OffBall.decideIn[marker], RUN_REACTION + world.rng() * RUN_REACTION)
   }
 }
 
