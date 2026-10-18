@@ -5,7 +5,8 @@ import { Defender, DefenderMode, Pressing, Facing, MoveIntent, OffBalance, Outfi
 import { gradeT, readLag, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { attackedGoalX } from '../teams'
-import { CONTROL_RADIUS, footDistance, footX, footY } from '../touch'
+import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from '../touch'
+import { seenFacing, seenVx, seenVy, seenX, seenY } from '../perception'
 import { STAND_WINDUP } from './challenge'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
@@ -94,7 +95,6 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   const ballDistance = Math.hypot(toBallX, toBallY)
   const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
   const carrierDistance = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
-  const exposed = footDistance(carrier, ball) > EXPOSED_DISTANCE
   // A standing tackle is timed for where the ball will be when the foot gets there: off the carrier's feet, ideally.
   const exposedAtContact = exposedIn(world, eid, STAND_WINDUP)
   const shielded = Shield.active[carrier] === 1 || bodyBetween(carrier, eid, ball)
@@ -113,7 +113,7 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   // A slide is the last resort of a beaten defender at full tilt, for a ball the carrier has let out of their feet.
   const beaten = Defender.mode[eid] === DefenderMode.Run
   const running = Math.hypot(Velocity.x[eid], Velocity.y[eid]) >= SLIDE_FROM_SPEED
-  if (beaten && running && exposed && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
+  if (beaten && running && exposedIn(world, eid, 0) && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
     if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
   }
 }
@@ -121,14 +121,15 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
 /**
  * Whether, `seconds` from now, the defender reckons the ball will be off the
  * carrier's feet: the ball where they read it to be going, the carrier
- * where they're running.
+ * where they've seen him heading.
  */
 function exposedIn(world: Match, eid: number, seconds: number): boolean {
   const carrier = world.carrier
+  const facing = seenFacing(world, eid, carrier)
+  const fx = seenX(world, eid, carrier) + Math.cos(facing) * FOOT_OFFSET + seenVx(world, eid, carrier) * seconds
+  const fy = seenY(world, eid, carrier) + Math.sin(facing) * FOOT_OFFSET + seenVy(world, eid, carrier) * seconds
   const bx = Defender.readX[eid] + Defender.readVx[eid] * seconds
   const by = Defender.readY[eid] + Defender.readVy[eid] * seconds
-  const fx = footX(carrier) + Velocity.x[carrier] * seconds
-  const fy = footY(carrier) + Velocity.y[carrier] * seconds
   return Math.hypot(bx - fx, by - fy) > EXPOSED_DISTANCE
 }
 
