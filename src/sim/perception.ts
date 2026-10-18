@@ -1,6 +1,6 @@
-import { Call, CallKind, Facing, Outfielder, Position, Team, Velocity } from './components'
+import { Call, CallKind, Facing, Mark, Outfielder, Position, Team, Velocity } from './components'
 import { FIXED_DT } from './constants'
-import { preReceiveScanChance, scanRate } from './grades'
+import { manCheckRate, preReceiveScanChance, scanRate } from './grades'
 import type { Match } from './match'
 
 /**
@@ -14,6 +14,9 @@ import type { Match } from './match'
  *   kept up to date. Outside it, and behind them, it goes stale.
  * - **Scans**: a look over the shoulder takes in everyone at once. Players
  *   with more vision scan more often, and before a pass reaches them.
+ * - **Checks**: a marker glances at their man between scans, the more often
+ *   the better their positioning. A man who slips behind a marker who rarely
+ *   checks is gone before they know it.
  * - **Hearing**: a teammate calling for it is heard wherever they are, and
  *   so is one shouting "man on" about an opponent closing in unseen.
  *
@@ -37,6 +40,8 @@ export interface Memory {
   /** When each player next looks over their shoulder, and when they last did. */
   nextScan: Float64Array
   lastScan: Float64Array
+  /** When each player next checks where their man is. */
+  nextCheck: Float64Array
 }
 
 /**
@@ -84,6 +89,7 @@ export function createMemory(players: number[], maxEntities: number): Memory {
     at: pairs().fill(-Infinity),
     nextScan: new Float64Array(n),
     lastScan: new Float64Array(n).fill(-Infinity),
+    nextCheck: new Float64Array(n),
   }
 }
 
@@ -100,6 +106,7 @@ export function perceptionSystem(world: Match, _dt: number) {
       const i = memory.index[eid]
       if (world.time >= memory.nextScan[i]) scan(world, eid)
       else if ((tick + i) % GLANCE_TICKS === 0) glance(world, eid)
+      if (world.time >= memory.nextCheck[i]) checkMan(world, eid)
     }
   }
   if (world.phase === 'play') manOn(world, world.carrier)
@@ -156,6 +163,15 @@ export function scan(world: Match, observer: number) {
   memory.lastScan[i] = world.time
   // Scans come at random moments, at a rate set by their vision.
   memory.nextScan[i] = world.time - Math.log(1 - world.rng()) / scanRate(Outfielder.vision[observer])
+}
+
+/** A glance at their man, wherever he is: `observer` sees him, and decides when to check again. */
+function checkMan(world: Match, observer: number) {
+  const man = Mark.target[observer]
+  if (man !== -1) see(world, observer, man)
+  const i = world.memory.index[observer]
+  // Like scans, checks come at random moments, at a rate set by their positioning.
+  world.memory.nextCheck[i] = world.time - Math.log(1 - world.rng()) / manCheckRate(Outfielder.positioning[observer])
 }
 
 /** Everyone takes in everyone: at a restart, before play resumes, players have had a look around. */
@@ -283,6 +299,12 @@ export function teamView(world: Match, team: number, eid: number, out: View): Vi
     }
   }
   return view(world, freshest, eid, out)
+}
+
+/** Whether `by` has `eid` in sight right now: seen within the last glance. */
+export function inSight(world: Match, by: number, eid: number): boolean {
+  const k = slot(world, by, eid)
+  return k === -1 || world.time - world.memory.at[k] <= FIXED_DT * GLANCE_TICKS
 }
 
 /** Seconds since `eid` last looked over their shoulder. */

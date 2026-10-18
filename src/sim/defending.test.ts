@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, Mark, OffBall, Outfielder, Position, Run, RunPhase, Velocity } from './components'
+import { Facing, Mark, OffBall, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { SMALL_SIDED_PITCH } from './pitch'
-import { lookAround } from './perception'
+import { lookAround, perceptionSystem } from './perception'
+import { createRng } from './rng'
 import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { strikePass } from './playmaking'
 import { along, baseLine, homePosition } from './shape'
@@ -22,7 +23,7 @@ function place(eid: number, x: number, y: number, facing = 0) {
   Facing.angle[eid] = facing
 }
 
-/** Red on the ball at (x, y) facing `facing`, Red's teammate at (mx, my), Blue's outfielders at the given spots. */
+/** Red on the ball at (x, y) facing `facing`, Red's teammate at (mx, my), Blue's outfielders at the given spots, all seen by everyone. */
 function scene(x: number, y: number, facing: number, mx: number, my: number, blue: [number, number][], grades: GradeOverrides = {}): Match {
   const world = createMatch({ outfielders: 2, seed: 1, grades })
   const [carrier, mate] = world.teams[RED].outfielders
@@ -33,6 +34,8 @@ function scene(x: number, y: number, facing: number, mx: number, my: number, blu
   place(mate, mx, my, 0)
   world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, blue[i][0], blue[i][1], Math.PI))
   place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+  // Everyone has had a look round.
+  lookAround(world)
   return world
 }
 
@@ -91,32 +94,91 @@ describe('the line', () => {
   })
 })
 
-describe('runs behind a marker', () => {
-  const delayFor = (positioning: number) => {
-    const grades = { blue: { outfielder: { positioning } }, red: { outfielder: { offTheBall: 20 } } }
-    // The runner is level with the marker but over their shoulder, onside.
+describe('marking from memory', () => {
+  /** Blue's second outfielder marks Red's runner at (7.5, 6), turned towards the ball, having had a look round. */
+  const marking = (seed: number, grades: GradeOverrides = {}) => {
     const world = scene(-8, 0, 0, 7.5, 6, [[-6, 0], [8, 3]], grades)
-    const [, blueB] = world.teams[BLUE].outfielders
-    const mate = world.teams[RED].outfielders[1]
-    Outfielder.positioning[blueB] = positioning
-    // The marker is turned towards the ball, away from the runner.
-    Facing.angle[blueB] = Math.PI + 0.5
-    Mark.target[blueB] = mate
-    OffBall.decideIn[blueB] = 0
-    Run.phase[mate] = RunPhase.Prepare
-    Run.timer[mate] = 0
-    Run.targetX[mate] = 15
-    Run.targetY[mate] = 4
-    world.phase = 'play'
-    world.possession = RED
-    attackingIntent(world, mate)
-    expect(Run.phase[mate]).toBe(RunPhase.Go)
-    return OffBall.decideIn[blueB]
+    const [blueA, marker] = world.teams[BLUE].outfielders
+    const runner = world.teams[RED].outfielders[1]
+    world.rng = createRng(seed)
+    world.presser = blueA
+    world.nextMarking = [Infinity, Infinity]
+    Mark.target[marker] = runner
+    Facing.angle[marker] = Math.PI
+    lookAround(world)
+    // Until a test says otherwise, they don't look over their shoulder or check on him.
+    world.memory.nextScan[world.memory.index[marker]] = Infinity
+    world.memory.nextCheck[world.memory.index[marker]] = Infinity
+    return { world, marker, runner }
   }
+  const slot = (world: Match, by: number, eid: number) => world.memory.index[by] * world.memory.players.length + world.memory.index[eid]
 
-  test('a marker who can’t see the run is slow to pick it up, slower with worse positioning', () => {
-    expect(delayFor(1)).toBeGreaterThan(delayFor(20) + 0.4)
-    expect(delayFor(20)).toBeGreaterThan(0)
+  test('a marker picks up their man where they last saw him, not where he really is', () => {
+    const { world, marker, runner } = marking(1)
+    // He slips off behind the marker's back, and the marker neither scans nor checks.
+    place(runner, 14, 6)
+    OffBall.decideIn[marker] = 0
+    stepMatch(world)
+    // Goal-side of where he was (towards +x), well short of where he is.
+    expect(OffBall.targetX[marker]).toBeGreaterThan(7.5)
+    expect(OffBall.targetX[marker]).toBeLessThan(12)
+    // Once they look, they go with him.
+    world.memory.nextCheck[world.memory.index[marker]] = 0
+    OffBall.decideIn[marker] = 0
+    stepMatch(world)
+    expect(OffBall.targetX[marker]).toBeGreaterThan(14)
+  })
+
+  test('the better their positioning, the sooner a marker finds the man who has gone behind them', () => {
+    const lost = (positioning: number) => {
+      let total = 0
+      for (let seed = 1; seed <= 60; seed++) {
+        const { world, marker, runner } = marking(seed, { blue: { outfielder: { positioning, vision: 1 } } })
+        // They scan and check at their own rates from now: the first of each comes straight away, before he goes.
+        world.memory.nextScan[world.memory.index[marker]] = 0
+        world.memory.nextCheck[world.memory.index[marker]] = 0
+        perceptionSystem(world, 1 / 120)
+        place(runner, 14, 6)
+        const k = slot(world, marker, runner)
+        const seenAt = world.memory.at[k]
+        // Only perception runs: everyone stands where they are.
+        let t = 0
+        while (world.memory.at[k] === seenAt && t < 10) {
+          world.time += 1 / 120
+          t += 1 / 120
+          perceptionSystem(world, 1 / 120)
+        }
+        total += t
+      }
+      return total / 60
+    }
+    expect(lost(1)).toBeGreaterThan(1)
+    expect(lost(20)).toBeLessThan(0.5)
+  })
+
+  test('a marker who sees their man set off goes with him straight away; one who can’t see him doesn’t', () => {
+    const reaction = (behind: boolean) => {
+      const { world, marker, runner } = marking(1, { red: { outfielder: { offTheBall: 20 } } })
+      // Turned towards him, he's in view; turned away, he's behind them.
+      const toRunner = Math.atan2(Position.y[runner] - Position.y[marker], Position.x[runner] - Position.x[marker])
+      Facing.angle[marker] = behind ? toRunner + Math.PI : toRunner
+      // A moment's watching: long enough for what they had seen of him behind them to go stale.
+      for (let i = 0; i < 24; i++) {
+        world.time += 1 / 120
+        perceptionSystem(world, 1 / 120)
+      }
+      OffBall.decideIn[marker] = 1
+      Run.phase[runner] = RunPhase.Prepare
+      Run.timer[runner] = 0
+      Run.targetX[runner] = 15
+      Run.targetY[runner] = 4
+      world.possession = RED
+      attackingIntent(world, runner)
+      expect(Run.phase[runner]).toBe(RunPhase.Go)
+      return OffBall.decideIn[marker]
+    }
+    expect(reaction(false)).toBeLessThanOrEqual(0.2)
+    expect(reaction(true)).toBe(1)
   })
 })
 
