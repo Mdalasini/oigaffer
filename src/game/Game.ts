@@ -1,5 +1,6 @@
 import { Batch } from '../render/batch'
 import { goalCamera, pitchCamera } from '../render/cameras'
+import type { Overlay } from '../render/overlay'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
@@ -40,6 +41,7 @@ export interface GameSnapshot {
   carrierShielding: boolean
   /** The latest tackle or barge, for a moment after it happens. */
   challenge: { kind: ChallengeKind; result: ChallengeResult } | null
+  overlay: Overlay
 }
 
 /** How long (s) a challenge result or a turnover stays on screen. */
@@ -56,6 +58,7 @@ export class Game {
   private readonly listeners = new Set<() => void>()
   private snapshot: GameSnapshot
   private snapshotKey = ''
+  private overlay: Overlay = 'off'
 
   constructor() {
     this.match = createMatch()
@@ -97,6 +100,12 @@ export class Game {
     this.publishIfChanged()
   }
 
+  /** Shows the space model over the pitch, or hides it. */
+  setOverlay(overlay: Overlay) {
+    this.overlay = overlay
+    this.publishIfChanged()
+  }
+
   shoot() {
     requestShot(this.match)
   }
@@ -111,7 +120,7 @@ export class Game {
     const dpr = renderer.resize()
     const main = { x: 0, y: 0, width: canvas.width, height: canvas.height }
     const top = pitchCamera(main.width / main.height)
-    buildScene(this.batch, this.match, top)
+    buildScene(this.batch, this.match, top, this.overlay)
     renderer.draw(this.batch, top.viewProjection, main, PITCH_SKY)
 
     const c = canvas.getBoundingClientRect()
@@ -151,6 +160,7 @@ export class Game {
       defenderMode: this.defenderMode(),
       carrierShielding: this.carrierShielding(),
       challenge: this.recentChallenge(),
+      overlay: this.overlay,
     }
   }
 
@@ -192,6 +202,7 @@ export class Game {
       this.carrierShielding(),
       challenge && `${challenge.kind}:${challenge.result}:${m.lastChallenge?.time}`,
       ...grades,
+      this.overlay,
     ].join('|')
     if (key === this.snapshotKey) return
     this.snapshotKey = key
