@@ -1,10 +1,10 @@
 import { query } from 'bitecs'
 import { Facing, Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH } from '../constants'
-import { distanceToSegment } from '../geometry'
-import { setPhase, setVec, type Match } from '../match'
+import { handOver, setPhase, setVec, type Match } from '../match'
 import { rollSpeedFor } from '../passing'
 import { gaussian } from '../rng'
+import { passSafety } from '../space/control'
 import { ownGoalX } from '../teams'
 
 /** How far off the line the keeper comes to narrow the angle. */
@@ -18,9 +18,9 @@ const POST_OVERRUN = 0.4
 /** Hold the ball at least this long (s), and roll it out by HOLD_MAX whatever happens. */
 const HOLD_MIN = 1
 const HOLD_MAX = 4
-/** Roll it out once the teammate is this far away (m), with the opponent this far off the line of the pass. */
+/** Roll it out to a teammate at least this far away (m), once the pass is at least this likely to get through. */
 const RECEIVE_MIN = 6
-const LANE_CLEARANCE = 2.5
+const SAFE_ENOUGH = 0.85
 /** Aim where the teammate will be this far ahead (s), arriving at this speed (m/s). */
 const PASS_LEAD = 0.3
 const PASS_ARRIVAL = 3.5
@@ -34,7 +34,7 @@ const HANDS_HEIGHT = 1.1
 
 /**
  * Each keeper guards their own goal; the one facing a shot dives for it, and
- * one with the ball in their hands rolls it out to their outfielder.
+ * one with the ball in their hands rolls it out to a teammate.
  */
 export function keeperSystem(world: Match, dt: number) {
   for (const eid of query(world, [Goalkeeper, Position, Velocity, Facing, Team])) {
@@ -98,13 +98,13 @@ function dive(world: Match, eid: number, dt: number) {
 }
 
 /**
- * Stands with the ball in hands, facing their outfielder, and once they've
- * found space away from the opponent rolls it out to where they're heading.
+ * Stands with the ball in hands, facing the teammate it would be safest to
+ * roll it to, and rolls it out once that teammate is far enough away and the
+ * pass would surely get through.
  */
 function holdAndRollOut(world: Match, eid: number) {
   const { ball } = world
-  const receiver = world.teams[Team.id[eid]].outfielders[0]
-  const opponent = world.presser
+  const { receiver, safety } = bestReceiver(world, eid, Position.x[eid], Position.y[eid])
   setVec(Velocity, eid, 0, 0, 0)
   Facing.angle[eid] = Math.atan2(Position.y[receiver] - Position.y[eid], Position.x[receiver] - Position.x[eid])
   const fx = Math.cos(Facing.angle[eid])
@@ -112,12 +112,29 @@ function holdAndRollOut(world: Match, eid: number) {
   setVec(Position, ball, Position.x[eid] + fx * HANDS_AHEAD, Position.y[eid] + fy * HANDS_AHEAD, HANDS_HEIGHT)
   setVec(Velocity, ball, 0, 0, 0)
   if (world.phaseTime < HOLD_MIN) return
+  if (safety < SAFE_ENOUGH && world.phaseTime < HOLD_MAX) return
+  passToOutfielder(world, eid, receiver, Position.x[eid], Position.y[eid])
+}
 
-  const { x, y } = passTarget(receiver)
-  const distance = Math.hypot(x - Position.x[eid], y - Position.y[eid])
-  const lane = distanceToSegment(Position.x[opponent], Position.y[opponent], Position.x[eid], Position.y[eid], x, y)
-  if ((distance < RECEIVE_MIN || lane < LANE_CLEARANCE) && world.phaseTime < HOLD_MAX) return
-  passToOutfielder(world, eid, Position.x[eid], Position.y[eid])
+/**
+ * The keeper's teammate it's safest to play to from (fromX, fromY), and how
+ * safe that pass is. Teammates too close to be worth rolling it to count as
+ * unsafe.
+ */
+export function bestReceiver(world: Match, keeper: number, fromX: number, fromY: number) {
+  const team = Team.id[keeper]
+  let receiver = world.teams[team].outfielders[0]
+  let safety = -1
+  for (const eid of world.teams[team].outfielders) {
+    const { x, y } = passTarget(eid)
+    const distance = Math.hypot(x - fromX, y - fromY)
+    const s = distance < RECEIVE_MIN ? 0 : passSafety(world, team, fromX, fromY, x, y, rollSpeedFor(distance, PASS_ARRIVAL))
+    if (s > safety) {
+      receiver = eid
+      safety = s
+    }
+  }
+  return { receiver, safety }
 }
 
 /** Where to aim a pass to `receiver`: a little ahead of where they're running. */
@@ -126,13 +143,12 @@ function passTarget(receiver: number) {
 }
 
 /**
- * Plays the ball along the ground from (fromX, fromY) to the keeper's own
- * outfielder, weighted to reach them at a comfortable pace, and resumes play.
+ * Plays the ball along the ground from (fromX, fromY) to `receiver`, weighted
+ * to reach them at a comfortable pace, and resumes play with them on it.
  * Used for rolling it out of the hands and for kicking a back-pass first time.
  */
-export function passToOutfielder(world: Match, keeper: number, fromX: number, fromY: number) {
+export function passToOutfielder(world: Match, keeper: number, receiver: number, fromX: number, fromY: number) {
   const { ball, rng } = world
-  const receiver = world.teams[Team.id[keeper]].outfielders[0]
   const { x, y } = passTarget(receiver)
   const angle = Math.atan2(y - fromY, x - fromX) + gaussian(rng) * PASS_ERROR
   const dx = Math.cos(angle)
@@ -146,6 +162,7 @@ export function passToOutfielder(world: Match, keeper: number, fromX: number, fr
   world.lastTouchDeliberate = true
   world.lastTouch = null
   world.shot = null
+  handOver(world, receiver)
   setPhase(world, 'play')
 }
 

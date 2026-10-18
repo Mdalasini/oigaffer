@@ -150,6 +150,36 @@ export const TakeOn = {
   checkBackTimer: new Float32Array(MAX_ENTITIES),
 }
 
+/** A player's place in their team's formation: an index into its slots. */
+export const Slot = {
+  index: new Uint8Array(MAX_ENTITIES),
+}
+
+export const Effort = {
+  Walk: 0,
+  Jog: 1,
+  Run: 2,
+  Sprint: 3,
+} as const
+export type Effort = (typeof Effort)[keyof typeof Effort]
+
+/**
+ * What an outfielder without a job on the ball is doing: where they're
+ * heading, how close counts as there, and how hard they're working to get
+ * there. Re-decided a few times a second, not every tick.
+ */
+export const OffBall = {
+  targetX: new Float32Array(MAX_ENTITIES),
+  targetY: new Float32Array(MAX_ENTITIES),
+  /** Within this distance (m) of the target they stop and hold. */
+  radius: new Float32Array(MAX_ENTITIES),
+  effort: new Uint8Array(MAX_ENTITIES),
+  /** Whether they've arrived and are holding, until pulled far enough away. */
+  settled: new Uint8Array(MAX_ENTITIES),
+  /** Seconds until they next reconsider. */
+  decideIn: new Float32Array(MAX_ENTITIES),
+}
+
 export const Goalkeeper = {
   reaction: new Uint8Array(MAX_ENTITIES),
   /** How often a shot within reach is held rather than parried. */

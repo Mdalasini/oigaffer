@@ -5,7 +5,7 @@ import { FIXED_DT } from './constants'
 import { createMatch, setVec, stepMatch, type Match } from './match'
 import { ballSystem } from './systems/ball'
 import { locomotionSystem } from './systems/locomotion'
-import { touchSystem } from './systems/touch'
+import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { dribble, FOOT_OFFSET } from './touch'
 
 /** A carrier in open grass with the ball at its feet, running along +x at `speed`. */
@@ -21,6 +21,7 @@ function setup(seed: number, speed = 0, dribbling = 13): Match {
 }
 
 function tick(world: Match) {
+  touchCooldownSystem(world, FIXED_DT)
   touchSystem(world, FIXED_DT)
   locomotionSystem(world, FIXED_DT)
   ballSystem(world, FIXED_DT)

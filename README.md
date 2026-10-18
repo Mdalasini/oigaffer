@@ -3,12 +3,32 @@
 A football match simulation. The simulation is fully 3D (metres, z-up, ballistic
 ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 
-Currently: a 1v1 match between two teams, Red and Blue, each with one outfielder and a
-goalkeeper, on a small-sided 44 m × 28 m pitch with full-size goals. Red attacks the
-goal at +x, Blue the one at -x.
+Currently: a match between two teams, Red and Blue, each with two outfielders and a
+goalkeeper, on a small-sided 50 m × 32 m pitch with full-size goals. Red attacks the
+goal at +x, Blue the one at -x. How teammates move off the ball, pass and defend
+together is designed in [docs/off-ball-play.md](docs/off-ball-play.md) and is
+being built in stages.
 
-- **Possession** — whichever outfielder's team has the ball attacks (dribbles, takes
-  the other on, shoots); the other defends. Win the ball back with a tackle or an
+- **Teammates and shape** — each team has a formation that lives in a block
+  moving with the ball. With the ball, the block stretches: one outfielder
+  stays deep and the other plays on the opposition's last line, on a diagonal.
+  Without it, the block is compact and sits back from the ball. The player on
+  the ball is the *carrier*. The defender quickest to the ball *presses* it.
+  The other defender covers behind the presser, sliding across to mark the
+  free attacker once that attacker gets nearer goal than the ball. The
+  presser hands over to the cover once beaten. A loose ball goes to
+  whichever player gets there first, teammates included.
+- **Moving like footballers** — players without the ball decide a few times a
+  second, at staggered moments. Each decision picks a target area, not an exact
+  spot, and a player inside it stands still. They walk or jog unless they're
+  far off or have to recover, keep their body facing the play on short moves,
+  and keep clear of each other.
+- **Show space** — a debug overlay that paints the space model players read
+  the pitch with: how dangerous each spot is (threat), and which team would get
+  to a ball there first (control).
+
+- **Possession** — the carrier attacks (dribbles, takes the presser on, shoots).
+  Win the ball back with a tackle or an
   interception and the roles swap on the spot: the new attacker turns and goes the
   other way, while the player who lost it needs a moment before challenging again.
 
@@ -58,8 +78,8 @@ goal at +x, Blue the one at -x.
 - **Out of play and restarts** — once the whole ball is over a touchline or a
   goal line, play stops and the restart goes against whoever touched it last:
   a throw-in, a corner, or a goal kick. After a goal the other team kicks off.
-  Restarts are taken by the outfielder starting with the ball at their feet,
-  with the opponent standing off goal-side. A ball that rolls into a net is a
+  Restarts are taken by an outfielder starting with the ball at their feet,
+  with the nearest opponent standing off goal-side and everyone else in shape. A ball that rolls into a net is a
   goal, own goals included. The carrier only knocks the ball long
   when there's room on the pitch for it, and takes defenders on the infield
   side near a touchline.
@@ -86,7 +106,7 @@ grades are set from its tab in the control panel. `bun test` runs the simulation
 
 ## Layout
 
-- `src/sim` — the ECS world: components, teams, systems (attacking and defending decisions, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
+- `src/sim` — the ECS world: components, teams, systems (roles, the carrier's and presser's decisions, off-ball movement, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), formations and team shape, the space model (`space/`), shooting model and grade curves. No DOM.
 - `src/render` — WebGL renderer, cameras (top-down and goal-face orthographic) and the scene built from the world.
 - `src/game` — fixed-step loop tying the simulation to the renderer, plus a store for the UI.
 - `src/ui` — React HUD and controls.

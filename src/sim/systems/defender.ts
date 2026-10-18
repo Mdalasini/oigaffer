@@ -17,8 +17,6 @@ const JOCKEY_LOOKAHEAD = 0.3
 const RUN_LOOKAHEAD = 0.6
 /** When running, aim this far goal-side of the ball, to get back in front of it. */
 const RECOVERY_DEPTH = 3
-/** While the keeper holds the ball, stand this far goal-side of the player they'll roll it to. */
-const MARK_DEPTH = 5
 const POSITION_GAIN = 3
 
 /**
@@ -51,12 +49,8 @@ const BARGE_DRIVE = 1.5
 export function defenderSystem(world: Match, dt: number) {
   for (const eid of query(world, [Pressing, Defender, Outfielder, MoveIntent, Position, Velocity, Facing, Physical])) {
     const ball = world.ball
-    if (world.phase === 'held') {
-      // A slide, get-up or challenge already under way plays out first; the challenge system owns it.
-      const mode = Defender.mode[eid]
-      if (mode === DefenderMode.Jockey || mode === DefenderMode.Run) markReceiver(world, eid)
-      continue
-    }
+    // With a keeper holding the ball, everyone is off it.
+    if (world.phase === 'held') continue
     if (world.phase !== 'play') {
       stand(eid, ball)
       continue
@@ -227,28 +221,6 @@ function goForBall(eid: number) {
   MoveIntent.vy[eid] = (dy / distance) * speed
   MoveIntent.faceX[eid] = 0
   MoveIntent.faceY[eid] = 0
-}
-
-/** Drop off goal-side of the player the keeper will roll it out to, ready to step in when it comes. */
-function markReceiver(world: Match, eid: number) {
-  const receiver = world.carrier
-  const goalX = attackedGoalX(Team.id[receiver])
-  const gx = goalX - Position.x[receiver]
-  const gy = -Position.y[receiver]
-  const len = Math.hypot(gx, gy) || 1
-  const dx = Position.x[receiver] + (gx / len) * MARK_DEPTH - Position.x[eid]
-  const dy = Position.y[receiver] + (gy / len) * MARK_DEPTH - Position.y[eid]
-  const distance = Math.hypot(dx, dy) || 1
-  const speed = Math.min(topSpeed(Physical.pace[eid]), distance * POSITION_GAIN)
-  MoveIntent.vx[eid] = (dx / distance) * speed
-  MoveIntent.vy[eid] = (dy / distance) * speed
-  MoveIntent.faceX[eid] = Position.x[receiver] - Position.x[eid]
-  MoveIntent.faceY[eid] = Position.y[receiver] - Position.y[eid]
-  Defender.mode[eid] = DefenderMode.Run
-  // Reads stay current, so they can react the moment the ball is out.
-  Defender.readX[eid] = Position.x[world.ball]
-  Defender.readY[eid] = Position.y[world.ball]
-  Defender.readVx[eid] = Defender.readVy[eid] = 0
 }
 
 function stand(eid: number, ball: number) {

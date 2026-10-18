@@ -11,7 +11,7 @@ import { BANDS, bandOf, laneOf, LANES, zoneCentre } from './space/zones'
 const RED = 0
 const BLUE = 1
 
-/** Red's outfielder at (x, y), Blue's at (bx, by), standing still and facing each other; the keepers on their lines. */
+/** Red's first outfielder at (x, y), Blue's at (bx, by), standing still and facing each other; the keepers on their lines. */
 function placed(x: number, y: number, bx: number, by: number, grades: GradeOverrides = {}): Match {
   const world = createMatch({ seed: 1, grades })
   const red = world.teams[RED].outfielders[0]
@@ -23,6 +23,13 @@ function placed(x: number, y: number, bx: number, by: number, grades: GradeOverr
     setVec(Position, eid, px, py, 0)
     setVec(Velocity, eid, 0, 0, 0)
     Facing.angle[eid] = facing
+  }
+  // Everyone else is parked out of the way, in the corners.
+  for (const team of [RED, BLUE]) {
+    for (const eid of world.teams[team].outfielders.slice(1)) {
+      setVec(Position, eid, (team === RED ? -1 : 1) * (PITCH_HALF_LENGTH - 1), PITCH_HALF_WIDTH - 1, 0)
+      setVec(Velocity, eid, 0, 0, 0)
+    }
   }
   setVec(Position, world.teams[RED].keeper, -GOAL_X + 0.5, 0, 0)
   setVec(Position, world.teams[BLUE].keeper, GOAL_X - 0.5, 0, 0)
