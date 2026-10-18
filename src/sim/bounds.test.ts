@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { hasComponent } from 'bitecs'
 import { Goalkeeper, OnBall, Position, Velocity } from './components'
-import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from './constants'
+import { BALL_RADIUS } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, setVec, stepMatch, winBall, type Match } from './match'
 import { ballAtFeet, roomAhead } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
+const PITCH_HALF_WIDTH = SMALL_SIDED_PITCH.halfWidth
 
 const RED = 0
 const BLUE = 1
@@ -105,11 +110,11 @@ describe('out of play', () => {
 
 describe('room ahead', () => {
   test('measures the run to the nearest line, but not into either goal mouth', () => {
-    expect(roomAhead(GOAL_X - 10, 10, 1, 0)).toBeCloseTo(10, 6)
-    expect(roomAhead(-GOAL_X + 10, 10, -1, 0)).toBeCloseTo(10, 6)
-    expect(roomAhead(0, PITCH_HALF_WIDTH - 4, 0, 1)).toBeCloseTo(4, 6)
-    expect(roomAhead(GOAL_X - 10, 0, 1, 0)).toBe(Infinity)
-    expect(roomAhead(-GOAL_X + 10, 0, -1, 0)).toBe(Infinity)
+    expect(roomAhead(SMALL_SIDED_PITCH, GOAL_X - 10, 10, 1, 0)).toBeCloseTo(10, 6)
+    expect(roomAhead(SMALL_SIDED_PITCH, -GOAL_X + 10, 10, -1, 0)).toBeCloseTo(10, 6)
+    expect(roomAhead(SMALL_SIDED_PITCH, 0, PITCH_HALF_WIDTH - 4, 0, 1)).toBeCloseTo(4, 6)
+    expect(roomAhead(SMALL_SIDED_PITCH, GOAL_X - 10, 0, 1, 0)).toBe(Infinity)
+    expect(roomAhead(SMALL_SIDED_PITCH, -GOAL_X + 10, 0, -1, 0)).toBe(Infinity)
   })
 })
 

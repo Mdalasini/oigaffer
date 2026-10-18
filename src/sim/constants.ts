@@ -1,23 +1,10 @@
 // World space is metres, z-up. The origin is the centre spot; +x runs towards
 // the goal we attack, +y towards the left touchline as seen by the attacker.
-// A small-sided pitch for four outfielders and a keeper a side: 60 m by 40 m,
-// about 200 m² a player (11v11 has about 320, futsal about 80), with
-// full-size goals and markings scaled down to fit.
-export const PITCH_HALF_LENGTH = 30
-export const PITCH_HALF_WIDTH = 20
-
-export const GOAL_X = PITCH_HALF_LENGTH
+// The pitch's size and markings vary by match (see `pitch`); the goals don't.
 export const GOAL_HALF_WIDTH = 7.32 / 2
 export const GOAL_HEIGHT = 2.44
 export const GOAL_DEPTH = 2
 export const POST_WIDTH = 0.12
-
-export const PENALTY_AREA_DEPTH = 10
-export const PENALTY_AREA_HALF_WIDTH = 10
-export const GOAL_AREA_DEPTH = 3
-export const GOAL_AREA_HALF_WIDTH = 5.5
-export const PENALTY_SPOT_DISTANCE = 8
-export const CIRCLE_RADIUS = 6
 
 export const GRAVITY = 9.81
 export const BALL_RADIUS = 0.11

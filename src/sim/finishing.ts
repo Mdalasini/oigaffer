@@ -53,7 +53,7 @@ export function shotError(world: Match, carrier: number, by = -1): number {
   let nearest = Infinity
   for (const eid of world.teams[1 - team].outfielders) nearest = Math.min(nearest, Math.hypot(seenX(world, by, eid) - x, seenY(world, by, eid) - y))
   const hurried = 1 + (FULL_PRESSURE - 1) * Math.max(0, 1 - nearest / PRESSURE_RANGE)
-  const toGoal = Math.atan2(-Position.y[world.ball], attackedGoalX(team) - Position.x[world.ball])
+  const toGoal = Math.atan2(-Position.y[world.ball], attackedGoalX(world.pitch, team) - Position.x[world.ball])
   const across = 1 + ACROSS_BODY * Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], toGoal)) - CLEAN_TURN)
   return shotAngleError(Outfielder.shooting[carrier]) * hurried * across
 }
@@ -64,7 +64,7 @@ export function shotError(world: Match, carrier: number, by = -1): number {
  * it really is.
  */
 export function planShot(world: Match, carrier: number, judge = -1): ShotPlan {
-  const goalX = attackedGoalX(Team.id[carrier])
+  const goalX = attackedGoalX(world.pitch, Team.id[carrier])
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
   const keeperY = seenY(world, judge, world.keeper)

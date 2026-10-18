@@ -9,6 +9,7 @@
 import { Position, Velocity } from '../src/sim/components'
 import { createMatch, MATCH_SYSTEMS, type Match } from '../src/sim/match'
 import { FIXED_DT } from '../src/sim/constants'
+import { pitchFor } from '../src/sim/pitch'
 import { along, onsideLimit } from '../src/sim/shape'
 import { ownGoalX } from '../src/sim/teams'
 
@@ -18,6 +19,9 @@ const seeds = (process.argv[4] ?? '1,2,3').split(',').map(Number)
 
 const pct = (n: number, d: number) => `${((100 * n) / Math.max(1, d)).toFixed(0)}%`
 const totals = new Map<string, number>()
+
+const pitch = pitchFor(outfielders)
+console.log(`${outfielders} outfielders a side on ${2 * pitch.halfLength} m x ${2 * pitch.halfWidth} m`)
 
 for (const seed of seeds) {
   const world = createMatch({ seed, outfielders })
@@ -104,7 +108,7 @@ function sample(world: Match, t: Tally, heading: Map<number, number>) {
         if (along(team, Position.x[eid]) <= onsideLimit(world, team) + 1) t.onside++
       } else {
         t.defenders++
-        const goal = ownGoalX(team)
+        const goal = ownGoalX(world.pitch, team)
         if (Math.hypot(goal - Position.x[eid], Position.y[eid]) <= Math.hypot(goal - Position.x[world.ball], Position.y[world.ball]) + 1) t.goalSide++
       }
     }

@@ -1,4 +1,4 @@
-import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
+import type { Pitch } from '../pitch'
 import { attackDir } from '../teams'
 
 /**
@@ -16,34 +16,34 @@ export const BANDS = 6
 const LANE_EDGES = [0.27, 0.59]
 
 /** Lane 0 is the wide lane on the -y side, 2 the centre, 4 the wide lane on the +y side. */
-export function laneOf(y: number): number {
-  const t = Math.abs(y) / PITCH_HALF_WIDTH
+export function laneOf(pitch: Pitch, y: number): number {
+  const t = Math.abs(y) / pitch.halfWidth
   const fromCentre = t < LANE_EDGES[0] ? 0 : t < LANE_EDGES[1] ? 1 : 2
   return 2 + Math.sign(y) * fromCentre
 }
 
 /** The y range [lo, hi] a lane covers. */
-export function laneSpan(lane: number): [number, number] {
-  const edges = [-1, -LANE_EDGES[1], -LANE_EDGES[0], LANE_EDGES[0], LANE_EDGES[1], 1].map((t) => t * PITCH_HALF_WIDTH)
+export function laneSpan(pitch: Pitch, lane: number): [number, number] {
+  const edges = [-1, -LANE_EDGES[1], -LANE_EDGES[0], LANE_EDGES[0], LANE_EDGES[1], 1].map((t) => t * pitch.halfWidth)
   return [edges[lane], edges[lane + 1]]
 }
 
 /** Band 0 runs up from `team`'s own goal line, band 5 ends at the goal line they attack. */
-export function bandOf(x: number, team: number): number {
-  const depth = (x * attackDir(team) + PITCH_HALF_LENGTH) / (2 * PITCH_HALF_LENGTH)
+export function bandOf(pitch: Pitch, x: number, team: number): number {
+  const depth = (x * attackDir(team) + pitch.halfLength) / (2 * pitch.halfLength)
   return Math.min(BANDS - 1, Math.max(0, Math.floor(depth * BANDS)))
 }
 
 /** The x range [lo, hi] a band covers, for `team`. */
-export function bandSpan(band: number, team: number): [number, number] {
-  const length = (2 * PITCH_HALF_LENGTH) / BANDS
-  const a = (-PITCH_HALF_LENGTH + band * length) * attackDir(team)
-  const b = (-PITCH_HALF_LENGTH + (band + 1) * length) * attackDir(team)
+export function bandSpan(pitch: Pitch, band: number, team: number): [number, number] {
+  const length = (2 * pitch.halfLength) / BANDS
+  const a = (-pitch.halfLength + band * length) * attackDir(team)
+  const b = (-pitch.halfLength + (band + 1) * length) * attackDir(team)
   return [Math.min(a, b), Math.max(a, b)]
 }
 
-export function zoneCentre(lane: number, band: number, team: number) {
-  const [y0, y1] = laneSpan(lane)
-  const [x0, x1] = bandSpan(band, team)
+export function zoneCentre(pitch: Pitch, lane: number, band: number, team: number) {
+  const [y0, y1] = laneSpan(pitch, lane)
+  const [x0, x1] = bandSpan(pitch, band, team)
   return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }
 }

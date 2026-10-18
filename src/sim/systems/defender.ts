@@ -57,7 +57,7 @@ export function defenderSystem(world: Match, dt: number) {
     }
 
     // The goal being attacked, which this defender is protecting.
-    const goalX = attackedGoalX(Team.id[world.carrier])
+    const goalX = attackedGoalX(world.pitch, Team.id[world.carrier])
     Defender.challengeDelay[eid] = Math.max(0, Defender.challengeDelay[eid] - dt)
     updateRead(world, eid, dt)
     const mode = Defender.mode[eid] as DefenderMode

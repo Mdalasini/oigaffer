@@ -1,4 +1,3 @@
-import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../sim/constants'
 import type { Match } from '../sim/match'
 import { controlAt } from '../sim/space/control'
 import { threat } from '../sim/space/threat'
@@ -26,11 +25,12 @@ const TEAM_TINT: readonly [number, number, number][] = [
 export function drawOverlay(b: Batch, world: Match, overlay: Overlay) {
   if (overlay === 'off') return
   const team = world.possession
-  for (let x = -PITCH_HALF_LENGTH + CELL / 2; x < PITCH_HALF_LENGTH; x += CELL) {
-    for (let y = -PITCH_HALF_WIDTH + CELL / 2; y < PITCH_HALF_WIDTH; y += CELL) {
+  const { halfLength: L, halfWidth: W } = world.pitch
+  for (let x = -L + CELL / 2; x < L; x += CELL) {
+    for (let y = -W + CELL / 2; y < W; y += CELL) {
       let color: Color
       if (overlay === 'threat') {
-        const t = Math.min(1, threat(team, x, y) / 0.6)
+        const t = Math.min(1, threat(world.pitch, team, x, y) / 0.6)
         color = [1, 0.9 - 0.7 * t, 0.2, 0.55 * t]
       } else {
         const p = controlAt(world, team, x, y)

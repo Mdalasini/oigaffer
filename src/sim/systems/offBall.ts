@@ -1,6 +1,5 @@
 import { hasComponent, query } from 'bitecs'
 import { Defender, DefenderMode, Effort, Mark, MoveIntent, OffBall, Outfielder, Position, Run, RunPhase, Sliding, Team } from '../components'
-import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
 import { attackingIntent, endRun, tickRun } from '../attacking'
 import { coverSpot, lineTarget, pressCue, trapping } from './defending'
 import type { Match } from '../match'
@@ -127,7 +126,7 @@ function nextLook(world: Match, eid: number): number {
 function defend(world: Match, eid: number) {
   const ball = world.ball
   const team = Team.id[eid]
-  const goalX = ownGoalX(team)
+  const goalX = ownGoalX(world.pitch, team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
   let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : homePosition(world, eid)
@@ -158,9 +157,9 @@ function defend(world: Match, eid: number) {
   }
   // Never behind their own goal line.
   const dir = attackDir(team)
-  x = clamp(x, -PITCH_HALF_LENGTH + 1, PITCH_HALF_LENGTH - 1)
+  x = clamp(x, -world.pitch.halfLength + 1, world.pitch.halfLength - 1)
   if ((x - goalX) * dir < 1) x = goalX + dir
-  y = clamp(y, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
+  y = clamp(y, -world.pitch.halfWidth + 1, world.pitch.halfWidth - 1)
   go(world, eid, x, y, effortFor(world, eid, x, y, true))
 }
 
@@ -171,7 +170,7 @@ function defend(world: Match, eid: number) {
 function effortFor(world: Match, eid: number, x: number, y: number, defending: boolean): Effort {
   const distance = Math.hypot(x - Position.x[eid], y - Position.y[eid])
   if (defending) {
-    const goalX = ownGoalX(Team.id[eid])
+    const goalX = ownGoalX(world.pitch, Team.id[eid])
     const ball = world.ball
     const beaten = Math.hypot(goalX - Position.x[eid], Position.y[eid]) > Math.hypot(goalX - Position.x[ball], Position.y[ball]) + 1
     if (beaten && distance > 3) return Effort.Sprint
@@ -204,7 +203,7 @@ function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
         if (Math.abs(dx) >= TEAMMATE_GAP) continue
         const side = Math.sign(y - my) || 1
         const need = Math.sqrt(TEAMMATE_GAP * TEAMMATE_GAP - dx * dx)
-        if (Math.abs(y - my) < need) y = clamp(my + side * need, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
+        if (Math.abs(y - my) < need) y = clamp(my + side * need, -world.pitch.halfWidth + 1, world.pitch.halfWidth - 1)
       }
     }
   }
@@ -243,8 +242,8 @@ function apart(world: Match, eid: number, x: number, y: number) {
     y = my + uy * TEAMMATE_GAP
   }
   return {
-    x: clamp(x, -PITCH_HALF_LENGTH + 1, PITCH_HALF_LENGTH - 1),
-    y: clamp(y, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1),
+    x: clamp(x, -world.pitch.halfLength + 1, world.pitch.halfLength - 1),
+    y: clamp(y, -world.pitch.halfWidth + 1, world.pitch.halfWidth - 1),
   }
 }
 

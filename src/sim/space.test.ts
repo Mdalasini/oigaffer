@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Position, Velocity } from './components'
-import { GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
+import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, setVec, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollTime } from './passing'
 import { arrivalTime, REACTION_TIME } from './space/arrival'
 import { controlAt, passSafety, timeOnBall } from './space/control'
 import { shotChance, threat } from './space/threat'
 import { BANDS, bandOf, laneOf, LANES, zoneCentre } from './space/zones'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
+const PITCH_HALF_LENGTH = SMALL_SIDED_PITCH.halfLength
+const PITCH_HALF_WIDTH = SMALL_SIDED_PITCH.halfWidth
 
 const RED = 0
 const BLUE = 1
@@ -38,42 +43,52 @@ function placed(x: number, y: number, bx: number, by: number, grades: GradeOverr
 
 describe('zones', () => {
   test('five lanes, mirrored about the middle', () => {
-    expect(laneOf(0)).toBe(2)
-    expect(laneOf(-PITCH_HALF_WIDTH)).toBe(0)
-    expect(laneOf(PITCH_HALF_WIDTH)).toBe(LANES - 1)
-    for (const y of [1, 4, 7, 10, 13]) expect(laneOf(-y)).toBe(LANES - 1 - laneOf(y))
+    expect(laneOf(SMALL_SIDED_PITCH, 0)).toBe(2)
+    expect(laneOf(SMALL_SIDED_PITCH, -PITCH_HALF_WIDTH)).toBe(0)
+    expect(laneOf(SMALL_SIDED_PITCH, PITCH_HALF_WIDTH)).toBe(LANES - 1)
+    for (const y of [1, 4, 7, 10, 13]) expect(laneOf(SMALL_SIDED_PITCH, -y)).toBe(LANES - 1 - laneOf(SMALL_SIDED_PITCH, y))
   })
 
   test('bands count up from each team’s own goal', () => {
-    expect(bandOf(-PITCH_HALF_LENGTH, RED)).toBe(0)
-    expect(bandOf(PITCH_HALF_LENGTH, RED)).toBe(BANDS - 1)
-    expect(bandOf(PITCH_HALF_LENGTH, BLUE)).toBe(0)
-    const centre = zoneCentre(2, BANDS - 1, RED)
-    expect(laneOf(centre.y)).toBe(2)
-    expect(bandOf(centre.x, RED)).toBe(BANDS - 1)
-    expect(zoneCentre(2, BANDS - 1, BLUE).x).toBeCloseTo(-centre.x, 6)
+    expect(bandOf(SMALL_SIDED_PITCH, -PITCH_HALF_LENGTH, RED)).toBe(0)
+    expect(bandOf(SMALL_SIDED_PITCH, PITCH_HALF_LENGTH, RED)).toBe(BANDS - 1)
+    expect(bandOf(SMALL_SIDED_PITCH, PITCH_HALF_LENGTH, BLUE)).toBe(0)
+    const centre = zoneCentre(SMALL_SIDED_PITCH, 2, BANDS - 1, RED)
+    expect(laneOf(SMALL_SIDED_PITCH, centre.y)).toBe(2)
+    expect(bandOf(SMALL_SIDED_PITCH, centre.x, RED)).toBe(BANDS - 1)
+    expect(zoneCentre(SMALL_SIDED_PITCH, 2, BANDS - 1, BLUE).x).toBeCloseTo(-centre.x, 6)
   })
 })
 
 describe('threat', () => {
   test('shot chances look like expected goals', () => {
-    expect(shotChance(GOAL_X - 6, 0)).toBeGreaterThan(0.45)
-    expect(shotChance(GOAL_X - 11, 0)).toBeGreaterThan(0.15)
-    expect(shotChance(GOAL_X - 11, 0)).toBeLessThan(0.35)
-    expect(shotChance(GOAL_X - 20, 0)).toBeLessThan(0.12)
+    expect(shotChance(SMALL_SIDED_PITCH, GOAL_X - 6, 0)).toBeGreaterThan(0.45)
+    expect(shotChance(SMALL_SIDED_PITCH, GOAL_X - 11, 0)).toBeGreaterThan(0.15)
+    expect(shotChance(SMALL_SIDED_PITCH, GOAL_X - 11, 0)).toBeLessThan(0.35)
+    expect(shotChance(SMALL_SIDED_PITCH, GOAL_X - 20, 0)).toBeLessThan(0.12)
   })
 
   test('rises towards goal and towards the middle, never below the shot itself', () => {
     for (let x = -PITCH_HALF_LENGTH + 2; x < GOAL_X - 2; x += 2) {
-      expect(threat(RED, x + 2, 0)).toBeGreaterThan(threat(RED, x, 0))
-      expect(threat(RED, x, 0)).toBeGreaterThan(threat(RED, x, 10))
-      expect(threat(RED, x, 0)).toBeGreaterThanOrEqual(shotChance(x, 0) - 0.02)
+      expect(threat(SMALL_SIDED_PITCH, RED, x + 2, 0)).toBeGreaterThan(threat(SMALL_SIDED_PITCH, RED, x, 0))
+      expect(threat(SMALL_SIDED_PITCH, RED, x, 0)).toBeGreaterThan(threat(SMALL_SIDED_PITCH, RED, x, 10))
+      expect(threat(SMALL_SIDED_PITCH, RED, x, 0)).toBeGreaterThanOrEqual(shotChance(SMALL_SIDED_PITCH, x, 0) - 0.02)
     }
   })
 
   test('is the same for both teams, mirrored', () => {
-    expect(threat(BLUE, -10, 3)).toBeCloseTo(threat(RED, 10, 3), 6)
-    expect(threat(RED, 5, 4)).toBeCloseTo(threat(RED, 5, -4), 6)
+    expect(threat(SMALL_SIDED_PITCH, BLUE, -10, 3)).toBeCloseTo(threat(SMALL_SIDED_PITCH, RED, 10, 3), 6)
+    expect(threat(SMALL_SIDED_PITCH, RED, 5, 4)).toBeCloseTo(threat(SMALL_SIDED_PITCH, RED, 5, -4), 6)
+  })
+
+  test('each pitch has its own map, measured from its own goal', () => {
+    const small = SMALL_SIDED_PITCH.halfLength
+    const full = FULL_PITCH.halfLength
+    // The same spot relative to the goal is as dangerous on either pitch...
+    expect(threat(FULL_PITCH, RED, full - 8, 2)).toBeCloseTo(threat(SMALL_SIDED_PITCH, RED, small - 8, 2), 2)
+    // ...and the full pitch's halfway line is further from goal than the small one's.
+    expect(threat(FULL_PITCH, RED, 0, 0)).toBeLessThan(threat(SMALL_SIDED_PITCH, RED, 0, 0))
+    expect(threat(FULL_PITCH, BLUE, -(full - 8), 2)).toBeCloseTo(threat(FULL_PITCH, RED, full - 8, 2), 6)
   })
 })
 

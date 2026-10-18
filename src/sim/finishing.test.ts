@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Passer, Position, Velocity } from './components'
-import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X } from './constants'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { landingChance, planShot, shotValue } from './finishing'
 import { createMatch, handOver, requestShot, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { keepValue } from './playmaking'
@@ -8,6 +9,9 @@ import { createRng } from './rng'
 import { sampleShotTarget } from './shooting'
 import { shotChance } from './space/threat'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 const RED = 0
 const BLUE = 1
@@ -84,7 +88,7 @@ describe('finishing against a set keeper', () => {
   test('an average finisher scores about as often as real shots from there do', () => {
     // Measured over 9000 shots a spot, three seed blocks pooled: 60/33/19/13/6% from 6/10/14/18/22 m,
     // against 58/32/18/11/7% for real shots. These 1000 come to 61/35/19/13/7%.
-    for (const { distance, rate } of curve) expect(Math.abs(rate - shotChance(GOAL_X - distance, 0))).toBeLessThan(0.04)
+    for (const { distance, rate } of curve) expect(Math.abs(rate - shotChance(SMALL_SIDED_PITCH, GOAL_X - distance, 0))).toBeLessThan(0.04)
   })
 
   test('the further out, the fewer go in', () => {

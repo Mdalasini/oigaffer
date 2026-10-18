@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { Body, Goalkeeper, Outfielder, Position, Team, Velocity } from '../components'
-import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
+import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from '../constants'
 import { catchChance } from '../grades'
 import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
 import { ARM_REACH, bestReceiver, keeperReach, passToOutfielder } from './keeper'
@@ -81,17 +81,17 @@ function leftThePitch(world: Match) {
   const { ball } = world
   const lastTeam = Team.id[world.lastTouchedBy]
   for (const end of [-1, 1]) {
-    const atLine = crossPlane(world, end * (GOAL_X + BALL_RADIUS), end)
+    const atLine = crossPlane(world, end * (world.pitch.halfLength + BALL_RADIUS), end)
     if (!atLine) continue
     // The team attacking this end, and the one defending it.
     const attackers = attackDir(0) === end ? 0 : 1
     const defenders = opponent(attackers)
     if (Math.abs(atLine.y) <= GOAL_HALF_WIDTH - BALL_RADIUS && atLine.z <= GOAL_HEIGHT - BALL_RADIUS) scoreFromPlay(world, attackers)
-    else if (lastTeam === defenders) ballOut(world, 'corner', attackers, end * GOAL_X, atLine.y)
-    else ballOut(world, 'goal-kick', defenders, end * GOAL_X, atLine.y)
+    else if (lastTeam === defenders) ballOut(world, 'corner', attackers, end * world.pitch.halfLength, atLine.y)
+    else ballOut(world, 'goal-kick', defenders, end * world.pitch.halfLength, atLine.y)
     return
   }
-  if (Math.abs(Position.y[ball]) > PITCH_HALF_WIDTH + BALL_RADIUS) {
+  if (Math.abs(Position.y[ball]) > world.pitch.halfWidth + BALL_RADIUS) {
     ballOut(world, 'throw-in', opponent(lastTeam), Position.x[ball], Position.y[ball])
   }
 }

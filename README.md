@@ -8,7 +8,8 @@ and a goalkeeper, on a small-sided 60 m × 40 m pitch with full-size goals. Red
 attacks the goal at +x, Blue the one at -x. The four play a 1-2-1 diamond with
 the ball and a 2-2 box without it. The simulation can also be run with one,
 two or ten outfielders a side; ten play a 4-3-3 with the ball and a 4-1-4-1
-without it, still on the small pitch for now.
+without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
+(`world.pitch`, see `src/sim/pitch.ts`), and a match can ask for any pitch.
 
 - **Teammates and shape** — each team has a formation that lives in a block
   moving with the ball. With the ball, the block stretches: one outfielder

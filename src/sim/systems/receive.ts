@@ -1,5 +1,5 @@
 import { Dribbler, Facing, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from '../components'
-import { BALL_RADIUS, GOAL_X, PITCH_HALF_WIDTH } from '../constants'
+import { BALL_RADIUS } from '../constants'
 import { cleanTakeSpeed, firstTouchError, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { rollDistanceIn, rollStopTime } from '../passing'
@@ -131,9 +131,10 @@ export function receiveSystem(world: Match, _dt: number) {
  * straight into him.
  */
 function touchDirection(world: Match, eid: number) {
-  const goalX = attackedGoalX(world.possession)
+  const goalX = attackedGoalX(world.pitch, world.possession)
+  const L = world.pitch.halfLength
   let x = goalX - Position.x[eid]
-  let y = (-Position.y[eid] * GOAL_X) / Math.max(Math.abs(goalX - Position.x[eid]), GOAL_X)
+  let y = (-Position.y[eid] * L) / Math.max(Math.abs(goalX - Position.x[eid]), L)
   const length = Math.hypot(x, y) || 1
   x /= length
   y /= length
@@ -159,7 +160,7 @@ function touchDirection(world: Match, eid: number) {
     y += ((Position.y[eid] - ny) / gap) * away
   }
   // Keep it on the pitch.
-  if (Math.abs(Position.y[eid]) > PITCH_HALF_WIDTH - 2 && Math.sign(y) === Math.sign(Position.y[eid])) y = 0
+  if (Math.abs(Position.y[eid]) > world.pitch.halfWidth - 2 && Math.sign(y) === Math.sign(Position.y[eid])) y = 0
   const facing = Facing.angle[eid]
   return Math.hypot(x, y) > 1e-6 ? { x, y } : { x: Math.cos(facing), y: Math.sin(facing) }
 }

@@ -1,5 +1,5 @@
 import { Position, Team } from '../components'
-import { PENALTY_AREA_DEPTH, PENALTY_AREA_HALF_WIDTH } from '../constants'
+import type { Pitch } from '../pitch'
 import type { Match } from '../match'
 import { rollTime } from '../passing'
 import { ownGoalX } from '../teams'
@@ -25,14 +25,14 @@ const PASS_START = 1.5
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
 
 /** Whether (x, y) is inside the penalty area `team` defends. */
-export function inOwnArea(team: number, x: number, y: number): boolean {
-  const lineX = ownGoalX(team)
-  return Math.abs(x - lineX) <= PENALTY_AREA_DEPTH && Math.abs(y) <= PENALTY_AREA_HALF_WIDTH
+export function inOwnArea(pitch: Pitch, team: number, x: number, y: number): boolean {
+  const lineX = ownGoalX(pitch, team)
+  return Math.abs(x - lineX) <= pitch.penaltyAreaDepth && Math.abs(y) <= pitch.penaltyAreaHalfWidth
 }
 
 /** Whether `eid` can get to a ball at (x, y) at all: a keeper only in their own area. */
 function canContest(world: Match, eid: number, x: number, y: number): boolean {
-  return !isKeeper(world, eid) || inOwnArea(Team.id[eid], x, y)
+  return !isKeeper(world, eid) || inOwnArea(world.pitch, Team.id[eid], x, y)
 }
 
 /** Every player of `team`, outfielders then the keeper. */

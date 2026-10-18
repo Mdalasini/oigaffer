@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Mark, OffBall, Position, Run, RunPhase, Velocity } from './components'
-import { BALL_RADIUS, GOAL_X } from './constants'
+import { BALL_RADIUS } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { lookAround, perceptionSystem } from './perception'
 import { createRng } from './rng'
 import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
@@ -9,6 +10,9 @@ import { along, baseLine, homePosition } from './shape'
 import { attackingIntent } from './attacking'
 import { canPlayForward, coverSpot, lineTarget, maybeSpringTrap, pressCue, trapping } from './systems/defending'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 const RED = 0
 const BLUE = 1

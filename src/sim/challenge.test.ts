@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { hasComponent } from 'bitecs'
 import { bodyBetween, resolveBarge, resolveStandingTackle } from './challenge'
 import { Defender, DefenderMode, Dribbler, Facing, OffBalance, Position, Shield, Sliding, TakeOn, TouchStyle, Velocity } from './components'
-import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
+import { BALL_RADIUS, FIXED_DT } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { challengeSystem } from './systems/challenge'
 import { ballBodySystem } from './systems/collision'
@@ -11,6 +12,9 @@ import { startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 const RED = 0
 const BLUE = 1

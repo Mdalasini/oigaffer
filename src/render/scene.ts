@@ -1,24 +1,10 @@
 import { hasComponent } from 'bitecs'
 import { sinceScan } from '../sim/perception'
 import { Body, Call, CallKind, Defender, DefenderMode, Facing, Goalkeeper, OffBalance, Position, Sliding, Team, TouchStyle, Velocity } from '../sim/components'
-import {
-  BALL_RADIUS,
-  CIRCLE_RADIUS,
-  GOAL_AREA_DEPTH,
-  GOAL_AREA_HALF_WIDTH,
-  GOAL_DEPTH,
-  GOAL_HALF_WIDTH,
-  GOAL_HEIGHT,
-  GOAL_X,
-  PENALTY_AREA_DEPTH,
-  PENALTY_AREA_HALF_WIDTH,
-  PENALTY_SPOT_DISTANCE,
-  PITCH_HALF_LENGTH,
-  PITCH_HALF_WIDTH,
-  POST_WIDTH,
-} from '../sim/constants'
+import { BALL_RADIUS, GOAL_DEPTH, GOAL_HALF_WIDTH, GOAL_HEIGHT, POST_WIDTH } from '../sim/constants'
 import { currentSpread, type Match, type ShotOutcome } from '../sim/match'
 import { planShot } from '../sim/finishing'
+import type { Pitch } from '../sim/pitch'
 import type { GoalPoint, Vec3 } from '../sim/shooting'
 import { attackedGoalX } from '../sim/teams'
 import type { Batch, Color } from './batch'
@@ -87,10 +73,10 @@ const Z = { x: 0, y: 0, z: 1 }
 
 export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Overlay = 'off') {
   batch.clear()
-  drawGround(batch)
-  drawMarkings(batch)
+  drawGround(batch, world.pitch)
+  drawMarkings(batch, world.pitch)
   drawOverlay(batch, world, overlay)
-  for (const end of ENDS) drawGoal(batch, end)
+  for (const end of ENDS) drawGoal(batch, world.pitch, end)
   for (const team of world.teams) {
     for (const eid of team.outfielders) drawPlayer(batch, cam, world, eid, KITS[Team.id[eid]].outfield)
     drawPlayer(batch, cam, world, team.keeper, KITS[Team.id[team.keeper]].keeper)
@@ -103,9 +89,9 @@ export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Ove
   drawShotGuide(batch, world)
 }
 
-function drawGround(b: Batch) {
-  const L = PITCH_HALF_LENGTH
-  const W = PITCH_HALF_WIDTH
+function drawGround(b: Batch, pitch: Pitch) {
+  const L = pitch.halfLength
+  const W = pitch.halfWidth
   b.quad({ x: 0, y: 0, z: -0.02 }, { x: L + 10, y: 0, z: 0 }, { x: 0, y: W + 8, z: 0 }, GRASS_OUTER)
   const stripes = 10
   const width = (2 * L) / stripes
@@ -114,20 +100,19 @@ function drawGround(b: Batch) {
   }
   // Seen face-on from the goal camera, the pitch is edge-on; these strips
   // behind each goal stand in for the ground there.
-  for (const end of ENDS) b.quad({ x: end * (GOAL_X + 12), y: 0, z: -3 }, { x: 0, y: 40, z: 0 }, { x: 0, y: 0, z: 3 }, GRASS_OUTER)
+  for (const end of ENDS) b.quad({ x: end * (L + 12), y: 0, z: -3 }, { x: 0, y: W + 20, z: 0 }, { x: 0, y: 0, z: 3 }, GRASS_OUTER)
 }
 
-function drawMarkings(b: Batch) {
+function drawMarkings(b: Batch, pitch: Pitch) {
   const w = 0.12
   const z = 0
   const line = (x0: number, y0: number, x1: number, y1: number) => b.groundLine(x0, y0, x1, y1, w, z, LINE)
-  const L = PITCH_HALF_LENGTH
-  const W = PITCH_HALF_WIDTH
+  const { halfLength: L, halfWidth: W, circleRadius, penaltyAreaDepth, penaltySpotDistance } = pitch
   line(-L, -W, L, -W)
   line(-L, W, L, W)
   line(0, -W, 0, W)
   b.disc({ x: 0, y: 0, z }, X, Y, 0.2, LINE, 12)
-  b.arc({ x: 0, y: 0, z }, X, Y, CIRCLE_RADIUS, w, 0, Math.PI * 2, LINE)
+  b.arc({ x: 0, y: 0, z }, X, Y, circleRadius, w, 0, Math.PI * 2, LINE)
 
   for (const end of ENDS) {
     const goalLine = end * L
@@ -138,20 +123,21 @@ function drawMarkings(b: Batch) {
       line(front, -halfWidth, goalLine, -halfWidth)
       line(front, halfWidth, goalLine, halfWidth)
     }
-    box(PENALTY_AREA_DEPTH, PENALTY_AREA_HALF_WIDTH)
-    box(GOAL_AREA_DEPTH, GOAL_AREA_HALF_WIDTH)
+    box(penaltyAreaDepth, pitch.penaltyAreaHalfWidth)
+    box(pitch.goalAreaDepth, pitch.goalAreaHalfWidth)
 
-    const spot = { x: end * (L - PENALTY_SPOT_DISTANCE), y: 0, z }
+    const spot = { x: end * (L - penaltySpotDistance), y: 0, z }
     b.disc(spot, X, Y, 0.2, LINE, 12)
     // The "D": the part of the penalty arc outside the area, facing the halfway line.
-    const edge = Math.acos((PENALTY_AREA_DEPTH - PENALTY_SPOT_DISTANCE) / CIRCLE_RADIUS)
+    const edge = Math.acos((penaltyAreaDepth - penaltySpotDistance) / circleRadius)
     const towardHalfway = end > 0 ? Math.PI : 0
-    b.arc(spot, X, Y, CIRCLE_RADIUS, w, towardHalfway - edge, towardHalfway + edge, LINE, 24)
+    b.arc(spot, X, Y, circleRadius, w, towardHalfway - edge, towardHalfway + edge, LINE, 24)
   }
 }
 
 /** Both goals: `end` is +1 for the goal at +x, -1 for the one at -x. */
-function drawGoal(b: Batch, end: number) {
+function drawGoal(b: Batch, pitch: Pitch, end: number) {
+  const goalLine = pitch.halfLength
   const half = GOAL_HALF_WIDTH
   const pw = POST_WIDTH
   const span = (x0: number, x1: number) => [end * x0, end * x1].sort((a, c) => a - c)
@@ -161,12 +147,12 @@ function drawGoal(b: Batch, end: number) {
   }
   for (const side of [-1, 1]) {
     const y = side * (half + pw / 2)
-    box(GOAL_X, GOAL_X + pw, y - pw / 2, y + pw / 2, 0, GOAL_HEIGHT + pw)
+    box(goalLine, goalLine + pw, y - pw / 2, y + pw / 2, 0, GOAL_HEIGHT + pw)
   }
-  box(GOAL_X, GOAL_X + pw, -half - pw, half + pw, GOAL_HEIGHT, GOAL_HEIGHT + pw)
+  box(goalLine, goalLine + pw, -half - pw, half + pw, GOAL_HEIGHT, GOAL_HEIGHT + pw)
 
-  const back = end * (GOAL_X + GOAL_DEPTH)
-  const mid = end * (GOAL_X + GOAL_DEPTH / 2)
+  const back = end * (goalLine + GOAL_DEPTH)
+  const mid = end * (goalLine + GOAL_DEPTH / 2)
   // Back, sides and roof of the net.
   b.quad({ x: back, y: 0, z: GOAL_HEIGHT / 2 }, { x: 0, y: half, z: 0 }, { x: 0, y: 0, z: GOAL_HEIGHT / 2 }, NET_FILL)
   for (const side of [-1, 1]) {
@@ -184,7 +170,7 @@ function drawGoal(b: Batch, end: number) {
     b.quad({ x: back, y: 0, z }, { x: 0, y: half, z: 0 }, { x: 0, y: 0, z: t }, NET_LINE)
   }
   for (let d = mesh; d < GOAL_DEPTH; d += mesh) {
-    b.quad({ x: end * (GOAL_X + d), y: 0, z: GOAL_HEIGHT }, { x: t, y: 0, z: 0 }, { x: 0, y: half, z: 0 }, NET_LINE)
+    b.quad({ x: end * (goalLine + d), y: 0, z: GOAL_HEIGHT }, { x: t, y: 0, z: 0 }, { x: 0, y: half, z: 0 }, NET_LINE)
   }
 }
 
@@ -362,7 +348,7 @@ function drawShotGuide(b: Batch, world: Match) {
     origin = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
     aim = planShot(world, world.carrier).aim
     radius = currentSpread(world)
-    goalX = attackedGoalX(Team.id[world.carrier])
+    goalX = attackedGoalX(world.pitch, Team.id[world.carrier])
   }
   const end = Math.sign(goalX)
 

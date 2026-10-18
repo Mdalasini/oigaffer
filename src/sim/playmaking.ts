@@ -1,6 +1,6 @@
 import { angleDelta } from './angles'
 import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
-import { BALL_RADIUS, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
+import { BALL_RADIUS } from './constants'
 import { gradeT, judgementError, offsideMisjudgement, passAngleError, passWeightError } from './grades'
 import { cue } from './cues'
 import { handOver, setVec, type Match, type PassKind } from './match'
@@ -134,20 +134,20 @@ export function keepValue(world: Match, carrier: number): number {
   const keep = clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97)
   // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to
   // is worth over a clean one from here, but only if they have a moment on the ball to carry it on at all.
-  const gain = Math.max(0, threat(team, bx, by) * CARRY_GAIN - shotChance(bx * attackDir(team), by))
+  const gain = Math.max(0, threat(world.pitch, team, bx, by) * CARRY_GAIN - shotChance(world.pitch, bx * attackDir(team), by))
   const moment = 1 / (1 + Math.exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
   const kept = shotValue(world, carrier) * NOW_SHARE + gain * moment
-  return keep * kept - (1 - keep) * threat(opponent(team), bx, by)
+  return keep * kept - (1 - keep) * threat(world.pitch, opponent(team), bx, by)
 }
 
 /**
  * A pass's worth: the receiver's value if it gets through, less the threat
  * the other team has from where it would be cut out.
  */
-function passValue(team: number, safety: number, received: number, bx: number, by: number, x: number, y: number) {
+function passValue(world: Match, team: number, safety: number, received: number, bx: number, by: number, x: number, y: number) {
   const lostX = bx + (x - bx) * LOSS_ALONG
   const lostY = by + (y - by) * LOSS_ALONG
-  return safety * received - (1 - safety) * threat(opponent(team), lostX, lostY)
+  return safety * received - (1 - safety) * threat(world.pitch, opponent(team), lostX, lostY)
 }
 
 /**
@@ -165,7 +165,7 @@ export function passOptions(world: Match, carrier: number): PassOption[] {
     // Into space towards goal, or towards where they're calling for it.
     const calling = Call.kind[mate] === CallKind.Space
     for (const lead of THROUGH_LEADS) {
-      const through = intoSpace(world, carrier, mate, lead, attackedGoalX(team), 0)
+      const through = intoSpace(world, carrier, mate, lead, attackedGoalX(world.pitch, team), 0)
       if (through) options.push(through)
       const called = calling ? intoSpace(world, carrier, mate, lead, Call.x[mate], Call.y[mate]) : null
       if (called) options.push(called)
@@ -197,7 +197,7 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   const x = mx + seenVx(world, carrier, mate) * rough
   const y = my + seenVy(world, carrier, mate) * rough
   const distance = Math.hypot(x - bx, y - by)
-  if (!playable(carrier, bx, by, x, y, distance)) return null
+  if (!playable(world, carrier, bx, by, x, y, distance)) return null
   const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier)
   return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
 }
@@ -213,7 +213,7 @@ export function rateFeetPass(world: Match, team: number, receiver: number, x: nu
   const distance = Math.hypot(x - bx, y - by)
   const speed = rollSpeedFor(distance, FEET_ARRIVAL)
   const safety = passSafety(world, team, bx, by, x, y, speed, judge)
-  const value = passValue(team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance), judge), bx, by, x, y)
+  const value = passValue(world, team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance), judge), bx, by, x, y)
   return { speed, safety, value }
 }
 
@@ -233,10 +233,11 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
   const gy = towardY - my
   const glen = Math.hypot(gx, gy)
   if (glen < 1) return null
-  const x = clamp(mx + (gx / glen) * lead, -GOAL_X + 1, GOAL_X - 1)
-  const y = clamp(my + (gy / glen) * lead, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
+  const { halfLength: L, halfWidth: W } = world.pitch
+  const x = clamp(mx + (gx / glen) * lead, -L + 1, L - 1)
+  const y = clamp(my + (gy / glen) * lead, -W + 1, W - 1)
   const distance = Math.hypot(x - bx, y - by)
-  if (!playable(carrier, bx, by, x, y, distance)) return null
+  if (!playable(world, carrier, bx, by, x, y, distance)) return null
 
   const runner = arrivalTime(world, mate, x, y, 0.5, REACTION_TIME, carrier)
   let speed = rollSpeedToArrive(distance, runner + THROUGH_LAG)
@@ -248,14 +249,14 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
   // They have to win the race to the ball, the keeper included.
   const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, carrier) - meet) / RACE_SCALE))
   const safety = passSafety(world, team, bx, by, x, y, speed, carrier) * race
-  const value = passValue(team, safety, receiveValue(world, mate, x, y, meet, carrier), bx, by, x, y)
+  const value = passValue(world, team, safety, receiveValue(world, mate, x, y, meet, carrier), bx, by, x, y)
   return { receiver: mate, kind: 'through', x, y, speed, safety, value }
 }
 
 /** Whether a pass from (bx, by) to (x, y) is one the carrier can play from how they stand. */
-function playable(carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
+function playable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
   if (distance < MIN_PASS || distance > MAX_PASS) return false
-  if (Math.abs(x) > PITCH_HALF_LENGTH - 0.5 || Math.abs(y) > PITCH_HALF_WIDTH - 0.5) return false
+  if (Math.abs(x) > world.pitch.halfLength - 0.5 || Math.abs(y) > world.pitch.halfWidth - 0.5) return false
   return Math.abs(angleDelta(Facing.angle[carrier], Math.atan2(y - by, x - bx))) <= MAX_PASS_TURN
 }
 
@@ -270,7 +271,7 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
   const time = teamArrival(world, opponent(team), x, y, 0.95, judge) - arrive
   const open = clamp(time / OPEN_TIME, 0, 1)
   const forward = Math.max(0, Math.cos(angleDelta(seenFacing(world, judge, receiver), attackDir(team) > 0 ? 0 : Math.PI)))
-  return threat(team, x, y) * (0.5 + 0.5 * open) * (0.85 + 0.15 * forward)
+  return threat(world.pitch, team, x, y) * (0.5 + 0.5 * open) * (0.85 + 0.15 * forward)
 }
 
 /**

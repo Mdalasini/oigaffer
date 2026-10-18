@@ -1,4 +1,5 @@
-import { GOAL_DEPTH, GOAL_HALF_WIDTH, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../sim/constants'
+import { GOAL_DEPTH, GOAL_HALF_WIDTH } from '../sim/constants'
+import type { Pitch } from '../sim/pitch'
 import type { Vec3 } from '../sim/shooting'
 import { cross, lookAt, multiply, ortho, type Mat4 } from './mat4'
 
@@ -20,12 +21,12 @@ const OVERLAY_ROOM = 2.5
 
 /**
  * The main 2D view: an orthographic camera straight above the centre spot
- * that fits the whole pitch. The pitch runs across a landscape screen and up
+ * that fits the whole of `pitch`. The pitch runs across a landscape screen and up
  * a portrait one.
  */
-export function pitchCamera(aspect: number): Camera {
-  const along = PITCH_HALF_LENGTH + PITCH_MARGIN_ALONG
-  const across = PITCH_HALF_WIDTH + PITCH_MARGIN_ACROSS
+export function pitchCamera(aspect: number, pitch: Pitch): Camera {
+  const along = pitch.halfLength + PITCH_MARGIN_ALONG
+  const across = pitch.halfWidth + PITCH_MARGIN_ACROSS
   const landscape = aspect >= 1
   // Screen-up is the +y touchline on a landscape screen, the +x goal on a portrait one.
   const up = landscape ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }
