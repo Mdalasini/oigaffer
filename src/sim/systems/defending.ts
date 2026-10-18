@@ -1,6 +1,7 @@
 import { angleDelta } from '../angles'
-import { Facing, Mark, OffBall, Outfielder, Position } from '../components'
+import { Facing, Mark, Outfielder, Position } from '../components'
 import { assign } from '../assignment'
+import { cue } from '../cues'
 import { trapChance } from '../grades'
 import type { Match } from '../match'
 import { along, baseLine, homePosition, LINE_LIMITS, onsideLimit } from '../shape'
@@ -58,8 +59,6 @@ const TRAP_SPEED = 5
 const TRAP_HOLD = 0.3
 /** An attacker within this distance (m) of the line is lurking on it. */
 const LURKING = 2
-/** Seconds before defenders react to the trap being sprung. */
-const TRAP_REACTION = 0.08
 
 /**
  * The defending team's shared decisions: where its line is, and who marks
@@ -122,7 +121,7 @@ export function maybeSpringTrap(world: Match, windup: number) {
   const positioning = defenders.reduce((sum, d) => sum + Outfielder.positioning[d], 0) / defenders.length
   if (world.rng() >= trapChance(positioning)) return
   world.trap[team] = world.time + windup + TRAP_HOLD
-  for (const d of defenders) if (d !== world.presser) OffBall.decideIn[d] = Math.min(OffBall.decideIn[d], TRAP_REACTION)
+  cue(world, { kind: 'trap', team })
 }
 
 /** Whether the carrier has the time and the body shape to play forward. */

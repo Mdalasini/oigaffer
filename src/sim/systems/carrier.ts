@@ -1,11 +1,10 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OffBall, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
-import { closeControlSpeed, passWindup, reactionDelay, runTimingError } from '../grades'
-import { gaussian } from '../rng'
-import { maybeSpringTrap } from './defending'
+import { closeControlSpeed, passWindup, reactionDelay } from '../grades'
+import { cue } from '../cues'
 import { setPhase, setVec, type Match } from '../match'
 import { playBall } from '../offside'
 import { planShot, shotValue } from '../finishing'
@@ -129,15 +128,7 @@ export function carrierSystem(world: Match, dt: number) {
       if (pass) {
         const windup = passWindup(Outfielder.passing[eid])
         world.windup = { carrier: eid, option: pass, at: world.time + windup }
-        maybeSpringTrap(world, windup)
-        // A runner reads the passer shaping to play it through and times their burst to the strike: early and they're offside.
-        Run.burstAt[pass.receiver] = 0
-        if (pass.kind === 'through') {
-          const runner = pass.receiver
-          const delay = Math.max(0, windup + gaussian(world.rng) * runTimingError(Outfielder.offTheBall[runner]))
-          Run.burstAt[runner] = world.time + delay
-          OffBall.decideIn[runner] = delay
-        }
+        cue(world, { kind: 'passShaped', passer: eid, option: pass, windup })
         setUpPass(eid, ball, pass.x, pass.y)
         continue
       }
@@ -170,9 +161,9 @@ function wantsToShoot(world: Match, eid: number, goalX: number) {
   return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN
 }
 
-/** Calls off a pass being wound up; a runner waiting to burst for it stays put. */
+/** Calls off a pass being wound up. */
 function cancelWindup(world: Match) {
-  if (world.windup) Run.burstAt[world.windup.option.receiver] = 0
+  if (world.windup) cue(world, { kind: 'passCalledOff', option: world.windup.option })
   world.windup = null
 }
 

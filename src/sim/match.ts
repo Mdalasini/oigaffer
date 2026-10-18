@@ -35,6 +35,7 @@ import { clampGrade } from './grades'
 import { planShot } from './finishing'
 import { createRng, type Rng } from './rng'
 import { clearIntentions } from './attacking'
+import { cue, type Cue } from './cues'
 import { clearOffside, playedBy } from './offside'
 import { baseLine, homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
@@ -246,6 +247,8 @@ export interface MatchContext {
    */
   lastTouchDeliberate: boolean
   onEvent?: (event: MatchEvent) => void
+  /** Called with each moment players react to, before they do. */
+  onCue?: (cue: Cue) => void
 }
 
 export type Match = World<MatchContext>
@@ -259,8 +262,6 @@ export interface MatchOptions {
 
 /** Seconds a player who has just lost the ball waits before challenging for it. */
 const CHALLENGE_DELAY_ON_LOSS = 0.6
-/** Players take this long, plus up to as long again, to react to the ball changing hands. */
-const TURNOVER_REACTION = 0.2
 /** How far (m) opponents stand from a free kick: 9.15 m scaled to this pitch. */
 const FREE_KICK_DISTANCE = 5
 /** Reach (m) that counts as getting to the ball. */
@@ -397,17 +398,13 @@ export function kickOff(world: Match, team: number) {
 export function setPossession(world: Match, team: number, carrier: number) {
   const lost = world.carrier
   world.pass = null
-  world.nextMarking = [0, 0]
   // The other team has played it on purpose, which ends any offside.
   clearOffside(world)
   world.possession = team
   world.keeper = world.teams[opponent(team)].keeper
   world.stats[team].attacks++
   handOver(world, carrier)
-  // Everyone takes a moment to register the change before they reshape.
-  for (const t of [0, 1]) {
-    for (const eid of world.teams[t].outfielders) OffBall.decideIn[eid] = TURNOVER_REACTION + world.rng() * TURNOVER_REACTION
-  }
+  cue(world, { kind: 'possession', team })
   const presser = quickestTo(world, opponent(team), Position.x[world.ball], Position.y[world.ball])
   // The player who lost it needs a moment to turn before challenging.
   engage(world, presser, presser === lost ? CHALLENGE_DELAY_ON_LOSS : 0)
@@ -465,44 +462,32 @@ export function quickestTo(world: Match, team: number, x: number, y: number, exc
 
 /** Moves the OnBall tag to `eid`. */
 function setCarrier(world: Match, eid: number) {
-  // Who's free to be marked has changed: share the marking out again now.
-  world.nextMarking = [0, 0]
+  let previous = -1
   for (const other of query(world, [OnBall])) {
     if (other === eid) continue
     removeComponent(world, other, OnBall)
-    stepOffBall(world, other)
+    previous = other
   }
   if (hasComponent(world, eid, Pressing)) removeComponent(world, eid, Pressing)
   addComponent(world, eid, OnBall)
   // On the ball, they've stopped running and calling for it.
   clearIntentions(eid)
   world.carrier = eid
+  cue(world, { kind: 'carrier', player: eid, previous })
 }
 
 /** Moves the Pressing tag to `eid`. */
 function setPresser(world: Match, eid: number) {
-  world.nextMarking = [0, 0]
+  let previous = -1
   for (const other of query(world, [Pressing])) {
     if (other === eid) continue
     removeComponent(world, other, Pressing)
-    stepOffBall(world, other)
+    previous = other
   }
   if (hasComponent(world, eid, OnBall)) removeComponent(world, eid, OnBall)
   addComponent(world, eid, Pressing)
   world.presser = eid
-}
-
-/**
- * A player leaving the ball or the press: they hold where they are while they
- * take stock, rather than picking up an off-ball plan from before.
- */
-function stepOffBall(world: Match, eid: number) {
-  clearIntentions(eid)
-  OffBall.targetX[eid] = Position.x[eid]
-  OffBall.targetY[eid] = Position.y[eid]
-  OffBall.radius[eid] = 1
-  OffBall.settled[eid] = 0
-  OffBall.decideIn[eid] = Math.min(OffBall.decideIn[eid], TURNOVER_REACTION + world.rng() * TURNOVER_REACTION)
+  cue(world, { kind: 'presser', player: eid, previous })
 }
 
 /** `player` wins the ball for their team in open play, and they go the other way. */
@@ -564,10 +549,10 @@ export function keeperClaims(world: Match, keeper: number) {
 function takeInHands(world: Match, keeper: number) {
   const team = Team.id[keeper]
   world.pass = null
-  world.nextMarking = [0, 0]
   setVec(Velocity, world.ball, 0, 0, 0)
   if (team !== world.possession) setPossession(world, team, quickestTo(world, team, Position.x[keeper], Position.y[keeper]))
   setPhase(world, 'held')
+  cue(world, { kind: 'held', keeper })
 }
 
 /** The ball has gone out: play stops, and `team` restarts from about (x, y). */
@@ -660,10 +645,9 @@ export function takeRestart(world: Match) {
 
   setVec(Position, ball, bx, by, BALL_RADIUS)
   setVec(Velocity, ball, 0, 0, 0)
-  // Both lines start where they'd naturally be, and the marking is shared out at once.
+  // Both lines start where they'd naturally be; the marking is shared out at once when the ball is given to the taker.
   for (const t of [0, 1]) {
     world.lines[t] = baseLine(world, t)
-    world.nextMarking[t] = 0
     world.trap[t] = 0
   }
   world.possession = team
