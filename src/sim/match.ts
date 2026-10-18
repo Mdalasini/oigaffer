@@ -464,6 +464,8 @@ export function quickestTo(world: Match, team: number, x: number, y: number, exc
 
 /** Moves the OnBall tag to `eid`. */
 function setCarrier(world: Match, eid: number) {
+  // Who's free to be marked has changed: share the marking out again now.
+  world.nextMarking = [0, 0]
   for (const other of query(world, [OnBall])) {
     if (other === eid) continue
     removeComponent(world, other, OnBall)
@@ -478,6 +480,7 @@ function setCarrier(world: Match, eid: number) {
 
 /** Moves the Pressing tag to `eid`. */
 function setPresser(world: Match, eid: number) {
+  world.nextMarking = [0, 0]
   for (const other of query(world, [Pressing])) {
     if (other === eid) continue
     removeComponent(world, other, Pressing)
@@ -560,6 +563,7 @@ export function keeperClaims(world: Match, keeper: number) {
 function takeInHands(world: Match, keeper: number) {
   const team = Team.id[keeper]
   world.pass = null
+  world.nextMarking = [0, 0]
   setVec(Velocity, world.ball, 0, 0, 0)
   if (team !== world.possession) setPossession(world, team, quickestTo(world, team, Position.x[keeper], Position.y[keeper]))
   setPhase(world, 'held')
@@ -680,6 +684,7 @@ export function takeRestart(world: Match) {
   // Everyone holds where they've been put until they've had a look around, with no run or call carried over.
   for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
     clearIntentions(eid)
+    Run.burstAt[eid] = 0
     OffBall.targetX[eid] = Position.x[eid]
     OffBall.targetY[eid] = Position.y[eid]
     OffBall.radius[eid] = 1
@@ -699,6 +704,7 @@ export function takeRestart(world: Match) {
 
   world.shot = null
   world.pass = null
+  world.windup = null
   // Nobody can be offside from a throw-in, a corner or a goal kick.
   clearOffside(world)
   world.offsideExempt = kind === 'throw-in' || kind === 'corner' || kind === 'goal-kick'

@@ -99,6 +99,8 @@ export const Run = {
   rest: new Float32Array(MAX_ENTITIES),
   targetX: new Float32Array(MAX_ENTITIES),
   targetY: new Float32Array(MAX_ENTITIES),
+  /** Match time at which they burst for a through ball being shaped for them, judged from the passer's shape. */
+  burstAt: new Float32Array(MAX_ENTITIES),
 }
 
 export const CallKind = {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, Mark, OffBall, Outfielder, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS, GOAL_X } from './constants'
-import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
+import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
+import { strikePass } from './playmaking'
 import { along, baseLine } from './shape'
 import { attackingIntent } from './attacking'
 import { canPlayForward, lineTarget, maybeSpringTrap, pressCue, trapping } from './systems/defending'
@@ -139,5 +140,82 @@ describe('the offside trap', () => {
     world.rng = () => 0
     maybeSpringTrap(world, 0.2)
     expect(trapping(world, BLUE)).toBe(false)
+  })
+})
+
+describe('review fixes', () => {
+  test('springing the trap moves a defender who was standing settled', () => {
+    const world = scene(-10, 0, 0, 7.5, 4, [[-8, 0], [8, 4]], { blue: { outfielder: { positioning: 20 } } })
+    const [blueA, blueB] = world.teams[BLUE].outfielders
+    world.presser = blueA
+    world.lines[BLUE] = along(BLUE, 8)
+    OffBall.targetX[blueB] = 8
+    OffBall.targetY[blueB] = 4
+    OffBall.radius[blueB] = 2
+    OffBall.settled[blueB] = 1
+    OffBall.decideIn[blueB] = 1
+    world.rng = () => 0
+    maybeSpringTrap(world, 0.25)
+    expect(trapping(world, BLUE)).toBe(true)
+    // Half a second: from standing, a defender covers only about 0.1 m in the first quarter.
+    for (let i = 0; i < 60; i++) stepMatch(world)
+    // Stepping up for Blue is towards -x.
+    expect(Position.x[blueB]).toBeLessThan(8 - 0.3)
+  })
+
+  test('a runner who reads a through ball late doesn’t go until they’ve read it', () => {
+    // Blue are out of the pass's way.
+    const world = scene(-12, 0, 0, 4, 6, [[-14, -6], [14, -8]])
+    const [carrier, runner] = world.teams[RED].outfielders
+    setVec(Velocity, runner, 0, 0, 0)
+    Run.burstAt[runner] = world.time + 0.6
+    strikePass(world, carrier, { receiver: runner, kind: 'through', x: 12, y: 6, speed: 14, safety: 1, value: 1 })
+    const start = Position.x[runner]
+    for (let i = 0; i < 60; i++) stepMatch(world)
+    expect(world.pass?.to).toBe(runner)
+    expect(Math.abs(Position.x[runner] - start)).toBeLessThan(0.3)
+  })
+
+  test('when the man being marked gets the ball, the marking is shared out again at once', () => {
+    // The presser stays the same after the pass, so only the share-out can free the cover.
+    const world = scene(-5, 0, 0, 2, 4, [[-1, 2], [12, 8]])
+    const [carrier, mate] = world.teams[RED].outfielders
+    const [blueA, blueB] = world.teams[BLUE].outfielders
+    world.presser = blueA
+    world.nextMarking = [0, 0]
+    stepMatch(world)
+    expect(Mark.target[blueB]).toBe(mate)
+    // The teammate gets the ball at their feet, well before the next scheduled share-out.
+    Facing.angle[mate] = 0
+    setVec(Position, world.ball, Position.x[mate] + FOOT_OFFSET, Position.y[mate], BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    handOver(world, mate)
+    stepMatch(world)
+    expect(world.carrier).toBe(mate)
+    expect(world.presser).toBe(blueA)
+    // The cover now has the player who passed it, not the one the presser is going to.
+    expect(Mark.target[blueB]).toBe(carrier)
+  })
+
+  test('keeping clear of the presser never drops the cover behind the line', () => {
+    // Red's teammate is deep in Blue's half; Blue's line is at x = 8, the presser just in front of it.
+    const world = scene(4, 0, 0, 10, 0.3, [[7, 0], [9, 3]])
+    const [blueA, blueB] = world.teams[BLUE].outfielders
+    world.presser = blueA
+    world.lines[BLUE] = along(BLUE, 8)
+    world.nextMarking = [0, 0]
+    OffBall.decideIn[blueB] = 0
+    stepMatch(world)
+    expect(Mark.target[blueB]).toBe(world.teams[RED].outfielders[1])
+    expect(along(BLUE, OffBall.targetX[blueB])).toBeGreaterThanOrEqual(world.lines[BLUE] - 0.5)
+    // Still clear of the presser.
+    expect(Math.hypot(OffBall.targetX[blueB] - Position.x[blueA], OffBall.targetY[blueB] - Position.y[blueA])).toBeGreaterThan(3)
+  })
+
+  test('a restart calls off a pass being wound up', () => {
+    const world = scene(-5, 0, 0, 8, 8, [[-3, 0], [6, 6]])
+    world.windup = { carrier: world.carrier, option: { receiver: world.teams[RED].outfielders[1], kind: 'feet', x: 8, y: 8, speed: 9, safety: 1, value: 1 }, at: world.time + 0.2 }
+    resetMatch(world)
+    expect(world.windup).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
-import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OffBall, OnBall, Outfielder, Physical, Position, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
+import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OffBall, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
 import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, passWindup, reactionDelay, runTimingError, shotSpreadRadius } from '../grades'
@@ -65,14 +65,18 @@ const SHIELD_PACE = 1.2
 /** The carrier's decisions: dribble at goal with touches, then shoot. */
 export function carrierSystem(world: Match, dt: number) {
   // A pass being wound up is off if someone else has the ball, or play has stopped.
-  if (world.windup && (world.windup.carrier !== world.carrier || world.phase !== 'play')) world.windup = null
+  if (world.windup && (world.windup.carrier !== world.carrier || world.phase !== 'play')) cancelWindup(world)
   for (const eid of query(world, [OnBall, Outfielder, MoveIntent, Dribbler])) {
     MoveIntent.faceX[eid] = 0
     MoveIntent.faceY[eid] = 0
     // With a keeper holding the ball, everyone is off it.
     if (world.phase === 'held') continue
     if (world.pass?.to === eid && world.phase === 'play') {
-      meetTheBall(world, eid)
+      // A runner who has read the pass late hasn't gone yet: they carry on as they were.
+      if (world.time < Run.burstAt[eid]) {
+        MoveIntent.vx[eid] = Velocity.x[eid]
+        MoveIntent.vy[eid] = Velocity.y[eid]
+      } else meetTheBall(world, eid)
       continue
     }
     if (world.phase !== 'play') {
@@ -104,11 +108,12 @@ export function carrierSystem(world: Match, dt: number) {
         setUpPass(eid, ball, windup.option.x, windup.option.y)
         continue
       }
-      world.windup = null
       if (canPlayBall(world, eid) && ballAtFeet(eid, ball)) {
+        world.windup = null
         strikePass(world, eid, windup.option)
         continue
       }
+      cancelWindup(world)
     }
 
     if (canPlayBall(world, eid) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
@@ -118,9 +123,12 @@ export function carrierSystem(world: Match, dt: number) {
         world.windup = { carrier: eid, option: pass, at: world.time + windup }
         maybeSpringTrap(world, windup)
         // A runner reads the passer shaping to play it through and times their burst to the strike: early and they're offside.
+        Run.burstAt[pass.receiver] = 0
         if (pass.kind === 'through') {
           const runner = pass.receiver
-          OffBall.decideIn[runner] = Math.max(0, windup + gaussian(world.rng) * runTimingError(Outfielder.offTheBall[runner]))
+          const delay = Math.max(0, windup + gaussian(world.rng) * runTimingError(Outfielder.offTheBall[runner]))
+          Run.burstAt[runner] = world.time + delay
+          OffBall.decideIn[runner] = delay
         }
         setUpPass(eid, ball, pass.x, pass.y)
         continue
@@ -147,6 +155,12 @@ function wantsToShoot(world: Match, eid: number, goalX: number, distance: number
   const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
   if (Math.abs(angleDelta(Facing.angle[eid], facingGoal)) > MAX_SHOT_TURN) return false
   return world.shootRequested || laneClear(world, goalX)
+}
+
+/** Calls off a pass being wound up; a runner waiting to burst for it stays put. */
+function cancelWindup(world: Match) {
+  if (world.windup) Run.burstAt[world.windup.option.receiver] = 0
+  world.windup = null
 }
 
 /** Winding up a pass: stay with the ball without touching it, turning towards where it's going. */

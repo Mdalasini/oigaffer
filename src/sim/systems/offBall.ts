@@ -114,11 +114,6 @@ function cover(world: Match, eid: number) {
     x += (markX - x) * w
     y += (markY - y) * w
   }
-  // Hold the line rather than drop behind it, unless the ball is already beyond it or a pass is on its way:
-  // a runner who goes past them before the pass is offside.
-  // Springing the trap, they make for where the line is going.
-  const line = trapping(world, team) ? lineTarget(world, team) : world.lines[team]
-  if (world.phase === 'play' && !world.pass && along(team, x) < line && along(team, bx) > line + 2) x = line * attackDir(team)
   // Never behind their own goal line.
   const dir = attackDir(team)
   x = clamp(x, -PITCH_HALF_LENGTH + 1, PITCH_HALF_LENGTH - 1)
@@ -149,16 +144,40 @@ function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   const team = Team.id[eid]
   const attacking = team === world.possession
   const ball = world.ball
-  // A runner wants to be right on the line, and a check away is a short, deliberate step: both need a tight aim.
-  const precise = attacking && Run.phase[eid] !== RunPhase.None
+  // Defenders hold the line rather than drop behind it, unless the ball is already beyond it or a pass is on
+  // its way: a runner who goes past them before the pass is offside. Springing the trap, they make for where
+  // the line is going.
+  const trap = !attacking && trapping(world, team)
+  if (!attacking) {
+    const line = trap ? lineTarget(world, team) : world.lines[team]
+    if (world.phase === 'play' && !world.pass && along(team, x) < line && along(team, Position.x[ball]) > line + 2) {
+      x = line * attackDir(team)
+      // Pinned to the line, they keep clear of teammates by sliding along it instead.
+      for (const mate of world.teams[team].outfielders) {
+        if (mate === eid) continue
+        const onBall = mate === world.presser
+        const mx = onBall ? Position.x[mate] : OffBall.targetX[mate]
+        const my = onBall ? Position.y[mate] : OffBall.targetY[mate]
+        const dx = x - mx
+        if (Math.abs(dx) >= TEAMMATE_GAP) continue
+        const side = Math.sign(y - my) || 1
+        const need = Math.sqrt(TEAMMATE_GAP * TEAMMATE_GAP - dx * dx)
+        if (Math.abs(y - my) < need) y = clamp(my + side * need, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1)
+      }
+    }
+  }
+  // A runner wants to be right on the line, a check away is a short, deliberate step, and a trap is a step up
+  // together: all need a tight aim, so they move even from standing.
+  const precise = (attacking && Run.phase[eid] !== RunPhase.None) || trap
   const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
-  setTarget(eid, x, y, radius, effort)
+  // The trap is sprung sharply.
+  setTarget(eid, x, y, radius, trap ? Math.max(effort, Effort.Run) as Effort : effort)
   // Whatever the target ends up being, an attacker's stays onside: a runner on the last
   // defender's shoulder, everyone else a yard short, except a runner bursting for a
   // through ball being shaped for them.
   if (attacking) {
     const limit = onsideLimit(world, team) - (Run.phase[eid] === RunPhase.Go ? RUNNER_MARGIN : ONSIDE_MARGIN)
-    const bursting = world.windup?.option.receiver === eid && world.windup.option.kind === 'through'
+    const bursting = world.windup?.option.receiver === eid && world.windup.option.kind === 'through' && world.time >= Run.burstAt[eid]
     if (!bursting && along(team, OffBall.targetX[eid]) > limit) OffBall.targetX[eid] = limit * attackDir(team)
   }
 }
