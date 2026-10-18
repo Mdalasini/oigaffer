@@ -95,22 +95,26 @@ export class Batch {
 
   /** Axis-aligned box, with faces lightly shaded so edges read in any view. */
   box(min: Vec3, max: Vec3, color: Color) {
-    const cx = (min.x + max.x) / 2
-    const cy = (min.y + max.y) / 2
-    const cz = (min.z + max.z) / 2
-    const hx = (max.x - min.x) / 2
-    const hy = (max.y - min.y) / 2
-    const hz = (max.z - min.z) / 2
+    const centre = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
+    const half = { x: (max.x - min.x) / 2, y: (max.y - min.y) / 2, z: (max.z - min.z) / 2 }
+    this.orientedBox(centre, half, 0, color)
+  }
+
+  /** Box with half-extents `half` in its own frame, turned `yaw` radians about z. */
+  orientedBox(c: Vec3, half: Vec3, yaw: number, color: Color) {
+    const cos = Math.cos(yaw)
+    const sin = Math.sin(yaw)
+    const ax = { x: cos * half.x, y: sin * half.x, z: 0 }
+    const ay = { x: -sin * half.y, y: cos * half.y, z: 0 }
+    const az = { x: 0, y: 0, z: half.z }
+    const at = (a: Vec3, sign: number): Vec3 => ({ x: c.x + a.x * sign, y: c.y + a.y * sign, z: c.z + a.z * sign })
     const shade = (k: number): Color => [color[0] * k, color[1] * k, color[2] * k, color[3]]
-    const X = { x: hx, y: 0, z: 0 }
-    const Y = { x: 0, y: hy, z: 0 }
-    const Z = { x: 0, y: 0, z: hz }
-    this.quad({ x: cx, y: cy, z: max.z }, X, Y, color)
-    this.quad({ x: cx, y: cy, z: min.z }, X, Y, shade(0.6))
-    this.quad({ x: min.x, y: cy, z: cz }, Y, Z, shade(0.85))
-    this.quad({ x: max.x, y: cy, z: cz }, Y, Z, shade(0.85))
-    this.quad({ x: cx, y: min.y, z: cz }, X, Z, shade(0.75))
-    this.quad({ x: cx, y: max.y, z: cz }, X, Z, shade(0.75))
+    this.quad(at(az, 1), ax, ay, color)
+    this.quad(at(az, -1), ax, ay, shade(0.6))
+    this.quad(at(ax, 1), ay, az, shade(0.85))
+    this.quad(at(ax, -1), ay, az, shade(0.85))
+    this.quad(at(ay, 1), ax, az, shade(0.75))
+    this.quad(at(ay, -1), ax, az, shade(0.75))
   }
 
   /** Flat strip of `width` on the ground between two points. */

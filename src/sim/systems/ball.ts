@@ -1,5 +1,5 @@
 import { query } from 'bitecs'
-import { Ball, Position, Velocity } from '../components'
+import { Ball, Facing, Position, Velocity } from '../components'
 import {
   BALL_RADIUS,
   BALL_RESTITUTION,
@@ -17,8 +17,10 @@ export function ballSystem(world: Match, dt: number) {
     world.prevBall.x = Position.x[eid]
     world.prevBall.y = Position.y[eid]
     world.prevBall.z = Position.z[eid]
-    // While dribbling, the striker carries the ball.
-    if (world.phase === 'approach') continue
+    if (world.phase === 'approach') {
+      carry(eid, world.striker)
+      continue
+    }
 
     Velocity.z[eid] -= GRAVITY * dt
     Position.x[eid] += Velocity.x[eid] * dt
@@ -35,6 +37,20 @@ export function ballSystem(world: Match, dt: number) {
 
     if (world.outcome === 'goal') containInNet(eid)
   }
+}
+
+/** Distance ahead of the carrier's centre that the ball sits while dribbling. */
+const CARRY_OFFSET = 0.6
+
+/** Keeps the ball at the carrier's feet, in front of where they face. */
+function carry(ball: number, carrier: number) {
+  const angle = Facing.angle[carrier]
+  Position.x[ball] = Position.x[carrier] + Math.cos(angle) * CARRY_OFFSET
+  Position.y[ball] = Position.y[carrier] + Math.sin(angle) * CARRY_OFFSET
+  Position.z[ball] = BALL_RADIUS
+  Velocity.x[ball] = Velocity.x[carrier]
+  Velocity.y[ball] = Velocity.y[carrier]
+  Velocity.z[ball] = 0
 }
 
 function containInNet(eid: number) {

@@ -12,26 +12,31 @@ export interface Camera {
   ballScale: number
 }
 
-/** World region the top-down view keeps on screen: the final third. */
-const TOP_CENTRE_X = 37.5
-const TOP_HALF_ACROSS = 24
-const TOP_HALF_ALONG = 20
+/** Minimum span of pitch the top-down view keeps on screen, in metres. */
+const TOP_HALF_ACROSS = 16
+const TOP_HALF_ALONG = 12
 
 /**
- * The main 2D view: an orthographic camera straight above the attacking half,
- * with the goal at the top of the screen.
+ * The main 2D view: an orthographic camera straight above `centre`, with the
+ * goal at the top of the screen.
  */
-export function topDownCamera(aspect: number): Camera {
-  const eye = { x: TOP_CENTRE_X, y: 0, z: 100 }
-  const { view, right, up } = lookAt(eye, { x: TOP_CENTRE_X, y: 0, z: 0 }, { x: 1, y: 0, z: 0 })
+export function topDownCamera(aspect: number, centre: { x: number; y: number }): Camera {
+  const eye = { x: centre.x, y: centre.y, z: 100 }
+  const { view, right, up } = lookAt(eye, { x: centre.x, y: centre.y, z: 0 }, { x: 1, y: 0, z: 0 })
+  const { halfW, halfH } = topDownExtent(aspect)
+  const projection = ortho(-halfW, halfW, -halfH, halfH, 1, 200)
+  return { viewProjection: multiply(projection, view), right, up, forward: cross(up, right), ballScale: 2 }
+}
+
+/** Half-size of the top-down view in metres: across the pitch (screen x) and along it (screen y). */
+export function topDownExtent(aspect: number) {
   let halfW = TOP_HALF_ALONG * aspect
   let halfH = TOP_HALF_ALONG
   if (halfW < TOP_HALF_ACROSS) {
     halfW = TOP_HALF_ACROSS
     halfH = TOP_HALF_ACROSS / aspect
   }
-  const projection = ortho(-halfW, halfW, -halfH, halfH, 1, 200)
-  return { viewProjection: multiply(projection, view), right, up, forward: cross(up, right), ballScale: 2.6 }
+  return { halfW, halfH }
 }
 
 const GOAL_VIEW_DISTANCE = 12

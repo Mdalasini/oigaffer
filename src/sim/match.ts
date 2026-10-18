@@ -1,5 +1,5 @@
 import { addComponent, addEntity, createWorld, type World } from 'bitecs'
-import { Ball, Body, Goalkeeper, Outfielder, Position, Velocity } from './components'
+import { Ball, Body, Facing, Goalkeeper, MoveIntent, Outfielder, Physical, Position, Velocity } from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
@@ -7,6 +7,7 @@ import type { GoalPoint, Vec3 } from './shooting'
 import { ballSystem } from './systems/ball'
 import { keeperSystem } from './systems/keeper'
 import { outcomeSystem } from './systems/outcome'
+import { locomotionSystem } from './systems/locomotion'
 import { strikerSystem } from './systems/striker'
 
 export type Phase = 'approach' | 'shot' | 'result'
@@ -85,6 +86,13 @@ export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOpti
   addComponent(world, world.striker, Velocity)
   addComponent(world, world.striker, Body)
   addComponent(world, world.striker, Outfielder)
+  addComponent(world, world.striker, Facing)
+  addComponent(world, world.striker, MoveIntent)
+  addComponent(world, world.striker, Physical)
+  Physical.pace[world.striker] = 14
+  Physical.acceleration[world.striker] = 14
+  Physical.agility[world.striker] = 14
+  Physical.strength[world.striker] = 12
   Body.radius[world.striker] = 0.35
   Body.height[world.striker] = 1.8
 
@@ -93,6 +101,7 @@ export function createMatch({ seed = Date.now(), shooting, reaction }: MatchOpti
   addComponent(world, world.keeper, Velocity)
   addComponent(world, world.keeper, Body)
   addComponent(world, world.keeper, Goalkeeper)
+  addComponent(world, world.keeper, Facing)
   Body.radius[world.keeper] = 0.4
   Body.height[world.keeper] = 1.9
 
@@ -111,7 +120,9 @@ export function resetPlay(world: Match) {
   const { rng, ball, striker, keeper } = world
   setVec(Position, striker, GOAL_X - 32, (rng() * 2 - 1) * 14, 0)
   setVec(Velocity, striker, 0, 0, 0)
-  setVec(Position, ball, Position.x[striker] + 0.6, Position.y[striker], BALL_RADIUS)
+  // Start half-turned away so the striker has to come round onto goal.
+  Facing.angle[striker] = Math.atan2(-Position.y[striker], GOAL_X - Position.x[striker]) + (rng() * 2 - 1) * 1.6
+  setVec(Position, ball, Position.x[striker], Position.y[striker], BALL_RADIUS)
   setVec(Velocity, ball, 0, 0, 0)
   setVec(Position, keeper, GOAL_X - 0.5, 0, 0)
   setVec(Velocity, keeper, 0, 0, 0)
@@ -143,6 +154,7 @@ export function setPhase(world: Match, phase: Phase) {
 export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.phaseTime += dt
   strikerSystem(world, dt)
+  locomotionSystem(world, dt)
   keeperSystem(world, dt)
   ballSystem(world, dt)
   outcomeSystem(world, dt)
