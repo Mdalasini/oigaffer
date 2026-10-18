@@ -107,7 +107,7 @@ export function App() {
 
       <div
         ref={insetRef}
-        className="pointer-events-none absolute bottom-4 left-4 aspect-[12/5] w-[min(46%,460px)] rounded-md ring-2 ring-white/25"
+        className="pointer-events-none absolute bottom-4 left-4 aspect-[12/5] w-[min(40%,360px)] rounded-md ring-2 ring-white/25"
       >
         <span className="absolute top-1.5 left-2 rounded bg-black/50 px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-neutral-300 uppercase">
           Striker's view

@@ -64,6 +64,9 @@ const OUTCOME_COLOR: Record<Outcome, Color> = {
 /** Shadows fall away from a sun high to the south-east. */
 const SUN = { x: -0.45, y: -0.3 }
 
+/** The two ends of the pitch, by the sign of their goal line's x. */
+const ENDS = [-1, 1]
+
 const X = { x: 1, y: 0, z: 0 }
 const Y = { x: 0, y: 1, z: 0 }
 const Z = { x: 0, y: 0, z: 1 }
@@ -72,7 +75,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
   batch.clear()
   drawGround(batch)
   drawMarkings(batch)
-  drawGoal(batch)
+  for (const end of ENDS) drawGoal(batch, end)
   drawPlayer(batch, cam, world, world.striker, STRIKER_KIT)
   if (world.defenderActive) drawPlayer(batch, cam, world, world.defender, DEFENDER_KIT)
   drawPlayer(batch, cam, world, world.keeper, KEEPER_KIT)
@@ -82,20 +85,17 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
 }
 
 function drawGround(b: Batch) {
-  b.quad({ x: 30, y: 0, z: -0.02 }, { x: 45, y: 0, z: 0 }, { x: 0, y: 50, z: 0 }, GRASS_OUTER)
+  const L = PITCH_HALF_LENGTH
+  const W = PITCH_HALF_WIDTH
+  b.quad({ x: 0, y: 0, z: -0.02 }, { x: L + 10, y: 0, z: 0 }, { x: 0, y: W + 8, z: 0 }, GRASS_OUTER)
   const stripes = 10
-  const width = PITCH_HALF_LENGTH / stripes
+  const width = (2 * L) / stripes
   for (let i = 0; i < stripes; i++) {
-    b.quad(
-      { x: (i + 0.5) * width, y: 0, z: -0.01 },
-      { x: width / 2, y: 0, z: 0 },
-      { x: 0, y: PITCH_HALF_WIDTH, z: 0 },
-      i % 2 ? GRASS : GRASS_STRIPE,
-    )
+    b.quad({ x: -L + (i + 0.5) * width, y: 0, z: -0.01 }, { x: width / 2, y: 0, z: 0 }, { x: 0, y: W, z: 0 }, i % 2 ? GRASS : GRASS_STRIPE)
   }
-  // Seen face-on from the goal camera, the pitch is edge-on; this strip
-  // behind the goal stands in for the ground there.
-  b.quad({ x: GOAL_X + 12, y: 0, z: -3 }, { x: 0, y: 40, z: 0 }, { x: 0, y: 0, z: 3 }, GRASS_OUTER)
+  // Seen face-on from the goal camera, the pitch is edge-on; these strips
+  // behind each goal stand in for the ground there.
+  for (const end of ENDS) b.quad({ x: end * (GOAL_X + 12), y: 0, z: -3 }, { x: 0, y: 40, z: 0 }, { x: 0, y: 0, z: 3 }, GRASS_OUTER)
 }
 
 function drawMarkings(b: Batch) {
@@ -104,39 +104,50 @@ function drawMarkings(b: Batch) {
   const line = (x0: number, y0: number, x1: number, y1: number) => b.groundLine(x0, y0, x1, y1, w, z, LINE)
   const L = PITCH_HALF_LENGTH
   const W = PITCH_HALF_WIDTH
-  line(0, -W, L, -W)
-  line(0, W, L, W)
-  line(L, -W, L, W)
+  line(-L, -W, L, -W)
+  line(-L, W, L, W)
   line(0, -W, 0, W)
-
-  const box = (depth: number, halfWidth: number) => {
-    line(L - depth, -halfWidth, L - depth, halfWidth)
-    line(L - depth, -halfWidth, L, -halfWidth)
-    line(L - depth, halfWidth, L, halfWidth)
-  }
-  box(PENALTY_AREA_DEPTH, PENALTY_AREA_HALF_WIDTH)
-  box(GOAL_AREA_DEPTH, GOAL_AREA_HALF_WIDTH)
-
-  const spot = { x: L - PENALTY_SPOT_DISTANCE, y: 0, z }
-  b.disc(spot, X, Y, 0.2, LINE, 12)
   b.disc({ x: 0, y: 0, z }, X, Y, 0.2, LINE, 12)
-  b.arc({ x: 0, y: 0, z }, X, Y, CIRCLE_RADIUS, w, -Math.PI / 2, Math.PI / 2, LINE)
-  // The "D": the part of the penalty arc outside the area.
-  const edge = Math.acos((PENALTY_AREA_DEPTH - PENALTY_SPOT_DISTANCE) / CIRCLE_RADIUS)
-  b.arc(spot, X, Y, CIRCLE_RADIUS, w, Math.PI - edge, Math.PI + edge, LINE, 24)
+  b.arc({ x: 0, y: 0, z }, X, Y, CIRCLE_RADIUS, w, 0, Math.PI * 2, LINE)
+
+  for (const end of ENDS) {
+    const goalLine = end * L
+    line(goalLine, -W, goalLine, W)
+    const box = (depth: number, halfWidth: number) => {
+      const front = end * (L - depth)
+      line(front, -halfWidth, front, halfWidth)
+      line(front, -halfWidth, goalLine, -halfWidth)
+      line(front, halfWidth, goalLine, halfWidth)
+    }
+    box(PENALTY_AREA_DEPTH, PENALTY_AREA_HALF_WIDTH)
+    box(GOAL_AREA_DEPTH, GOAL_AREA_HALF_WIDTH)
+
+    const spot = { x: end * (L - PENALTY_SPOT_DISTANCE), y: 0, z }
+    b.disc(spot, X, Y, 0.2, LINE, 12)
+    // The "D": the part of the penalty arc outside the area, facing the halfway line.
+    const edge = Math.acos((PENALTY_AREA_DEPTH - PENALTY_SPOT_DISTANCE) / CIRCLE_RADIUS)
+    const towardHalfway = end > 0 ? Math.PI : 0
+    b.arc(spot, X, Y, CIRCLE_RADIUS, w, towardHalfway - edge, towardHalfway + edge, LINE, 24)
+  }
 }
 
-function drawGoal(b: Batch) {
+/** Both goals: `end` is +1 for the goal at +x, -1 for the one at -x. */
+function drawGoal(b: Batch, end: number) {
   const half = GOAL_HALF_WIDTH
   const pw = POST_WIDTH
+  const span = (x0: number, x1: number) => [end * x0, end * x1].sort((a, c) => a - c)
+  const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => {
+    const [lo, hi] = span(x0, x1)
+    b.box({ x: lo, y: y0, z: z0 }, { x: hi, y: y1, z: z1 }, POST)
+  }
   for (const side of [-1, 1]) {
     const y = side * (half + pw / 2)
-    b.box({ x: GOAL_X, y: y - pw / 2, z: 0 }, { x: GOAL_X + pw, y: y + pw / 2, z: GOAL_HEIGHT + pw }, POST)
+    box(GOAL_X, GOAL_X + pw, y - pw / 2, y + pw / 2, 0, GOAL_HEIGHT + pw)
   }
-  b.box({ x: GOAL_X, y: -half - pw, z: GOAL_HEIGHT }, { x: GOAL_X + pw, y: half + pw, z: GOAL_HEIGHT + pw }, POST)
+  box(GOAL_X, GOAL_X + pw, -half - pw, half + pw, GOAL_HEIGHT, GOAL_HEIGHT + pw)
 
-  const back = GOAL_X + GOAL_DEPTH
-  const mid = GOAL_X + GOAL_DEPTH / 2
+  const back = end * (GOAL_X + GOAL_DEPTH)
+  const mid = end * (GOAL_X + GOAL_DEPTH / 2)
   // Back, sides and roof of the net.
   b.quad({ x: back, y: 0, z: GOAL_HEIGHT / 2 }, { x: 0, y: half, z: 0 }, { x: 0, y: 0, z: GOAL_HEIGHT / 2 }, NET_FILL)
   for (const side of [-1, 1]) {
@@ -153,8 +164,8 @@ function drawGoal(b: Batch) {
   for (let z = mesh; z < GOAL_HEIGHT; z += mesh) {
     b.quad({ x: back, y: 0, z }, { x: 0, y: half, z: 0 }, { x: 0, y: 0, z: t }, NET_LINE)
   }
-  for (let x = GOAL_X + mesh; x < back; x += mesh) {
-    b.quad({ x, y: 0, z: GOAL_HEIGHT }, { x: t, y: 0, z: 0 }, { x: 0, y: half, z: 0 }, NET_LINE)
+  for (let d = mesh; d < GOAL_DEPTH; d += mesh) {
+    b.quad({ x: end * (GOAL_X + d), y: 0, z: GOAL_HEIGHT }, { x: t, y: 0, z: 0 }, { x: 0, y: half, z: 0 }, NET_LINE)
   }
 }
 

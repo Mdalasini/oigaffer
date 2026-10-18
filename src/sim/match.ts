@@ -19,7 +19,7 @@ import {
   TouchStyle,
   Velocity,
 } from './components'
-import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
+import { BALL_RADIUS, FIXED_DT, GOAL_X, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
 import type { GoalPoint, Vec3 } from './shooting'
@@ -245,7 +245,7 @@ export function setDefenderActive(world: Match, active: boolean) {
 /** Lines the striker up for a fresh run at goal. */
 export function resetPlay(world: Match) {
   const { rng, ball, striker, keeper } = world
-  setVec(Position, striker, GOAL_X - 32, (rng() * 2 - 1) * 14, 0)
+  setVec(Position, striker, GOAL_X - 30, (rng() * 2 - 1) * 8, 0)
   setVec(Velocity, striker, 0, 0, 0)
   // Start half-turned away so the striker has to come round onto goal.
   Facing.angle[striker] = Math.atan2(-Position.y[striker], GOAL_X - Position.x[striker]) + (rng() * 2 - 1) * 1.6
@@ -269,7 +269,7 @@ export function resetPlay(world: Match) {
   world.phase = 'approach'
   world.phaseTime = 0
   // Shots come a touch or two after the striker decides to, so plan a little further out.
-  world.shootDistance = 16 + rng() * 6
+  world.shootDistance = 13 + rng() * 5
   world.aimHigh = rng() < 0.5
   world.shootRequested = false
   world.shot = null
@@ -284,9 +284,9 @@ export function resetPlay(world: Match) {
 function placeDefender(world: Match) {
   const { rng, defender, striker } = world
   if (world.defenderActive) {
-    setVec(Position, defender, GOAL_X - 20 + rng() * 4, Position.y[striker] * 0.5 + (rng() * 2 - 1) * 2, 0)
+    setVec(Position, defender, GOAL_X - 17 + rng() * 3, Position.y[striker] * 0.5 + (rng() * 2 - 1) * 2, 0)
   } else {
-    setVec(Position, defender, GOAL_X - 20, 60, 0)
+    setVec(Position, defender, GOAL_X - 17, PITCH_HALF_WIDTH + 10, 0)
   }
   setVec(Velocity, defender, 0, 0, 0)
   Facing.angle[defender] = Math.atan2(Position.y[striker] - Position.y[defender], Position.x[striker] - Position.x[defender])

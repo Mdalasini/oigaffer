@@ -1,4 +1,4 @@
-import { GOAL_HALF_WIDTH, GOAL_X } from '../sim/constants'
+import { GOAL_DEPTH, GOAL_HALF_WIDTH, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../sim/constants'
 import type { Vec3 } from '../sim/shooting'
 import { cross, lookAt, multiply, ortho, type Mat4 } from './mat4'
 
@@ -12,31 +12,29 @@ export interface Camera {
   ballScale: number
 }
 
-/** Minimum span of pitch the top-down view keeps on screen, in metres. */
-const TOP_HALF_ACROSS = 16
-const TOP_HALF_ALONG = 12
+/** Space (m) kept around the pitch: the goals stick out past each end. */
+const PITCH_MARGIN_ALONG = GOAL_DEPTH + 2
+const PITCH_MARGIN_ACROSS = 2
+/** Extra room (m) above and below the pitch for the HUD and the goal view. */
+const OVERLAY_ROOM = 2.5
 
 /**
- * The main 2D view: an orthographic camera straight above `centre`, with the
- * goal at the top of the screen.
+ * The main 2D view: an orthographic camera straight above the centre spot
+ * that fits the whole pitch. The pitch runs across a landscape screen and up
+ * a portrait one.
  */
-export function topDownCamera(aspect: number, centre: { x: number; y: number }): Camera {
-  const eye = { x: centre.x, y: centre.y, z: 100 }
-  const { view, right, up } = lookAt(eye, { x: centre.x, y: centre.y, z: 0 }, { x: 1, y: 0, z: 0 })
-  const { halfW, halfH } = topDownExtent(aspect)
+export function pitchCamera(aspect: number): Camera {
+  const along = PITCH_HALF_LENGTH + PITCH_MARGIN_ALONG
+  const across = PITCH_HALF_WIDTH + PITCH_MARGIN_ACROSS
+  const landscape = aspect >= 1
+  // Screen-up is the +y touchline on a landscape screen, the +x goal on a portrait one.
+  const up = landscape ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }
+  const [needW, needH] = landscape ? [along, across + OVERLAY_ROOM] : [across, along + OVERLAY_ROOM]
+  const halfH = Math.max(needH, needW / aspect)
+  const halfW = halfH * aspect
+  const { view, right, up: screenUp } = lookAt({ x: 0, y: 0, z: 100 }, { x: 0, y: 0, z: 0 }, up)
   const projection = ortho(-halfW, halfW, -halfH, halfH, 1, 200)
-  return { viewProjection: multiply(projection, view), right, up, forward: cross(up, right), ballScale: 2 }
-}
-
-/** Half-size of the top-down view in metres: across the pitch (screen x) and along it (screen y). */
-export function topDownExtent(aspect: number) {
-  let halfW = TOP_HALF_ALONG * aspect
-  let halfH = TOP_HALF_ALONG
-  if (halfW < TOP_HALF_ACROSS) {
-    halfW = TOP_HALF_ACROSS
-    halfH = TOP_HALF_ACROSS / aspect
-  }
-  return { halfW, halfH }
+  return { viewProjection: multiply(projection, view), right, up: screenUp, forward: cross(screenUp, right), ballScale: 2.5 }
 }
 
 const GOAL_VIEW_DISTANCE = 12

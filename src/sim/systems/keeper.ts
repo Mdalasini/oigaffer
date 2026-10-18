@@ -4,10 +4,10 @@ import { GOAL_HALF_WIDTH, GOAL_X } from '../constants'
 import type { Match } from '../match'
 
 /** How far off the line the keeper comes to narrow the angle. */
-const ADVANCE = 1.0
+const ADVANCE = 1.5
 const SET_SPEED = 4
-const DIVE_SPEED = 6
-const DIVE_ACCEL = 13
+const DIVE_SPEED = 7.5
+const DIVE_ACCEL = 26
 /** Furthest the keeper's centre goes beyond a post. */
 const POST_OVERRUN = 0.4
 

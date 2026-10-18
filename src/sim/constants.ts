@@ -1,7 +1,9 @@
 // World space is metres, z-up. The origin is the centre spot; +x runs towards
 // the goal we attack, +y towards the left touchline as seen by the attacker.
-export const PITCH_HALF_LENGTH = 52.5
-export const PITCH_HALF_WIDTH = 34
+// A small-sided pitch for one outfielder and a keeper a side: 44 m by 28 m,
+// with full-size goals and markings scaled down to fit.
+export const PITCH_HALF_LENGTH = 22
+export const PITCH_HALF_WIDTH = 14
 
 export const GOAL_X = PITCH_HALF_LENGTH
 export const GOAL_HALF_WIDTH = 7.32 / 2
@@ -9,12 +11,12 @@ export const GOAL_HEIGHT = 2.44
 export const GOAL_DEPTH = 2
 export const POST_WIDTH = 0.12
 
-export const PENALTY_AREA_DEPTH = 16.5
-export const PENALTY_AREA_HALF_WIDTH = 20.16
-export const GOAL_AREA_DEPTH = 5.5
-export const GOAL_AREA_HALF_WIDTH = 9.16
-export const PENALTY_SPOT_DISTANCE = 11
-export const CIRCLE_RADIUS = 9.15
+export const PENALTY_AREA_DEPTH = 9
+export const PENALTY_AREA_HALF_WIDTH = 9
+export const GOAL_AREA_DEPTH = 3
+export const GOAL_AREA_HALF_WIDTH = 5.5
+export const PENALTY_SPOT_DISTANCE = 7
+export const CIRCLE_RADIUS = 5
 
 export const GRAVITY = 9.81
 export const BALL_RADIUS = 0.11

@@ -1,10 +1,10 @@
 import { Batch } from '../render/batch'
-import { goalCamera, topDownCamera, topDownExtent } from '../render/cameras'
+import { goalCamera, pitchCamera } from '../render/cameras'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
-import { Defender, DefenderMode, Position, Shield } from '../sim/components'
-import { FIXED_DT, GOAL_DEPTH, GOAL_X } from '../sim/constants'
+import { Defender, DefenderMode, Shield } from '../sim/components'
+import { FIXED_DT } from '../sim/constants'
 import {
   createMatch,
   getGrade,
@@ -54,8 +54,6 @@ export class Game {
   private readonly listeners = new Set<() => void>()
   private snapshot: GameSnapshot
   private snapshotKey = ''
-  /** Where the top-down camera is looking; eases after the ball. */
-  private readonly view = { x: GOAL_X - 20, y: 0 }
 
   constructor() {
     this.match = createMatch()
@@ -77,7 +75,7 @@ export class Game {
         stepMatch(this.match, FIXED_DT)
         accumulator -= FIXED_DT
       }
-      this.render(renderer, canvas, inset, dt)
+      this.render(renderer, canvas, inset)
       this.publishIfChanged()
       raf = requestAnimationFrame(frame)
     }
@@ -116,11 +114,10 @@ export class Game {
     this.publishIfChanged()
   }
 
-  private render(renderer: Renderer, canvas: HTMLCanvasElement, inset: HTMLElement, dt: number) {
+  private render(renderer: Renderer, canvas: HTMLCanvasElement, inset: HTMLElement) {
     const dpr = renderer.resize()
     const main = { x: 0, y: 0, width: canvas.width, height: canvas.height }
-    this.follow(main.width / main.height, dt)
-    const top = topDownCamera(main.width / main.height, this.view)
+    const top = pitchCamera(main.width / main.height)
     buildScene(this.batch, this.match, top)
     renderer.draw(this.batch, top.viewProjection, main, PITCH_SKY)
 
@@ -136,17 +133,6 @@ export class Game {
     const goal = goalCamera(view.width / view.height)
     buildScene(this.batch, this.match, goal)
     renderer.draw(this.batch, goal.viewProjection, view, GOAL_SKY)
-  }
-
-  /** Eases the top-down view towards the ball, looking ahead towards goal but never past it. */
-  private follow(aspect: number, dt: number) {
-    const ball = this.match.ball
-    const { halfH } = topDownExtent(aspect)
-    const targetX = Math.min(Position.x[ball] + halfH * 0.35, GOAL_X + GOAL_DEPTH + 1 - halfH)
-    const targetY = Position.y[ball] * 0.8
-    const k = 1 - Math.exp(-3 * dt)
-    this.view.x += (targetX - this.view.x) * k
-    this.view.y += (targetY - this.view.y) * k
   }
 
   private takeSnapshot(): GameSnapshot {
