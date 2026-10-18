@@ -23,6 +23,19 @@ being built in stages.
   spot, and a player inside it stands still. They walk or jog unless they're
   far off or have to recover, keep their body facing the play on short moves,
   and keep clear of each other.
+- **Passing (1–20)** — on the ball, a few times a second, the carrier weighs
+  keeping it against each pass they could play. A pass goes to feet, or into
+  space ahead of a teammate, weighted so the runner meets it in stride. Each
+  option is rated by expected threat: what it's worth if it gets through, less
+  the other team's threat from where it would be lost. The space model judges
+  how likely it is to get through. **Vision** decides which teammates outside
+  the carrier's field of view they spot, and **decisions** how far their
+  judgement of each option is off. **Passing** sets how true it goes in line
+  and weight, worse under pressure, over distance and across the body. The
+  receiver goes to meet the ball, then sets it with a directional first touch:
+  towards goal and away from pressure. **First touch** sets how fast a ball
+  they can take dead and how true the touch goes. A faster ball bounces off
+  them. Anyone can cut a pass out.
 - **Show space** — a debug overlay that paints the space model players read
   the pitch with: how dangerous each spot is (threat), and which team would get
   to a ball there first (control).
@@ -84,8 +97,8 @@ being built in stages.
   when there's room on the pitch for it, and takes defenders on the infield
   side near a touchline.
 
-The scoreboard shows goals, shots, shots saved and times each team won the
-ball back. The main view fits the whole pitch: lengthways across a landscape screen, up a
+The scoreboard shows goals, passes completed out of passes played, shots,
+shots saved, and times each team won the ball back. The main view fits the whole pitch: lengthways across a landscape screen, up a
 portrait one. The inset goal view is a second camera on the same 3D scene, looking face-on at
 the goal under attack so you can see the spread circle and where shots go.
 

@@ -2,7 +2,21 @@ import { useState } from 'react'
 import type { Game, GameSnapshot } from '../game/Game'
 import type { Overlay } from '../render/overlay'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
-import { catchChance, reactionDelay, readLag, shotSpreadRadius, sideStepSpeed, tackleSkill, topSpeed, touchAngleError } from '../sim/grades'
+import {
+  catchChance,
+  cleanTakeSpeed,
+  judgementError,
+  passAngleError,
+  passWeightError,
+  reactionDelay,
+  readLag,
+  shotSpreadRadius,
+  sideStepSpeed,
+  spotChance,
+  tackleSkill,
+  topSpeed,
+  touchAngleError,
+} from '../sim/grades'
 import type { GradeKey, Role } from '../sim/match'
 import { TEAM_NAMES, type TeamName } from '../sim/teams'
 import { TEAM_STYLE } from './teamStyle'
@@ -28,6 +42,10 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'dribbling', label: 'Dribbling', detail: (g) => `touch error ±${deg(touchAngleError(g))}°` },
       { key: 'marking', label: 'Marking', detail: (g) => `reads a cut in ${Math.round(readLag(g, false) * 1000)} ms jockeying` },
       { key: 'tackling', label: 'Tackling', detail: (g) => `${Math.round(tackleSkill(g, 10) * 100)}% vs a 10 dribbler, before reach` },
+      { key: 'passing', label: 'Passing', detail: (g) => `aim error ±${deg(passAngleError(g))}°, weight ±${Math.round(passWeightError(g) * 100)}%` },
+      { key: 'firstTouch', label: 'First touch', detail: (g) => `takes a ${cleanTakeSpeed(g).toFixed(0)} m/s ball dead` },
+      { key: 'vision', label: 'Vision', detail: (g) => `spots ${Math.round(spotChance(g) * 100)}% of teammates over the shoulder` },
+      { key: 'decisions', label: 'Decisions', detail: (g) => `misjudges options by ±${Math.round(judgementError(g) * 100)}%` },
       { key: 'pace', label: 'Pace', detail: (g) => `top speed ${topSpeed(g).toFixed(1)} m/s` },
       { key: 'agility', label: 'Agility', detail: (g) => `sidestep ${sideStepSpeed(g).toFixed(1)} m/s` },
       { key: 'strength', label: 'Strength', detail: () => 'wins barges, holds off when shielding' },
@@ -141,7 +159,8 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       <p className="text-xs leading-relaxed text-neutral-400">
         Red attacks to the right, Blue to the left, two outfielders and a keeper a side; outfield grades apply to both of a
         team's outfielders. Whoever has the ball takes the nearest defender on, shields when they get tight, and knocks it
-        past once clear, while their teammate holds the line. The other defender covers, and steps in once the first is
+        past once clear, while their teammate holds the line. When a pass to feet or into space is the better bet they play
+        it: a white ring marks where it's aimed, dashed for a through ball. The other defender covers, and steps in once the first is
         beaten. Rings mark touches: <span className="text-cyan-300">small</span> keeps it close,{' '}
         <span className="text-orange-300">large</span> knocks it ahead. Shots land inside the yellow circle. Space makes
         whoever has the ball shoot.

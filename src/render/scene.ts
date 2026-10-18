@@ -41,6 +41,8 @@ const AIM: Color = [1, 0.85, 0.25, 1]
 const AIM_FILL: Color = [1, 0.85, 0.25, 0.16]
 const SMALL_TOUCH: Color = [0.4, 0.9, 1, 1]
 const LARGE_TOUCH: Color = [1, 0.6, 0.25, 1]
+const PASS_LINE: Color = [1, 1, 1, 0.25]
+const PASS_RING: Color = [1, 1, 1, 0.8]
 /** Seconds a touch ring stays on screen. */
 const TOUCH_RING_LIFE = 0.45
 
@@ -87,6 +89,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera, overlay: Ove
     drawPlayer(batch, cam, world, team.keeper, KITS[Team.id[team.keeper]].keeper)
   }
   drawTouchRing(batch, world)
+  drawPass(batch, world)
   drawBall(batch, cam, world.ball)
   drawShotGuide(batch, world)
 }
@@ -271,6 +274,23 @@ function drawTouchRing(b: Batch, world: Match) {
   const color: Color = [base[0], base[1], base[2], 0.9 * (1 - t)]
   const radius = (touch.style === TouchStyle.Large ? 0.5 : 0.3) + t * 0.6
   b.arc({ x: touch.x, y: touch.y, z: 0.02 }, X, Y, radius, 0.08, 0, Math.PI * 2, color, 32)
+}
+
+/**
+ * A pass on its way: a faint line from the ball to where it was aimed, and a
+ * ring there. A through ball's ring is dashed, to show it's into space.
+ */
+function drawPass(b: Batch, world: Match) {
+  const pass = world.pass
+  if (!pass) return
+  const ball = world.ball
+  b.groundLine(Position.x[ball], Position.y[ball], pass.x, pass.y, 0.05, 0.015, PASS_LINE)
+  const segments = pass.kind === 'through' ? 8 : 1
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2
+    const a1 = a0 + (Math.PI * 2) / segments / (pass.kind === 'through' ? 2 : 1)
+    b.arc({ x: pass.x, y: pass.y, z: 0.02 }, X, Y, 0.45, 0.07, a0, a1, PASS_RING, 12)
+  }
 }
 
 function drawBall(b: Batch, cam: Camera, eid: number) {

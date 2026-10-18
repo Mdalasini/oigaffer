@@ -76,6 +76,12 @@ describe('match outcomes', () => {
     expect(world.stats[1].won).toBe(1)
   })
 
+  test('a shot blocked straight back to the shooter is not struck again and again', () => {
+    // Seed 1 once had a crowded edge of the box where every shot was blocked back to the
+    // shooter's feet and struck again the next tick, hundreds of times.
+    for (const s of simulateMatch(5, { seed: 1 })) expect(s.shots).toBeLessThan(30)
+  })
+
   test('the same seed replays the same match', () => {
     const options = { seed: 42, grades: { red: { outfielder: { shooting: 12 } }, blue: { keeper: { reaction: 9 } } } }
     expect(simulateMatch(5, options)).toEqual(simulateMatch(5, options))

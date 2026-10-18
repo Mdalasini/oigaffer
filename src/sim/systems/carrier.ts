@@ -7,9 +7,13 @@ import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
 import { attackedGoalX } from '../teams'
+import { choosePass, strikePass } from '../playmaking'
+import { meetTheBall } from './receive'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
 const SHOT_SPEED = 25
+/** Seconds after shooting before the shooter can play the ball again. */
+const SHOT_RECOVER = 0.4
 /**
  * Rough distance (m) covered before a large touch is caught up with, at a
  * given running speed: the faster you run, the further the ball goes.
@@ -62,6 +66,10 @@ export function carrierSystem(world: Match, dt: number) {
     MoveIntent.faceY[eid] = 0
     // With a keeper holding the ball, everyone is off it.
     if (world.phase === 'held') continue
+    if (world.pass?.to === eid && world.phase === 'play') {
+      meetTheBall(world, eid)
+      continue
+    }
     if (world.phase !== 'play') {
       MoveIntent.vx[eid] = 0
       MoveIntent.vy[eid] = 0
@@ -82,6 +90,14 @@ export function carrierSystem(world: Match, dt: number) {
     if (canPlayBall(world, eid) && wantsToShoot(world, eid, goalX, distance, shootDistance) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
       shoot(world, eid, goalX)
       continue
+    }
+
+    if (canPlayBall(world, eid) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+      const pass = choosePass(world, eid)
+      if (pass) {
+        strikePass(world, eid, pass)
+        continue
+      }
     }
 
     if (shield(world, eid, dirX, dirY, dt)) continue
@@ -111,12 +127,13 @@ function isChased(world: Match, gx: number, gy: number) {
   return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
 }
 
-/** Whether every opposing outfielder is out of the way of a shot at this attack's aim point. */
+/** Whether every other outfielder, either side's, is out of the way of a shot at this attack's aim point. */
 function laneClear(world: Match, goalX: number) {
-  const { ball, keeper } = world
+  const { ball, keeper, carrier } = world
   const aim = chooseAim(Position.y[ball], Position.y[keeper], world.aimHigh)
-  return world.teams[Team.id[keeper]].outfielders.every(
-    (eid) => distanceToSegment(Position.x[eid], Position.y[eid], Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
+  const outfielders = [...world.teams[0].outfielders, ...world.teams[1].outfielders]
+  return outfielders.every(
+    (eid) => eid === carrier || distanceToSegment(Position.x[eid], Position.y[eid], Position.x[ball], Position.y[ball], goalX, aim.y) > LANE_CLEARANCE,
   )
 }
 
@@ -255,6 +272,7 @@ function shoot(world: Match, carrier: number, goalX: number) {
 
   Goalkeeper.reactTimer[keeper] = reactionDelay(Goalkeeper.reaction[keeper])
   Dribbler.style[carrier] = TouchStyle.None
+  Dribbler.cooldown[carrier] = SHOT_RECOVER
   const team = Team.id[carrier]
   world.shot = { team, goalX, origin: from, aim, radius, target, crossing: null }
   world.shootRequested = false

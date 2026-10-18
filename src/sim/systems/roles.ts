@@ -47,8 +47,9 @@ export function rolesSystem(world: Match, _dt: number) {
     if (time(candidate) < time(presser) - PRESS_HANDOVER) engage(world, candidate, ENGAGE_DELAY)
   }
 
-  // A ball rolling to the carrier, such as the keeper's roll-out, stays theirs.
-  if (footDistance(carrier, ball) > CONTROL_RADIUS && !comingTo(world, carrier)) {
+  // A pass on its way belongs to its receiver, and so does a ball rolling to the carrier, such as
+  // the keeper's roll-out; only a ball that's got away is anyone's.
+  if (!world.pass && footDistance(carrier, ball) > CONTROL_RADIUS && !comingTo(world, carrier)) {
     const mate = quickestTo(world, world.possession, bx, by, carrier)
     if (time(mate) < time(carrier) - LOOSE_HANDOVER) handOver(world, mate)
   }

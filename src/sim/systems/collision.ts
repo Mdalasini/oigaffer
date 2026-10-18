@@ -81,6 +81,7 @@ function ballOffBody(world: Match, eid: number): boolean {
   Position.z[ball] = z
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = false
+  world.pass = null
   if (world.phase === 'shot') endShot(world, 'blocked', null)
   return true
 }

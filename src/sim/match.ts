@@ -13,6 +13,7 @@ import {
   MoveIntent,
   OffBall,
   OffBalance,
+  Passer,
   Outfielder,
   Physical,
   Position,
@@ -40,6 +41,7 @@ import { keeperSystem } from './systems/keeper'
 import { locomotionSystem } from './systems/locomotion'
 import { offBallSystem } from './systems/offBall'
 import { outcomeSystem } from './systems/outcome'
+import { receiveSystem } from './systems/receive'
 import { rolesSystem } from './systems/roles'
 import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
@@ -86,9 +88,25 @@ export interface ShotInfo {
   crossing: GoalPoint | null
 }
 
+/** A pass to feet, or one played into space for the receiver to run onto. */
+export type PassKind = 'feet' | 'through'
+
+/** A pass on its way: who played it, who it's for, and where they're meant to meet it. */
+export interface PassInfo {
+  from: number
+  to: number
+  kind: PassKind
+  x: number
+  y: number
+  time: number
+}
+
 export interface TeamStats {
   goals: number
   shots: number
+  /** Passes played, and how many reached the player they were meant for. */
+  passes: number
+  completed: number
   /** Shots kept out by the other keeper, caught or parried. */
   saved: number
   /** Shots wide, over or blocked. */
@@ -120,6 +138,10 @@ export const GRADE_FIELDS = {
     dribbling: Outfielder.dribbling,
     marking: Outfielder.marking,
     tackling: Outfielder.tackling,
+    passing: Outfielder.passing,
+    firstTouch: Outfielder.firstTouch,
+    vision: Outfielder.vision,
+    decisions: Outfielder.decisions,
     pace: Physical.pace,
     agility: Physical.agility,
     strength: Physical.strength,
@@ -133,7 +155,19 @@ export type Grades = Record<TeamName, RoleGrades>
 export type GradeOverrides = { [T in TeamName]?: { [R in Role]?: Partial<RoleGrades[R]> } }
 
 export const DEFAULT_GRADES: RoleGrades = {
-  outfielder: { shooting: 14, dribbling: 13, marking: 12, tackling: 12, pace: 14, agility: 13, strength: 12 },
+  outfielder: {
+    shooting: 14,
+    dribbling: 13,
+    marking: 12,
+    tackling: 12,
+    passing: 13,
+    firstTouch: 13,
+    vision: 12,
+    decisions: 12,
+    pace: 14,
+    agility: 13,
+    strength: 12,
+  },
   keeper: { reaction: 12, handling: 12 },
 }
 export const ROLES = Object.keys(GRADE_FIELDS) as Role[]
@@ -162,6 +196,8 @@ export interface MatchContext {
   aimHigh: boolean
   shootRequested: boolean
   shot: ShotInfo | null
+  /** The pass on its way, until it's received or broken up. Its receiver is the carrier meanwhile. */
+  pass: PassInfo | null
   /** The latest notable moment. */
   event: MatchEvent | null
   /** How play will restart, while the ball is dead. */
@@ -197,7 +233,7 @@ const TURNOVER_REACTION = 0.2
 /** Reach (m) that counts as getting to the ball. */
 const CONTROL_REACH = 0.9
 
-const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, saved: 0, missed: 0, won: 0, attacks: 0 })
+const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, attacks: 0 })
 
 export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
@@ -218,6 +254,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     aimHigh: false,
     shootRequested: false,
     shot: null,
+    pass: null,
     event: null,
     restart: null,
     stats: [emptyStats(), emptyStats()],
@@ -257,7 +294,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -319,6 +356,7 @@ export function kickOff(world: Match, team: number) {
  */
 export function setPossession(world: Match, team: number, carrier: number) {
   const lost = world.carrier
+  world.pass = null
   world.possession = team
   world.keeper = world.teams[opponent(team)].keeper
   world.stats[team].attacks++
@@ -339,6 +377,8 @@ export function setPossession(world: Match, team: number, carrier: number) {
 
 /** `eid` takes the ball on for their team: from a teammate, a loose ball, or the keeper. */
 export function handOver(world: Match, eid: number) {
+  // Anyone but the receiver taking over means the pass didn't arrive.
+  if (world.pass && world.pass.to !== eid) world.pass = null
   Dribbler.style[world.carrier] = TouchStyle.None
   setCarrier(world, eid)
   Dribbler.style[eid] = TouchStyle.None
@@ -468,6 +508,7 @@ export function keeperClaims(world: Match, keeper: number) {
 /** The ball is in the keeper's hands: their team has it, and play waits on them to roll it out. */
 function takeInHands(world: Match, keeper: number) {
   const team = Team.id[keeper]
+  world.pass = null
   setVec(Velocity, world.ball, 0, 0, 0)
   if (team !== world.possession) setPossession(world, team, quickestTo(world, team, Position.x[keeper], Position.y[keeper]))
   setPhase(world, 'held')
@@ -480,6 +521,7 @@ export function ballOut(world: Match, kind: Exclude<RestartKind, 'kick-off'>, te
 }
 
 function stopPlay(world: Match, kind: RestartKind, team: number, x: number, y: number) {
+  world.pass = null
   world.restart = { kind, team, x, y }
   setPhase(world, 'stopped')
 }
@@ -586,6 +628,7 @@ export function takeRestart(world: Match) {
   Facing.angle[other] = Math.atan2(by - Position.y[other], bx - Position.x[other])
 
   world.shot = null
+  world.pass = null
   world.lastTouch = null
   world.lastChallenge = null
   world.lastTouchedBy = taker
@@ -642,6 +685,7 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   carrierSystem(world, dt)
   defenderSystem(world, dt)
   offBallSystem(world, dt)
+  receiveSystem(world, dt)
   touchSystem(world, dt)
   locomotionSystem(world, dt)
   challengeSystem(world, dt)
