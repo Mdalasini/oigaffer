@@ -103,17 +103,14 @@ export function passWeightError(passing: number): number {
   return lerp(0.14, 0.03, gradeT(passing))
 }
 
-/**
- * The fastest a ball can come at a player (m/s, relative to them) and still
- * be cushioned dead. Anything quicker bounces off further.
- */
-export function cleanTakeSpeed(firstTouch: number): number {
-  return lerp(6, 14, gradeT(firstTouch))
+/** Seconds after a first touch before the player can play the ball again: the best are ready at once. */
+export function controlTime(firstTouch: number): number {
+  return lerp(0.15, 0, gradeT(firstTouch))
 }
 
-/** Standard deviation (rad) of where a first touch sends the ball from where it was meant to go. */
+/** Standard deviation (rad) of where a first touch sets the ball from where it was meant to go. */
 export function firstTouchError(firstTouch: number): number {
-  return lerp(0.5, 0.08, gradeT(firstTouch))
+  return lerp(0.15, 0.03, gradeT(firstTouch))
 }
 
 /**

@@ -4,7 +4,7 @@ import type { Overlay } from '../render/overlay'
 import { MAX_GRADE, MIN_GRADE } from '../sim/constants'
 import {
   catchChance,
-  cleanTakeSpeed,
+  controlTime,
   gradeT,
   judgementError,
   manCheckRate,
@@ -47,7 +47,7 @@ const ROLE_CONTROLS: RoleControls[] = [
       { key: 'marking', label: 'Marking', detail: (g) => `reads a cut in ${Math.round(readLag(g, false) * 1000)} ms jockeying` },
       { key: 'tackling', label: 'Tackling', detail: (g) => `${Math.round(tackleSkill(g, 10) * 100)}% vs a 10 dribbler, before reach` },
       { key: 'passing', label: 'Passing', detail: (g) => `aim error ±${deg(passAngleError(g))}°, weight ±${Math.round(passWeightError(g) * 100)}%` },
-      { key: 'firstTouch', label: 'First touch', detail: (g) => `takes a ${cleanTakeSpeed(g).toFixed(0)} m/s ball dead` },
+      { key: 'firstTouch', label: 'First touch', detail: (g) => `ready to play it again ${Math.round(controlTime(g) * 1000)} ms after taking it` },
       { key: 'vision', label: 'Vision', detail: (g) => `scans every ${(1 / scanRate(g)).toFixed(1)} s, and before ${Math.round(preReceiveScanChance(g) * 100)}% of passes to them` },
       { key: 'decisions', label: 'Decisions', detail: (g) => `misjudges options by ±${Math.round(judgementError(g) * 100)}%` },
       { key: 'offTheBall', label: 'Off the ball', detail: (g) => `goes for ${Math.round((0.15 + 0.45 * gradeT(g)) * 100)}% of chances to run in behind` },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, Position, Velocity } from './components'
+import { Dribbler, Facing, Position, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
@@ -196,13 +196,30 @@ describe('first touch', () => {
     return kept / 60
   }
 
-  test('a good first touch tames a fast ball that a poor one lets get away', () => {
-    expect(controlled(20, 15)).toBeGreaterThan(controlled(1, 15) + 0.3)
+  test('every first touch sets the ball, however hard it comes and whoever takes it', () => {
+    expect(controlled(1, 15)).toBeGreaterThan(0.95)
+    expect(controlled(1, 5)).toBeGreaterThan(0.95)
   })
 
-  test('a gentle pass is easy for anyone', () => {
-    expect(controlled(1, 5)).toBeGreaterThan(0.8)
+  test('a better first touch is ready to play it again sooner', () => {
+    expect(readyAfter(20)).toBeLessThan(0.05)
+    expect(readyAfter(1)).toBeLessThan(0.2)
+    expect(readyAfter(1)).toBeGreaterThan(readyAfter(20) + 0.1)
   })
+
+  /** Seconds from the first touch until the receiver could play the ball again. */
+  function readyAfter(firstTouch: number) {
+    const world = scene(1, -15, 10, 0, 0, [], { red: { outfielder: { firstTouch } } })
+    const [passer, mate] = world.teams[RED].outfielders
+    place(passer, -20, 10)
+    Facing.angle[mate] = Math.PI
+    setVec(Position, world.ball, -3, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 8, 0, 0)
+    world.pass = { from: passer, to: mate, kind: 'feet', x: 0, y: 0, time: world.time }
+    handOver(world, mate)
+    for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
+    return Dribbler.cooldown[mate]
+  }
 })
 
 describe('choosing a pass', () => {

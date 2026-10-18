@@ -1,6 +1,6 @@
 import { Dribbler, Facing, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
-import { cleanTakeSpeed, firstTouchError, topSpeed } from '../grades'
+import { controlTime, firstTouchError, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { rollDistanceIn, rollStopTime } from '../passing'
 import { playBall } from '../offside'
@@ -8,7 +8,7 @@ import { seenX, seenY } from '../perception'
 import { gaussian } from '../rng'
 import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
-import { ballAtFeet, canPlayBall, touchAngle, TOUCH_SPECS } from '../touch'
+import { ballAtFeet, canPlayBall, touchAngle } from '../touch'
 
 /** How close (m) to the ball's path the receiver needs to be to take it. */
 const RECEIVE_REACH = 0.5
@@ -21,13 +21,8 @@ const STEP_IN = 1.5
 const THROUGH_SLACK = 2
 /** A pass not taken within this long (s) has gone astray: the ball is anyone's. */
 const PASS_EXPIRY = 6
-/** A first touch pushes the ball this far ahead of the receiver's stride (m/s): set, not dead. */
-const SET_PUSH = 1.2
-/** Running onto it at this speed (m/s) or more, they take it in stride with a longer touch. */
-const IN_STRIDE_SPEED = 3.5
-const STRIDE_PUSH = 3
-/** Share of the speed beyond a clean take that the ball keeps, bouncing off them. */
-const HEAVY_TOUCH = 0.6
+/** A first touch sets the ball moving this much faster than the receiver (m/s), the way they want to go: under control, not dead. */
+const SET_PUSH = 0.8
 /** Opponents within this distance (m) make the receiver take it away from them. */
 const PRESSURE_RANGE = 5
 
@@ -80,11 +75,11 @@ export function meetTheBall(world: Match, eid: number) {
 }
 
 /**
- * The receiver's first touch, once the pass reaches them. They try to set
- * the ball for their next action: towards goal, away from anyone closing
- * them down, and within what their body shape allows. How true it goes
- * depends on their first touch grade and how fast the ball came. A ball
- * quicker than they can take cleanly bounces off them, and may get away.
+ * The receiver's first touch, once the pass reaches them. They cushion it,
+ * however hard it came, and set it for their next action: towards goal,
+ * away from anyone closing them down, and within what their body shape
+ * allows, moving with them if they're running onto it. A better first touch
+ * sets it a little truer, and is ready to play it again sooner.
  */
 export function receiveSystem(world: Match, _dt: number) {
   const pass = world.pass
@@ -99,24 +94,15 @@ export function receiveSystem(world: Match, _dt: number) {
   if (!playBall(world, eid)) return
 
   const firstTouch = Outfielder.firstTouch[eid]
-  const rx = Velocity.x[ball] - Velocity.x[eid]
-  const ry = Velocity.y[ball] - Velocity.y[eid]
-  const relative = Math.hypot(rx, ry)
-  const clean = cleanTakeSpeed(firstTouch)
-  const running = Math.hypot(Velocity.x[eid], Velocity.y[eid])
-  const style = running >= IN_STRIDE_SPEED ? TouchStyle.Large : TouchStyle.Small
   const want = touchDirection(world, eid)
-  const angle = touchAngle(eid, style, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch) * (0.5 + relative / clean)
-  const push = style === TouchStyle.Large ? STRIDE_PUSH : SET_PUSH
-  // The part of the ball's pace they can't cushion carries on the way it was going.
-  const heavy = (Math.max(0, relative - clean) * HEAVY_TOUCH) / (relative || 1)
-  Velocity.x[ball] = Velocity.x[eid] + Math.cos(angle) * push + rx * heavy
-  Velocity.y[ball] = Velocity.y[eid] + Math.sin(angle) * push + ry * heavy
+  const angle = touchAngle(eid, TouchStyle.Small, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch)
+  Velocity.x[ball] = Velocity.x[eid] + Math.cos(angle) * SET_PUSH
+  Velocity.y[ball] = Velocity.y[eid] + Math.sin(angle) * SET_PUSH
   Velocity.z[ball] = 0
   Position.z[ball] = BALL_RADIUS
 
-  Dribbler.cooldown[eid] = TOUCH_SPECS[style].cooldown
-  world.lastTouch = { by: eid, style, time: world.time, x: Position.x[ball], y: Position.y[ball] }
+  Dribbler.cooldown[eid] = controlTime(firstTouch)
+  world.lastTouch = { by: eid, style: TouchStyle.Small, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true
   world.stats[world.possession].completed++
