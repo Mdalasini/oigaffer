@@ -82,9 +82,11 @@ without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
   backwards. On a pressing cue markers also get tight. The covering defender
   holds the line rather than following a runner beyond it before the pass.
   With an attacker lurking on the line as a pass is shaped, the line may step
-  up together to catch them offside. A runner who goes behind their marker's
-  back is picked up late. **Positioning** sets how late, and how often the
-  trap is sprung. Passes take a moment to wind up, and a runner times their
+  up together to catch them offside. Markers mark their man where they
+  reckon he is, so a runner who goes off behind his marker's back is marked
+  where he was until the marker looks again. **Positioning** sets how often a
+  marker checks on their man between scans (every 2.5 s at 1, three times a
+  second at 20), and how often the trap is sprung. Passes take a moment to wind up, and a runner times their
   burst to the strike: go too early and they're offside.
 - **Offside** — judged each time a team plays the ball on purpose (a touch,
   pass, shot or first touch). Any teammate then in the opponents' half, and

@@ -10,9 +10,9 @@ import { attackedGoalX } from './teams'
 
 // How hard (m/s) a shot is struck: placed from close in, driven from further
 // out. Power costs accuracy: the error scales with the pace over POWER_REFERENCE.
-const PLACED_SPEED = 18
-const DRIVEN_SPEED = 28
-const SPEED_PER_METRE = 0.6
+const PLACED_SPEED = 16
+const DRIVEN_SPEED = 31
+const SPEED_PER_METRE = 0.9
 const POWER_REFERENCE = 24
 /** The keeper's reaction a shooter reckons on (s): they can't know the keeper's grade. */
 const TYPICAL_REACTION = 0.2
