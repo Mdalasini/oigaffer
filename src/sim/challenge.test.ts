@@ -11,6 +11,7 @@ import { contestSystem } from './systems/contest'
 import { defenderSystem, startSlide } from './systems/defender'
 import { touchSystem } from './systems/touch'
 import { shotUnderway } from './testUtils'
+import { lookAround } from './perception'
 import { FOOT_OFFSET } from './touch'
 
 // These scenes play on the default five-a-side pitch.
@@ -87,6 +88,7 @@ describe('standing tackles', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const world = setup(seed, gap, ballAhead)
       const { presser: defender, ball } = world
+      lookAround(world)
       Defender.mode[defender] = DefenderMode.Jockey
       Defender.readX[defender] = Position.x[ball]
       Defender.readY[defender] = Position.y[ball]
@@ -100,6 +102,24 @@ describe('standing tackles', () => {
   test('a defender waits for the ball to come off the carrier’s feet, then goes in', () => {
     expect(goesIn(1.2, FOOT_OFFSET + 0.1)).toBeLessThan(0.35)
     expect(goesIn(1.9, FOOT_OFFSET + 0.9)).toBeGreaterThan(0.9)
+  })
+
+  test('when to go in is judged on where the defender has seen the carrier, not where he really is', () => {
+    // Since their last look, the carrier has stepped onto the ball: it's tight to his feet, but not as they see it.
+    let n = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      const world = setup(seed, 1.9, FOOT_OFFSET + 0.9)
+      const { presser: defender, carrier, ball } = world
+      lookAround(world)
+      Position.x[carrier] += 0.8
+      Defender.mode[defender] = DefenderMode.Jockey
+      Defender.readX[defender] = Position.x[ball]
+      Defender.readY[defender] = Position.y[ball]
+      Defender.challengeDelay[defender] = 0
+      for (let i = 0; i < 120 && Defender.mode[defender] !== DefenderMode.StandTackle; i++) defenderSystem(world, FIXED_DT)
+      if (Defender.mode[defender] === DefenderMode.StandTackle) n++
+    }
+    expect(n / 200).toBeGreaterThan(0.9)
   })
 
   test('a ball out of reach is a miss that leaves the tackler off balance', () => {
@@ -146,7 +166,7 @@ describe('sliding tackles', () => {
    * the side of the carrier at `speed`, goes to ground within a second,
    * with the ball `ballAhead` m in front of the carrier.
    */
-  function slides(speed: number, ballAhead: number) {
+  function slides(speed: number, ballAhead: number, readAhead = ballAhead) {
     let n = 0
     for (let seed = 1; seed <= 100; seed++) {
       const world = setup(seed, 0, ballAhead)
@@ -156,10 +176,15 @@ describe('sliding tackles', () => {
       setVec(Velocity, defender, Math.cos(angle) * speed, Math.sin(angle) * speed, 0)
       Facing.angle[defender] = angle
       Defender.mode[defender] = DefenderMode.Run
-      Defender.readX[defender] = Position.x[ball]
-      Defender.readY[defender] = Position.y[ball]
+      lookAround(world)
       Defender.challengeDelay[defender] = 0
-      for (let i = 0; i < 120 && !hasComponent(world, defender, Sliding); i++) defenderSystem(world, FIXED_DT)
+      for (let i = 0; i < 120 && !hasComponent(world, defender, Sliding); i++) {
+        // Where the defender reads the ball to be, which may not be where it is.
+        Defender.readX[defender] = Position.x[carrier] + readAhead
+        Defender.readY[defender] = Position.y[ball]
+        Defender.readVx[defender] = Defender.readVy[defender] = 0
+        defenderSystem(world, FIXED_DT)
+      }
       if (hasComponent(world, defender, Sliding)) n++
     }
     return n / 100
@@ -173,6 +198,11 @@ describe('sliding tackles', () => {
     const share = slides(7, 1.3)
     expect(share).toBeGreaterThan(0)
     expect(share).toBeLessThan(0.6)
+  })
+
+  test('whether to go to ground is judged on the defender’s read of the ball, not where it really is', () => {
+    expect(slides(7, 1.3, FOOT_OFFSET + 0.1)).toBe(0)
+    expect(slides(7, FOOT_OFFSET + 0.1, 1.3)).toBeGreaterThan(0)
   })
 
   test('nobody slides in from a standstill', () => {

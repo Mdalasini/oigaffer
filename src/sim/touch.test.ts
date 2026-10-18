@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { angleDelta } from './angles'
-import { Dribbler, Facing, Position, TouchStyle, Velocity } from './components'
+import { Dribbler, Facing, Physical, Position, TouchStyle, Velocity } from './components'
 import { FIXED_DT } from './constants'
 import { createMatch, setVec, stepMatch, type Match } from './match'
 import { attackedGoalX } from './teams'
@@ -8,6 +8,7 @@ import { ballSystem } from './systems/ball'
 import { locomotionSystem } from './systems/locomotion'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { dribble, FOOT_OFFSET } from './touch'
+import { largeTouchTravel } from './systems/carrier'
 
 /** A carrier in open grass with the ball at its feet, running along +x at `speed`. */
 function setup(seed: number, speed = 0, dribbling = 13): Match {
@@ -164,5 +165,30 @@ describe('touches', () => {
     }
     expect(Position.x[ball]).toBeLessThan(-21)
     expect(Math.abs(angleDelta(Facing.angle[carrier], Math.PI))).toBeLessThan(1)
+  })
+
+  test('a large touch is judged to need as much room as the ball really rolls before it’s caught, even at full pace', () => {
+    const world = setup(1, 0, 13)
+    const { carrier, ball } = world
+    Physical.pace[carrier] = 20
+    let rolled = 0
+    let touches = 0
+    let from: number | null = null
+    let reckoned = 0
+    for (let i = 0; i < 6 * 120; i++) {
+      dribble(carrier, ball, TouchStyle.Large, 1, 0)
+      const before = world.lastTouch
+      if (Dribbler.cooldown[carrier] === 0 && i > 240) reckoned = Math.max(reckoned, largeTouchTravel(carrier))
+      tick(world)
+      if (world.lastTouch === before || !world.lastTouch) continue
+      // From one touch to the next, once they're at full pace.
+      if (from !== null && i > 240) {
+        rolled += world.lastTouch.x - from
+        touches++
+      }
+      from = world.lastTouch.x
+    }
+    expect(touches).toBeGreaterThan(2)
+    expect(reckoned).toBeGreaterThanOrEqual((rolled / touches) * 0.9)
   })
 })
