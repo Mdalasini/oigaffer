@@ -52,12 +52,37 @@ const SAME_ANGLE = 0.5
 const SAME_ANGLE_COST = 0.03
 /** With at least this many outfielders, one stays behind the ball to stop the counter. */
 const REST_DEFENCE_FROM = 3
-/** The rest defence holds at least this far (m) behind the ball. */
+/**
+ * The rest defence holds at least this far (m) behind the ball once it's at
+ * halfway or beyond. Building it up from deeper, there's less room in behind
+ * to cover, so they come up level with it within REST_LEVEL_SHARE of the
+ * half's length from their own goal line, and offer the pass across rather
+ * than back.
+ */
 const REST_BEHIND = 6
+const REST_LEVEL_SHARE = 0.4
 /** One runner in behind at a time for every this many outfielders. */
 const PLAYERS_PER_RUNNER = 4
 /** A teammate calls for it to feet when they reckon a pass to them would get through at least this often. */
 const CALL_WHEN_SAFE = 0.85
+
+// Opening a lane: a teammate holding a place at least LANE_AHEAD metres
+// ahead of the ball looks for a spot LANE_SHIFTS metres off that place, in
+// LANE_DIRECTIONS directions across and forward, where a pass to them from
+// the ball would be worth most: out of a blocked lane, away from their
+// marker, into a gap in the line in front of them.
+const LANE_AHEAD = 2
+const LANE_SHIFTS = [6]
+/** Only this many of those, the nearest the ball, look for one: the rest are too far off to be the next pass. */
+const LANE_SEEKERS = 3
+const LANE_DIRECTIONS = 5
+/** Value lost for every metre a spot is from their place, so they keep the shape unless a lane is worth it. */
+const DRIFT_COST = 0.0002
+/** The lane they're in keeps them unless another is better by this share of its value, and at least KEEP_LANE_MIN. */
+const KEEP_LANE = 0.15
+const KEEP_LANE_MIN = 0.001
+/** Their misjudgement of a lane is at least this big a share, so lanes worth next to nothing still vary. */
+const LANE_MIN_JUDGED = 0.005
 
 // Running in behind: the cue is a carrier with at least CARRIER_TIME seconds
 // on the ball, facing within CARRIER_FACING (rad) of goal, a runner within
@@ -101,7 +126,8 @@ const RUN_REST = 2.5
  *   for it to feet. The one or two nearest the ball do this, each offering a
  *   different angle from the other; the rest keep the shape.
  * - Otherwise **hold** their place in the shape, kept clear of the carrier,
- *   calling for it when they're free.
+ *   shifting off it to open a lane ahead of the ball, and calling for it
+ *   when they're free.
  *
  * In a side of three or more, whoever plays deepest in the shape stays back
  * as **rest defence**: they hold, behind the ball, ready for the counter and
@@ -208,12 +234,15 @@ export function clearIntentions(eid: number) {
   Run.timer[eid] = 0
   Call.kind[eid] = CallKind.None
   OffBall.showing[eid] = 0
+  OffBall.laneX[eid] = 0
+  OffBall.laneY[eid] = 0
 }
 
 /**
  * Their place in the shape, kept clear of the carrier, calling for it if
- * they're free. The rest defence holds it behind the ball, however far
- * forward their place would be.
+ * they're free. Ahead of the ball, they shift off it to open a lane for a
+ * pass (see `openLane`). The rest defence holds it behind the ball, however
+ * far forward their place would be.
  */
 function hold(world: Match, eid: number, mayCall: boolean): Intent {
   let { x, y } = homePosition(world, eid)
@@ -221,9 +250,13 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
   const L = world.pitch.halfLength
   if (world.phase === 'play' && restDefender(world) === eid) {
     const team = world.possession
-    x = Math.min(along(team, x), along(team, Position.x[world.ball]) - REST_BEHIND, L - 1) * attackDir(team)
+    const ball = along(team, Position.x[world.ball])
+    const level = REST_LEVEL_SHARE * L
+    const behind = REST_BEHIND * clamp((ball + L - level) / (L - level), 0, 1)
+    x = Math.min(along(team, x), ball - behind, L - 1) * attackDir(team)
     x = clamp(x, -(L - 1), L - 1)
   } else if (world.phase !== 'held' && carrier !== eid) {
+    if (world.phase === 'play') ({ x, y } = openLane(world, eid, x, y))
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = Math.hypot(dx, dy)
@@ -353,6 +386,72 @@ function showForIt(world: Match, eid: number): Intent {
   Call.x[eid] = best.x
   Call.y[eid] = best.y
   return { ...best, effort: Effort.Run }
+}
+
+/**
+ * Whether `eid` is among the LANE_SEEKERS teammates nearest (ox, oy) whose
+ * places are ahead of it, leaving out the carrier, the rest defence and
+ * anyone showing or running.
+ */
+function amongNextOptions(world: Match, eid: number, ox: number, oy: number): boolean {
+  const team = world.possession
+  const rest = restDefender(world)
+  const own = Math.hypot(Position.x[eid] - ox, Position.y[eid] - oy)
+  let nearer = 0
+  for (const mate of world.teams[team].outfielders) {
+    if (mate === eid || mate === world.carrier || mate === rest || OffBall.showing[mate] || Run.phase[mate] !== RunPhase.None) continue
+    if (along(team, Position.x[mate]) < along(team, ox) + LANE_AHEAD) continue
+    if (Math.hypot(Position.x[mate] - ox, Position.y[mate] - oy) < own && ++nearer >= LANE_SEEKERS) return false
+  }
+  return true
+}
+
+/**
+ * Where near their place (hx, hy) a teammate ahead of the ball would be
+ * worth most to pass to, as they see it: from the ball, or from where a
+ * pass on its way will be received, so they're open for the next one. The
+ * lane they've already found keeps them unless another is clearly better,
+ * and a worse player judges the spots less accurately.
+ */
+function openLane(world: Match, eid: number, hx: number, hy: number) {
+  const team = world.possession
+  // The next pass is played from where the one on its way will be received.
+  const ox = world.pass ? world.pass.x : Position.x[world.ball]
+  const oy = world.pass ? world.pass.y : Position.y[world.ball]
+  if (along(team, hx) < along(team, ox) + LANE_AHEAD || !amongNextOptions(world, eid, ox, oy)) {
+    OffBall.laneX[eid] = OffBall.laneY[eid] = 0
+    return { x: hx, y: hy }
+  }
+  const { halfLength: L, halfWidth: W } = world.pitch
+  const limit = onsideLimit(world, team, eid) - 1
+  const error = 0.4 * (1 - gradeT(Outfielder.offTheBall[eid]))
+  const score = (dx: number, dy: number) => {
+    const { value } = rateFeetPass(world, team, eid, hx + dx, hy + dy, eid, ox, oy)
+    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), LANE_MIN_JUDGED) - DRIFT_COST * Math.hypot(dx, dy)
+  }
+  const fits = (dx: number, dy: number) => Math.abs(hx + dx) <= L - 1.5 && Math.abs(hy + dy) <= W - 1.5 && along(team, hx + dx) <= limit
+  // The lane they're already in, one of the spots below, keeps them unless another is clearly better.
+  const kept = (dx: number, dy: number, s: number) =>
+    Math.abs(dx - OffBall.laneX[eid]) < 0.01 && Math.abs(dy - OffBall.laneY[eid]) < 0.01 ? s + Math.abs(s) * KEEP_LANE + KEEP_LANE_MIN : s
+  let best = { dx: 0, dy: 0 }
+  let bestScore = fits(0, 0) ? kept(0, 0, score(0, 0)) : -Infinity
+  for (const shift of LANE_SHIFTS) {
+    for (let i = 0; i < LANE_DIRECTIONS; i++) {
+      // Across or forward, never back towards the ball: dropping in only brings their marker with them.
+      const angle = (i / (LANE_DIRECTIONS - 1) - 0.5) * Math.PI
+      const dx = Math.cos(angle) * shift * attackDir(team)
+      const dy = Math.sin(angle) * shift
+      if (!fits(dx, dy)) continue
+      const s = kept(dx, dy, score(dx, dy))
+      if (s > bestScore) {
+        best = { dx, dy }
+        bestScore = s
+      }
+    }
+  }
+  OffBall.laneX[eid] = best.dx
+  OffBall.laneY[eid] = best.dy
+  return { x: hx + best.dx, y: hy + best.dy }
 }
 
 /** Whether now is the moment to run in behind. */

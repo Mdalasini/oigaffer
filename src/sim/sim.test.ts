@@ -146,11 +146,15 @@ describe('match outcomes', () => {
     const far: number[] = []
     let struck = 0
     let justStruck = false
+    // A pass struck or the ball changing hands has everyone look again soon: that's not a fresh look's wait.
+    let cued = false
     world.onCue = (c) => {
       if (c.kind === 'passStruck') justStruck = true
+      if (c.kind === 'passStruck' || c.kind === 'possession') cued = true
     }
     const before = new Map<number, number>()
     while (world.time < 10 * 60) {
+      cued = false
       stepMatch(world)
       if (justStruck) {
         struck++
@@ -160,7 +164,7 @@ describe('match outcomes', () => {
       for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
         const wait = OffBall.decideIn[eid]
         // A fresh look sets a new wait, longer than what was left.
-        if (wait > (before.get(eid) ?? Infinity) + 0.05 && world.phase === 'play' && eid !== world.carrier && eid !== world.presser) {
+        if (!cued && wait > (before.get(eid) ?? Infinity) + 0.05 && world.phase === 'play' && eid !== world.carrier && eid !== world.presser) {
           const distance = Math.hypot(Position.x[eid] - Position.x[world.ball], Position.y[eid] - Position.y[world.ball])
           if (distance < 8 && Mark.target[eid] === -1) near.push(wait)
           // Runners keep looking often, however far off they are.

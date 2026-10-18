@@ -238,12 +238,10 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
 
 /**
  * How good a pass to `receiver`'s feet at (x, y) would be from where the
- * ball is now, as `judge` reckons it. Off-ball players use it too, to pick a
- * spot to show for it.
+ * ball is now, or from (bx, by), as `judge` reckons it. Off-ball players use
+ * it too, to pick a spot to show for it or to open a lane.
  */
-export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1) {
-  const bx = Position.x[world.ball]
-  const by = Position.y[world.ball]
+export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball]) {
   const distance = Math.hypot(x - bx, y - by)
   const speed = rollSpeedFor(distance, FEET_ARRIVAL)
   const safety = passSafety(world, team, bx, by, x, y, speed, judge)
