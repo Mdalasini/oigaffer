@@ -28,7 +28,8 @@ const CHALLENGE_RESULT: Record<ChallengeResult, string> = {
 /** Banner text for each kind of moment; `null` for ones named by their restart. */
 const EVENT_BANNER: Record<MatchEventKind, { text: string; className: string; withTeam?: boolean } | null> = {
   goal: { text: 'GOAL!', className: 'text-emerald-300', withTeam: true },
-  save: { text: 'SAVED', className: 'text-sky-300' },
+  caught: { text: 'CAUGHT', className: 'text-sky-300' },
+  parried: { text: 'PARRIED', className: 'text-sky-300' },
   claimed: { text: 'CLAIMED', className: 'text-sky-300' },
   blocked: { text: 'BLOCKED', className: 'text-rose-300' },
   wide: { text: 'WIDE', className: 'text-rose-300' },
@@ -77,6 +78,12 @@ export function App() {
 
       <div className="absolute top-4 left-4 flex flex-col items-start gap-2">
         <Scoreboard stats={snapshot.stats} possession={snapshot.possession} />
+        {snapshot.phase === 'held' && (
+          <div className="flex items-center gap-2 rounded-md bg-black/55 px-2.5 py-1 text-xs backdrop-blur">
+            <span className={`size-2 rounded-full ${TEAM_STYLE[snapshot.possession].dot}`} />
+            {TEAM_STYLE[snapshot.possession].name} keeper has the ball
+          </div>
+        )}
         {snapshot.defenderMode !== null && (
           <div className="flex items-center gap-2 rounded-md bg-black/55 px-2.5 py-1 text-xs backdrop-blur">
             <span className={`size-2 rounded-full ${TEAM_STYLE[defending].dot}`} />

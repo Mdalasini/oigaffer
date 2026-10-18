@@ -18,6 +18,8 @@ export function ballSystem(world: Match, dt: number) {
     world.prevBall.x = Position.x[eid]
     world.prevBall.y = Position.y[eid]
     world.prevBall.z = Position.z[eid]
+    // In a keeper's hands the ball goes where they carry it.
+    if (world.phase === 'held') continue
     Velocity.z[eid] -= GRAVITY * dt
     Position.x[eid] += Velocity.x[eid] * dt
     Position.y[eid] += Velocity.y[eid] * dt

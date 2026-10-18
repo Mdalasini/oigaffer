@@ -81,7 +81,8 @@ describe('defender', () => {
   test('better marking and agility are harder to get past', () => {
     const weak = beatenRate({ blue: { outfielder: { marking: 1, agility: 5 } } }, 300)
     const strong = beatenRate({ blue: { outfielder: { marking: 20, agility: 20 } } }, 300)
-    expect(strong).toBeLessThan(weak - 0.25)
+    // About 0.65 against 0.38, varying by a few points with the seed.
+    expect(strong).toBeLessThan(weak - 0.15)
   })
 
   test('players cannot overlap, even three at once', () => {

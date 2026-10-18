@@ -135,6 +135,7 @@ function pokeAway(world: Match, defender: number) {
   Velocity.y[ball] = Math.sin(angle) * speed
   Velocity.z[ball] = 1
   world.lastTouchedBy = defender
+  world.lastTouchDeliberate = false
   // The carrier can't instantly play a ball that's just been knocked off them.
   Dribbler.cooldown[world.striker] = Math.max(Dribbler.cooldown[world.striker], 0.25)
 }
