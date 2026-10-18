@@ -54,7 +54,7 @@ describe('match outcomes', () => {
 
   test('every attack is accounted for', () => {
     const s = simulateAttacks(ATTACKS, { seed: 5 })
-    expect(s.shots + s.lost).toBe(ATTACKS)
+    expect(s.shots + s.lost + s.setPieces).toBe(ATTACKS)
     expect(s.goals + s.saves + s.misses).toBe(s.shots)
   })
 

@@ -40,6 +40,14 @@ Currently: a striker runs at goal against a defender and a goalkeeper, over and 
   under its sole on the far side, and tackles through its body rarely work.
   **Strength (1–20)** decides barges.
 
+- **Out of play** — once the whole ball is over a touchline or the goal line,
+  open play ends with the restart going against whoever touched it last:
+  goal kick or a defence throw-in off the striker (counted as *lost*), corner
+  or an attack throw-in off the defender (counted as a *set piece*). A ball
+  that rolls into the net is still a goal. The striker only knocks the ball
+  long when there's room on the pitch for it, and takes defenders on the
+  infield side near a touchline.
+
 The inset "striker's view" is a second camera on the same 3D scene, looking at
 the goal mouth face-on so you can see the spread circle and where shots go.
 

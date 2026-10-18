@@ -1,11 +1,10 @@
 import { query } from 'bitecs'
-import { angleDelta } from '../angles'
 import { Dribbler, Facing, Outfielder, Position, TouchStyle, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { touchAngleError, touchWeightError } from '../grades'
 import type { Match } from '../match'
 import { gaussian } from '../rng'
-import { ballAtFeet, canPlayBall, TOUCH_SPECS } from '../touch'
+import { ballAtFeet, canPlayBall, touchAngle, TOUCH_SPECS } from '../touch'
 
 /**
  * Runs down touch cooldowns. It comes first in the step so that decisions
@@ -28,11 +27,9 @@ export function touchSystem(world: Match, _dt: number) {
 function playTouch(world: Match, eid: number, style: Exclude<TouchStyle, 0>) {
   const spec = TOUCH_SPECS[style]
   const ball = world.ball
-  const facing = Facing.angle[eid]
-  const wanted = Math.atan2(Dribbler.dirY[eid], Dribbler.dirX[eid])
-  const allowed = Math.max(-spec.maxAngle, Math.min(spec.maxAngle, angleDelta(facing, wanted)))
   const dribbling = Outfielder.dribbling[eid]
-  const angle = facing + allowed + gaussian(world.rng) * touchAngleError(dribbling) * spec.errorScale
+  const intended = touchAngle(eid, style, Dribbler.dirX[eid], Dribbler.dirY[eid])
+  const angle = intended + gaussian(world.rng) * touchAngleError(dribbling) * spec.errorScale
   const dx = Math.cos(angle)
   const dy = Math.sin(angle)
 
@@ -48,4 +45,5 @@ function playTouch(world: Match, eid: number, style: Exclude<TouchStyle, 0>) {
   Velocity.y[eid] *= spec.stride
   Dribbler.cooldown[eid] = spec.cooldown
   world.lastTouch = { by: eid, style, time: world.time, x: Position.x[ball], y: Position.y[ball] }
+  world.lastTouchedBy = eid
 }

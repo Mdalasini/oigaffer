@@ -1,11 +1,11 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, TakeOn, TouchStyle, Velocity } from '../components'
-import { GOAL_X } from '../constants'
+import { GOAL_X, PITCH_HALF_WIDTH } from '../constants'
 import { closeControlSpeed, reactionDelay, shotSpreadRadius } from '../grades'
 import { setPhase, setVec, type Match } from '../match'
 import { chooseAim, launchVelocity, sampleShotTarget } from '../shooting'
-import { ballAtFeet, canPlayBall, dribble, footDistance } from '../touch'
+import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle } from '../touch'
 
 const SHOT_SPEED = 25
 /**
@@ -13,6 +13,10 @@ const SHOT_SPEED = 25
  * given running speed: the faster you run, the further the ball goes.
  */
 const largeTouchTravel = (speed: number) => 3 + speed * 2.2
+/** Spare room (m) beyond a large touch's run before the line. */
+const LARGE_TOUCH_MARGIN = 3
+/** Within this distance (m) of a touchline, take defenders on the infield side. */
+const TOUCHLINE_MARGIN = 8
 /** Only shoot when facing within this angle (rad) of goal. */
 const MAX_SHOT_TURN = 1.3
 /** Don't shoot if the defender is within this distance (m) of the line to the aim point. */
@@ -84,7 +88,7 @@ export function strikerSystem(world: Match, dt: number) {
     const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
     const roomToRun = distance - largeTouchTravel(speed) > shootDistance
     const style = roomToRun || chased ? TouchStyle.Large : TouchStyle.Small
-    dribble(eid, ball, style, dirX, dirY)
+    carry(eid, ball, style, dirX, dirY)
   }
 }
 
@@ -174,8 +178,10 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
   if (along < -0.5 || distance > TAKE_ON_RANGE || Math.abs(lateral) > 4) return false
 
   if (TakeOn.side[eid] === 0) {
-    // Go round the side the defender is leaning away from.
-    const side = lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
+    // Go round the side the defender is leaning away from, or infield when near the touchline.
+    const infield = -Math.sign(Position.y[ball]) * Math.sign(gx) || 1
+    const nearTouchline = Math.abs(Position.y[ball]) > PITCH_HALF_WIDTH - TOUCHLINE_MARGIN
+    const side = nearTouchline ? infield : lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
     beginTakeOn(world, eid, side, rng() < FEINT_CHANCE)
   }
   let side = TakeOn.side[eid]
@@ -185,7 +191,7 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
 
   if (along < 0.3 || (distance < CUT_RANGE && clearance > BURST_CLEARANCE)) {
     const [x, y] = rotate(gx, gy, side * BURST_ANGLE)
-    dribble(eid, ball, TouchStyle.Large, x, y)
+    carry(eid, ball, TouchStyle.Large, x, y)
   } else if (distance < CUT_RANGE) {
     let cutSide = side
     if (TakeOn.feintTimer[eid] > 0) {
@@ -210,6 +216,20 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
     dribble(eid, ball, TouchStyle.Small, tx / len, ty / len, pace)
   }
   return true
+}
+
+/**
+ * Dribbles, but only knocks the ball long if, the way the body will send it,
+ * it would still be on the pitch when caught up with; otherwise keeps it close.
+ */
+function carry(eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number) {
+  if (style === TouchStyle.Large) {
+    const angle = touchAngle(eid, style, dirX, dirY)
+    const room = roomAhead(Position.x[ball], Position.y[ball], Math.cos(angle), Math.sin(angle))
+    const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
+    if (room < largeTouchTravel(speed) + LARGE_TOUCH_MARGIN) style = TouchStyle.Small
+  }
+  dribble(eid, ball, style, dirX, dirY)
 }
 
 /** Commits to going round the defender on `side`, with or without a dummy first. */
@@ -245,6 +265,7 @@ function shoot(world: Match, striker: number) {
   world.shot = { origin: from, aim, radius, target, crossing: null }
   world.shootRequested = false
   world.lastTouch = null
+  world.lastTouchedBy = striker
   world.stats.shots++
   setPhase(world, 'shot')
 }

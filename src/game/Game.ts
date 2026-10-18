@@ -21,12 +21,15 @@ import {
   type MatchStats,
   type Outcome,
   type Phase,
+  type Restart,
   type Role,
 } from '../sim/match'
 
 export interface GameSnapshot {
   phase: Phase
   outcome: Outcome | null
+  /** How play restarts, when the ball went out. */
+  restart: Restart | null
   stats: MatchStats
   grades: Grades
   autoReset: boolean
@@ -151,6 +154,7 @@ export class Game {
     return {
       phase: m.phase,
       outcome: m.outcome,
+      restart: m.restart,
       stats: { ...m.stats },
       grades: Object.fromEntries(
         ROLES.map((role) => [role, Object.fromEntries(gradeKeys(role).map((key) => [key, getGrade(m, role, key)]))]),
@@ -187,6 +191,7 @@ export class Game {
       m.outcome,
       m.stats.shots,
       m.stats.lost,
+      m.stats.setPieces,
       m.autoReset,
       m.defenderActive,
       this.defenderMode(),
