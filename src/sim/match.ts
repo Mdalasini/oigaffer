@@ -1,10 +1,28 @@
 import { addComponent, addEntity, createWorld, type World } from 'bitecs'
-import { Ball, Body, Dribbler, Facing, Goalkeeper, MoveIntent, Outfielder, Physical, Position, TouchStyle, Velocity } from './components'
+import {
+  Ball,
+  Body,
+  Defender,
+  DefenderMode,
+  Dribbler,
+  Facing,
+  Goalkeeper,
+  MoveIntent,
+  Outfielder,
+  Physical,
+  Position,
+  TakeOn,
+  TouchStyle,
+  Velocity,
+} from './components'
 import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
 import type { GoalPoint, Vec3 } from './shooting'
 import { ballSystem } from './systems/ball'
+import { ballBodySystem, collisionSystem } from './systems/collision'
+import { contestSystem } from './systems/contest'
+import { defenderSystem } from './systems/defender'
 import { keeperSystem } from './systems/keeper'
 import { outcomeSystem } from './systems/outcome'
 import { locomotionSystem } from './systems/locomotion'
@@ -17,8 +35,12 @@ export type Outcome =
   | 'save'
   | 'wide'
   | 'over'
+  /** A shot that hit the defender. */
+  | 'blocked'
   /** The keeper gathered a loose ball. */
   | 'claimed'
+  /** The defender won a loose ball. */
+  | 'intercepted'
   /** Open play ran on too long without a shot. */
   | 'abandoned'
 
@@ -50,18 +72,24 @@ export interface LastTouch {
   y: number
 }
 
-/** Every 1–20 grade in the match, the role it belongs to and where it is stored. */
+/** Every adjustable 1–20 grade, by role, and the store that holds it. */
 export const GRADE_FIELDS = {
-  shooting: { role: 'striker', store: Outfielder.shooting },
-  dribbling: { role: 'striker', store: Outfielder.dribbling },
-  pace: { role: 'striker', store: Physical.pace },
-  agility: { role: 'striker', store: Physical.agility },
-  reaction: { role: 'keeper', store: Goalkeeper.reaction },
+  striker: { shooting: Outfielder.shooting, dribbling: Outfielder.dribbling, pace: Physical.pace, agility: Physical.agility },
+  defender: { marking: Outfielder.marking, pace: Physical.pace, agility: Physical.agility },
+  keeper: { reaction: Goalkeeper.reaction },
 } as const
-export type GradeKey = keyof typeof GRADE_FIELDS
-export type Grades = Record<GradeKey, number>
+export type Role = keyof typeof GRADE_FIELDS
+export type GradeKey<R extends Role> = keyof (typeof GRADE_FIELDS)[R] & string
+export type Grades = { [R in Role]: Record<GradeKey<R>, number> }
+export type GradeOverrides = { [R in Role]?: Partial<Grades[R]> }
 
-export const DEFAULT_GRADES: Grades = { shooting: 14, dribbling: 13, pace: 14, agility: 14, reaction: 12 }
+export const DEFAULT_GRADES: Grades = {
+  striker: { shooting: 14, dribbling: 13, pace: 14, agility: 14 },
+  defender: { marking: 12, pace: 13, agility: 12 },
+  keeper: { reaction: 12 },
+}
+export const ROLES = Object.keys(GRADE_FIELDS) as Role[]
+export const gradeKeys = <R extends Role>(role: R) => Object.keys(GRADE_FIELDS[role]) as GradeKey<R>[]
 
 export interface MatchContext {
   rng: Rng
@@ -71,7 +99,10 @@ export interface MatchContext {
   phaseTime: number
   ball: number
   striker: number
+  defender: number
   keeper: number
+  /** Whether the defender takes part; when not, it stands aside off the pitch. */
+  defenderActive: boolean
   /** Distance from goal at which the striker pulls the trigger this attack. */
   shootDistance: number
   /** Whether this attack's shot is aimed high or low. */
@@ -90,10 +121,11 @@ export type Match = World<MatchContext>
 
 export interface MatchOptions {
   seed?: number
-  grades?: Partial<Grades>
+  grades?: GradeOverrides
+  defender?: boolean
 }
 
-export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {}): Match {
+export function createMatch({ seed = Date.now(), grades = {}, defender = true }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
     rng: createRng(seed),
     time: 0,
@@ -101,7 +133,9 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
     phaseTime: 0,
     ball: 0,
     striker: 0,
+    defender: 0,
     keeper: 0,
+    defenderActive: defender,
     shootDistance: 0,
     aimHigh: false,
     shootRequested: false,
@@ -118,19 +152,12 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
   addComponent(world, world.ball, Velocity)
   addComponent(world, world.ball, Ball)
 
-  world.striker = addEntity(world)
-  addComponent(world, world.striker, Position)
-  addComponent(world, world.striker, Velocity)
-  addComponent(world, world.striker, Body)
-  addComponent(world, world.striker, Outfielder)
-  addComponent(world, world.striker, Facing)
-  addComponent(world, world.striker, MoveIntent)
-  addComponent(world, world.striker, Physical)
+  world.striker = addOutfielder(world)
   addComponent(world, world.striker, Dribbler)
-  Physical.acceleration[world.striker] = 14
-  Physical.strength[world.striker] = 12
-  Body.radius[world.striker] = 0.35
-  Body.height[world.striker] = 1.8
+  addComponent(world, world.striker, TakeOn)
+
+  world.defender = addOutfielder(world)
+  addComponent(world, world.defender, Defender)
 
   world.keeper = addEntity(world)
   addComponent(world, world.keeper, Position)
@@ -141,19 +168,41 @@ export function createMatch({ seed = Date.now(), grades = {} }: MatchOptions = {
   Body.radius[world.keeper] = 0.4
   Body.height[world.keeper] = 1.9
 
-  for (const key of Object.keys(GRADE_FIELDS) as GradeKey[]) setGrade(world, key, grades[key] ?? DEFAULT_GRADES[key])
+  for (const role of ROLES) {
+    for (const key of gradeKeys(role)) {
+      const override = (grades[role] as Partial<Record<string, number>> | undefined)?.[key]
+      setGrade(world, role, key, override ?? (DEFAULT_GRADES[role] as Record<string, number>)[key])
+    }
+  }
   resetPlay(world)
   return world
 }
 
-export function setGrade(world: Match, key: GradeKey, grade: number) {
-  const { role, store } = GRADE_FIELDS[key]
-  store[world[role]] = clampGrade(grade)
+function addOutfielder(world: Match): number {
+  const eid = addEntity(world)
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical]) {
+    addComponent(world, eid, component)
+  }
+  Physical.acceleration[eid] = 14
+  Physical.strength[eid] = 12
+  Body.radius[eid] = 0.35
+  Body.height[eid] = 1.8
+  return eid
 }
 
-export function getGrade(world: Match, key: GradeKey): number {
-  const { role, store } = GRADE_FIELDS[key]
-  return store[world[role]]
+const gradeStore = (role: Role, key: string): Uint8Array => (GRADE_FIELDS[role] as Record<string, Uint8Array>)[key]
+
+export function setGrade<R extends Role>(world: Match, role: R, key: GradeKey<R>, grade: number) {
+  gradeStore(role, key)[world[role]] = clampGrade(grade)
+}
+
+export function getGrade<R extends Role>(world: Match, role: R, key: GradeKey<R>): number {
+  return gradeStore(role, key)[world[role]]
+}
+
+export function setDefenderActive(world: Match, active: boolean) {
+  world.defenderActive = active
+  resetPlay(world)
 }
 
 /** Lines the striker up for a fresh run at goal. */
@@ -169,6 +218,10 @@ export function resetPlay(world: Match) {
   Dribbler.style[striker] = TouchStyle.None
   Dribbler.cooldown[striker] = 0
   setVec(Velocity, ball, 0, 0, 0)
+  TakeOn.side[striker] = 0
+  TakeOn.feintTimer[striker] = 0
+  TakeOn.checkBackTimer[striker] = 0
+  placeDefender(world)
   setVec(Position, keeper, GOAL_X - 0.5, 0, 0)
   setVec(Velocity, keeper, 0, 0, 0)
   Goalkeeper.reactTimer[keeper] = 0
@@ -182,6 +235,23 @@ export function resetPlay(world: Match) {
   world.shot = null
   world.outcome = null
   world.lastTouch = null
+}
+
+/** The defender starts goal-side of the striker, ready to step up. */
+function placeDefender(world: Match) {
+  const { rng, defender, striker } = world
+  if (world.defenderActive) {
+    setVec(Position, defender, GOAL_X - 20 + rng() * 4, Position.y[striker] * 0.5 + (rng() * 2 - 1) * 2, 0)
+  } else {
+    setVec(Position, defender, GOAL_X - 20, 60, 0)
+  }
+  setVec(Velocity, defender, 0, 0, 0)
+  Facing.angle[defender] = Math.atan2(Position.y[striker] - Position.y[defender], Position.x[striker] - Position.x[defender])
+  Defender.mode[defender] = DefenderMode.Jockey
+  Defender.readX[defender] = Position.x[world.ball]
+  Defender.readY[defender] = Position.y[world.ball]
+  Defender.readVx[defender] = 0
+  Defender.readVy[defender] = 0
 }
 
 export function requestShot(world: Match) {
@@ -198,15 +268,39 @@ export function setPhase(world: Match, phase: Phase) {
   world.phaseTime = 0
 }
 
+const OUTCOME_STAT: Record<Outcome, keyof MatchStats> = {
+  goal: 'goals',
+  save: 'saves',
+  wide: 'misses',
+  over: 'misses',
+  blocked: 'misses',
+  claimed: 'lost',
+  intercepted: 'lost',
+  abandoned: 'lost',
+}
+
+/** Ends the attack: records the outcome, then pauses on the result. */
+export function endAttack(world: Match, outcome: Outcome, crossing: GoalPoint | null) {
+  world.outcome = outcome
+  if (world.shot) world.shot.crossing = crossing
+  world.stats[OUTCOME_STAT[outcome]]++
+  setPhase(world, 'result')
+  world.onOutcome?.(outcome)
+}
+
 export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.time += dt
   world.phaseTime += dt
   touchCooldownSystem(world, dt)
   strikerSystem(world, dt)
+  defenderSystem(world, dt)
   touchSystem(world, dt)
   locomotionSystem(world, dt)
   keeperSystem(world, dt)
+  collisionSystem(world, dt)
   ballSystem(world, dt)
+  ballBodySystem(world, dt)
+  contestSystem(world, dt)
   outcomeSystem(world, dt)
 }
 

@@ -3,7 +3,7 @@
 A football match simulation. The simulation is fully 3D (metres, z-up, ballistic
 ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 
-Currently: a striker runs at goal 1v1 against a goalkeeper, over and over.
+Currently: a striker runs at goal against a defender and a goalkeeper, over and over.
 
 - **Shooting grade (1–20)** — the striker aims at a corner, and the ball lands
   uniformly inside a circle around that aim point on the goal plane. Better
@@ -21,6 +21,16 @@ Currently: a striker runs at goal 1v1 against a goalkeeper, over and over.
   it 4–6 m ahead to run onto at full pace, only roughly forwards. Dribbling
   grade sets how true each touch goes. A loose ball that rolls to the keeper is
   claimed.
+
+- **Defending** — the defender *jockeys* when close and goal-side: side-on to
+  the ball, shuffling at sidestep speed with a short read lag. Once beaten or
+  far away it *runs*: full pace, but reading late and turning wide. **Marking
+  (1–20)** sets how far its read of the ball trails reality. The striker
+  carries the ball at the defender's shoulder, cuts across (sometimes after a
+  dummy, checking back if mirrored) and knocks it past once clear. Players
+  can't overlap, shots can be blocked, and a ball that gets away from the
+  striker can be intercepted; a ball still under control needs a tackle
+  (next).
 
 The inset "striker's view" is a second camera on the same 3D scene, looking at
 the goal mouth face-on so you can see the spread circle and where shots go.
@@ -41,7 +51,7 @@ Space shoots early, R restarts the attack. `bun test` runs the simulation tests;
 
 ## Layout
 
-- `src/sim` — the ECS world: components, systems (striker decisions, touches, locomotion, keeper, ball, outcome), shooting model and grade curves. No DOM.
+- `src/sim` — the ECS world: components, systems (striker and defender decisions, touches, locomotion, keeper, collisions, ball, contests, outcome), shooting model and grade curves. No DOM.
 - `src/render` — WebGL renderer, cameras (top-down and goal-face orthographic) and the scene built from the world.
 - `src/game` — fixed-step loop tying the simulation to the renderer, plus a store for the UI.
 - `src/ui` — React HUD and controls.

@@ -39,6 +39,14 @@ export function closeControlSpeed(pace: number, dribbling: number): number {
   return topSpeed(pace) * lerp(0.55, 0.8, gradeT(dribbling))
 }
 
+/**
+ * How far behind (s) a defender's read of the carrier's movement runs.
+ * Jockeying keeps it short; running flat out at least doubles it.
+ */
+export function readLag(marking: number, running: boolean): number {
+  return lerp(0.3, 0.08, gradeT(marking)) * (running ? 2.5 : 1)
+}
+
 /** Flat-out running speed (m/s). */
 export function topSpeed(pace: number): number {
   return lerp(6.8, 9.4, gradeT(pace))

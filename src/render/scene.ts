@@ -42,6 +42,7 @@ const LARGE_TOUCH: Color = [1, 0.6, 0.25, 1]
 const TOUCH_RING_LIFE = 0.45
 
 const STRIKER_KIT = { shirt: [0.84, 0.2, 0.22, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.84, 0.2, 0.22, 1] } as const
+const DEFENDER_KIT = { shirt: [0.22, 0.42, 0.9, 1], shorts: [0.95, 0.95, 0.95, 1], socks: [0.22, 0.42, 0.9, 1] } as const
 const KEEPER_KIT = { shirt: [0.78, 0.9, 0.2, 1], shorts: [0.1, 0.1, 0.12, 1], socks: [0.78, 0.9, 0.2, 1] } as const
 type Kit = { shirt: Color; shorts: Color; socks: Color }
 
@@ -49,6 +50,8 @@ const OUTCOME_COLOR: Record<Outcome, Color> = {
   goal: [0.25, 0.9, 0.4, 1],
   save: [0.35, 0.65, 1, 1],
   claimed: [0.35, 0.65, 1, 1],
+  intercepted: [0.35, 0.65, 1, 1],
+  blocked: [1, 0.35, 0.3, 1],
   abandoned: [0.7, 0.7, 0.7, 1],
   wide: [1, 0.35, 0.3, 1],
   over: [1, 0.35, 0.3, 1],
@@ -67,6 +70,7 @@ export function buildScene(batch: Batch, world: Match, cam: Camera) {
   drawMarkings(batch)
   drawGoal(batch)
   drawPlayer(batch, cam, world, world.striker, STRIKER_KIT)
+  if (world.defenderActive) drawPlayer(batch, cam, world, world.defender, DEFENDER_KIT)
   drawPlayer(batch, cam, world, world.keeper, KEEPER_KIT)
   drawTouchRing(batch, world)
   drawBall(batch, cam, world.ball)
