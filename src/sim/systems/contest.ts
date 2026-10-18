@@ -1,6 +1,7 @@
 import { query } from 'bitecs'
 import { Dribbler, Outfielder, Team, Velocity } from '../components'
 import { handOver, winBall, type Match } from '../match'
+import { offsideOffence } from '../offside'
 import { ballAtFeet, canPlayBall, CONTROL_RADIUS, footDistance } from '../touch'
 
 /** Beyond the carrier's control, another player must be at least this much nearer to call it theirs. */
@@ -31,7 +32,10 @@ export function contestSystem(world: Match, _dt: number) {
     nearest = distance
   }
   if (winner === -1) return
-  if (Team.id[winner] === world.possession) return handOver(world, winner)
+  if (Team.id[winner] === world.possession) {
+    if (!offsideOffence(world, winner)) handOver(world, winner)
+    return
+  }
   Velocity.x[ball] = Velocity.x[winner]
   Velocity.y[ball] = Velocity.y[winner]
   winBall(world, winner, 'intercepted')

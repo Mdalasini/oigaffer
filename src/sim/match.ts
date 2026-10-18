@@ -13,6 +13,7 @@ import {
   MoveIntent,
   OffBall,
   OffBalance,
+  Offside,
   Passer,
   Outfielder,
   Physical,
@@ -28,6 +29,7 @@ import {
 import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { clampGrade, shotSpreadRadius } from './grades'
 import { createRng, type Rng } from './rng'
+import { clearOffside, playedBy } from './offside'
 import { homePosition } from './shape'
 import { arrivalTime } from './space/arrival'
 import type { GoalPoint, Vec3 } from './shooting'
@@ -56,7 +58,7 @@ export type ShotOutcome = 'goal' | 'caught' | 'parried' | 'wide' | 'over' | 'blo
  * ball. `tackled` / `intercepted`: the defending team won the ball back.
  * `out`: the ball left the pitch.
  */
-export type MatchEventKind = ShotOutcome | 'claimed' | 'tackled' | 'intercepted' | 'out'
+export type MatchEventKind = ShotOutcome | 'claimed' | 'tackled' | 'intercepted' | 'out' | 'offside'
 
 export interface MatchEvent {
   kind: MatchEventKind
@@ -65,7 +67,8 @@ export interface MatchEvent {
   time: number
 }
 
-export type RestartKind = 'kick-off' | 'throw-in' | 'corner' | 'goal-kick'
+/** A free kick here is always indirect: the only kind awarded is for offside. */
+export type RestartKind = 'kick-off' | 'throw-in' | 'corner' | 'goal-kick' | 'free-kick'
 
 /** How and where play starts again once the ball is dead, and which team takes it. */
 export interface Restart {
@@ -113,6 +116,8 @@ export interface TeamStats {
   missed: number
   /** Times the team won the ball back in open play. */
   won: number
+  /** Times a player of theirs was caught offside. */
+  offsides: number
   /** Spells on the ball: from winning it or a restart until losing it or a stoppage. */
   attacks: number
 }
@@ -198,6 +203,13 @@ export interface MatchContext {
   shot: ShotInfo | null
   /** The pass on its way, until it's received or broken up. Its receiver is the carrier meanwhile. */
   pass: PassInfo | null
+  /** The restart just taken can't produce an offside, so the next touch takes no offside snapshot. */
+  offsideExempt: boolean
+  /**
+   * The taker of an indirect free kick, until someone else touches the ball;
+   * -1 otherwise. A goal can't be scored straight from one.
+   */
+  indirectTaker: number
   /** The latest notable moment. */
   event: MatchEvent | null
   /** How play will restart, while the ball is dead. */
@@ -230,10 +242,12 @@ export interface MatchOptions {
 const CHALLENGE_DELAY_ON_LOSS = 0.6
 /** Players take this long, plus up to as long again, to react to the ball changing hands. */
 const TURNOVER_REACTION = 0.2
+/** How far (m) opponents stand from a free kick: 9.15 m scaled to this pitch. */
+const FREE_KICK_DISTANCE = 5
 /** Reach (m) that counts as getting to the ball. */
 const CONTROL_REACH = 0.9
 
-const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, attacks: 0 })
+const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, offsides: 0, attacks: 0 })
 
 export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
@@ -255,6 +269,8 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     shootRequested: false,
     shot: null,
     pass: null,
+    offsideExempt: false,
+    indirectTaker: -1,
     event: null,
     restart: null,
     stats: [emptyStats(), emptyStats()],
@@ -294,7 +310,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
-  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer]) {
+  for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Shield, Defender, Slot, OffBall, Passer, Offside]) {
     addFresh(world, eid, component)
   }
   Team.id[eid] = team
@@ -357,6 +373,8 @@ export function kickOff(world: Match, team: number) {
 export function setPossession(world: Match, team: number, carrier: number) {
   const lost = world.carrier
   world.pass = null
+  // The other team has played it on purpose, which ends any offside.
+  clearOffside(world)
   world.possession = team
   world.keeper = world.teams[opponent(team)].keeper
   world.stats[team].attacks++
@@ -464,6 +482,8 @@ export function winBall(world: Match, player: number, kind: 'tackled' | 'interce
   world.lastTouchedBy = player
   world.lastTouchDeliberate = kind === 'intercepted'
   setPossession(world, team, player)
+  // Winning it is their team playing the ball: offside is judged for them from here.
+  playedBy(world, player)
   record(world, kind, team)
 }
 
@@ -471,6 +491,8 @@ export function winBall(world: Match, player: number, kind: 'tackled' | 'interce
 export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint | null) {
   const shot = world.shot
   if (!shot) return
+  // A shot straight in from an indirect free kick doesn't count: it's as good as wide.
+  if (outcome === 'goal' && world.indirectTaker !== -1) outcome = 'wide'
   shot.crossing = crossing
   const stats = world.stats[shot.team]
   if (outcome === 'goal') stats.goals++
@@ -491,6 +513,8 @@ export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint 
 
 /** A goal that went in without a shot being struck: counted as one, so goals stay a share of shots. */
 export function scoreFromPlay(world: Match, team: number) {
+  // Straight in from an indirect free kick, nobody else touching it: a goal kick, not a goal.
+  if (world.indirectTaker !== -1) return ballOut(world, 'goal-kick', opponent(team), attackedGoalX(team), 0)
   world.stats[team].shots++
   world.stats[team].goals++
   stopPlay(world, 'kick-off', opponent(team), 0, 0)
@@ -515,7 +539,15 @@ function takeInHands(world: Match, keeper: number) {
 }
 
 /** The ball has gone out: play stops, and `team` restarts from about (x, y). */
-export function ballOut(world: Match, kind: Exclude<RestartKind, 'kick-off'>, team: number, x: number, y: number) {
+/** `offender` was offside and got involved: the other team has an indirect free kick where they were. */
+export function offsideCalled(world: Match, offender: number) {
+  const team = Team.id[offender]
+  world.stats[team].offsides++
+  stopPlay(world, 'free-kick', opponent(team), Position.x[offender], Position.y[offender])
+  record(world, 'offside', team)
+}
+
+export function ballOut(world: Match, kind: Exclude<RestartKind, 'kick-off' | 'free-kick'>, team: number, x: number, y: number) {
   stopPlay(world, kind, team, x, y)
   record(world, 'out', team)
 }
@@ -569,6 +601,10 @@ export function takeRestart(world: Match) {
     bx = ownGoalX(team) + dir * GOAL_AREA_DEPTH
     by = (rng() < 0.5 ? -1 : 1) * 3
     standOff = 12
+  } else if (kind === 'free-kick') {
+    bx = clamp(restart.x, -L + 1, L - 1)
+    by = clamp(restart.y, -W + 1, W - 1)
+    standOff = FREE_KICK_DISTANCE
   }
   const faceLen = Math.hypot(faceX, faceY)
   faceX /= faceLen
@@ -629,6 +665,10 @@ export function takeRestart(world: Match) {
 
   world.shot = null
   world.pass = null
+  // Nobody can be offside from a throw-in, a corner or a goal kick.
+  clearOffside(world)
+  world.offsideExempt = kind === 'throw-in' || kind === 'corner' || kind === 'goal-kick'
+  world.indirectTaker = kind === 'free-kick' ? taker : -1
   world.lastTouch = null
   world.lastChallenge = null
   world.lastTouchedBy = taker
@@ -695,6 +735,8 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   ballBodySystem(world, dt)
   contestSystem(world, dt)
   outcomeSystem(world, dt)
+  // Anyone else touching the ball makes an indirect free kick live.
+  if (world.indirectTaker !== -1 && world.lastTouchedBy !== world.indirectTaker) world.indirectTaker = -1
 }
 
 export function setVec(store: typeof Position, eid: number, x: number, y: number, z: number) {

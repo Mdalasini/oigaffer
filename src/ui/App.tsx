@@ -6,7 +6,12 @@ import type { MatchEventKind, RestartKind, TeamStats } from '../sim/match'
 import { ControlPanel } from './ControlPanel'
 import { TEAM_STYLE } from './teamStyle'
 
-const RESTART_TEXT: Record<Exclude<RestartKind, 'kick-off'>, string> = { 'goal-kick': 'GOAL KICK', corner: 'CORNER', 'throw-in': 'THROW-IN' }
+const RESTART_TEXT: Record<Exclude<RestartKind, 'kick-off'>, string> = {
+  'goal-kick': 'GOAL KICK',
+  corner: 'CORNER',
+  'throw-in': 'THROW-IN',
+  'free-kick': 'FREE KICK',
+}
 
 const DEFENDER_MODE_LABEL: Record<DefenderMode, string> = {
   [DefenderMode.Jockey]: 'Jockeying',
@@ -36,6 +41,7 @@ const EVENT_BANNER: Record<MatchEventKind, { text: string; className: string; wi
   over: { text: 'OVER THE BAR', className: 'text-rose-300' },
   tackled: { text: 'TACKLED', className: 'text-amber-300', withTeam: true },
   intercepted: { text: 'INTERCEPTED', className: 'text-amber-300', withTeam: true },
+  offside: { text: 'OFFSIDE', className: 'text-amber-300', withTeam: true },
   out: null,
 }
 

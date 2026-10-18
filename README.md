@@ -36,6 +36,14 @@ being built in stages.
   towards goal and away from pressure. **First touch** sets how fast a ball
   they can take dead and how true the touch goes. A faster ball bounces off
   them. Anyone can cut a pass out.
+- **Offside** — judged each time a team plays the ball on purpose (a touch,
+  pass, shot or first touch). Any teammate then in the opponents' half, and
+  nearer their goal line than both the ball and the second-last opponent, is
+  flagged. A flagged player who plays the ball gives away an indirect free
+  kick where they were. Flags clear when the team plays it again or the other
+  team does; a throw-in, corner or goal kick can't be offside. Players know
+  the law: the attacker without the ball stays onside, and carriers don't pass
+  to a teammate standing offside.
 - **Show space** — a debug overlay that paints the space model players read
   the pitch with: how dangerous each spot is (threat), and which team would get
   to a ball there first (control).
@@ -91,6 +99,7 @@ being built in stages.
 - **Out of play and restarts** — once the whole ball is over a touchline or a
   goal line, play stops and the restart goes against whoever touched it last:
   a throw-in, a corner, or a goal kick. After a goal the other team kicks off.
+  An offside gives a free kick, with opponents 5 m away.
   Restarts are taken by an outfielder starting with the ball at their feet,
   with the nearest opponent standing off goal-side and everyone else in shape. A ball that rolls into a net is a
   goal, own goals included. The carrier only knocks the ball long

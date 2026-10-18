@@ -18,8 +18,8 @@ function place(eid: number, x: number, y: number, facing = 0) {
 
 /**
  * Red's first outfielder on the ball at (x, y) facing +x, their teammate at
- * (mx, my), and Blue's outfielders and keeper wherever given (far away by
- * default).
+ * (mx, my), and Blue's outfielders wherever given (otherwise back by their own
+ * goal, out wide).
  */
 function scene(seed: number, x: number, y: number, mx: number, my: number, blue: [number, number][] = [], grades: GradeOverrides = {}): Match {
   const world = createMatch({ seed, grades })
@@ -29,7 +29,7 @@ function scene(seed: number, x: number, y: number, mx: number, my: number, blue:
   setVec(Position, world.ball, x + FOOT_OFFSET, y, BALL_RADIUS)
   setVec(Velocity, world.ball, 0, 0, 0)
   place(mate, mx, my, Math.PI)
-  const spots: [number, number][] = [...blue, [-20, 14], [-20, -14]]
+  const spots: [number, number][] = [...blue, [20, 14], [20, -14]]
   world.teams[BLUE].outfielders.forEach((eid, i) => place(eid, spots[i][0], spots[i][1], Math.PI))
   return world
 }
@@ -56,7 +56,7 @@ describe('passes to feet', () => {
     expect(option.safety).toBeGreaterThan(0.95)
     strikePass(world, world.carrier, option)
     expect(world.carrier).toBe(mate)
-    play(world, 3)
+    for (let i = 0; i < 3 * 120 && world.stats[RED].completed === 0; i++) stepMatch(world)
     expect(world.pass).toBeNull()
     expect(world.stats[RED].completed).toBe(1)
     expect(world.carrier).toBe(mate)

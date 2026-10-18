@@ -2,6 +2,7 @@ import { hasComponent, query } from 'bitecs'
 import { Body, Outfielder, Position, Sliding, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { endShot, type Match } from '../match'
+import { offsideOffence } from '../offside'
 
 /** Share of the ball's speed into a body that it keeps when it bounces off. */
 const BODY_RESTITUTION = 0.3
@@ -78,6 +79,8 @@ function ballOffBody(world: Match, eid: number): boolean {
   if (z > height) return false
   const into = (Velocity.x[ball] - Velocity.x[eid]) * nx + (Velocity.y[ball] - Velocity.y[eid]) * ny
   if (into >= 0) return false
+  // A flagged player who gets in the way of the ball is involved: that's the offence, not a deflection.
+  if (offsideOffence(world, eid)) return true
   Velocity.x[ball] -= (1 + BODY_RESTITUTION) * into * nx
   Velocity.y[ball] -= (1 + BODY_RESTITUTION) * into * ny
   const minimum = Body.radius[eid] * LEG_WIDTH + BALL_RADIUS
