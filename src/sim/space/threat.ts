@@ -1,14 +1,15 @@
-import { GOAL_HALF_WIDTH, GOAL_X, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from '../constants'
+import { GOAL_HALF_WIDTH } from '../constants'
+import { perPitch, type Pitch } from '../pitch'
 import { attackDir } from '../teams'
 
 /**
- * The chance (0–1) that a shot from (x, y) at the goal on +x goes in, from
+ * The chance (0–1) that a shot from (x, y) at the goal on +x of `pitch` goes in, from
  * how far out it is and how much of the goal mouth it can see. A typical
  * expected-goals shape: about 0.6 from 6 m out in the middle, 0.25 from the
  * penalty spot, under 0.1 from 20 m.
  */
-export function shotChance(x: number, y: number): number {
-  const dx = GOAL_X - x
+export function shotChance(pitch: Pitch, x: number, y: number): number {
+  const dx = pitch.halfLength - x
   if (dx <= 0) return 0
   const distance = Math.hypot(dx, y)
   // The angle between the lines to the two posts.
@@ -24,9 +25,8 @@ const CELL = 1
  */
 const KEEP_PER_METRE = 0.9
 
-const NX = Math.round((2 * PITCH_HALF_LENGTH) / CELL) + 1
-const NY = Math.round((2 * PITCH_HALF_WIDTH) / CELL) + 1
-let grid: Float32Array | null = null
+/** Each pitch's threat map, built the first time it's needed. */
+const threatMap = perPitch(buildMap)
 
 /**
  * Expected threat: how dangerous it is for `team` to have the ball at (x, y).
@@ -34,18 +34,26 @@ let grid: Float32Array | null = null
  * to it, so it rises towards goal and towards the middle and is never below
  * the chance of shooting from the spot itself.
  */
-export function threat(team: number, x: number, y: number): number {
-  const g = (grid ??= buildGrid())
+export function threat(pitch: Pitch, team: number, x: number, y: number): number {
+  const map = threatMap(pitch)
   // The grid is built for attacking +x; mirror it for the other team.
-  const gx = (x * attackDir(team) + PITCH_HALF_LENGTH) / CELL
-  const gy = (y + PITCH_HALF_WIDTH) / CELL
-  return bilinear(g, clamp(gx, 0, NX - 1), clamp(gy, 0, NY - 1))
+  const gx = (x * attackDir(team) + pitch.halfLength) / CELL
+  const gy = (y + pitch.halfWidth) / CELL
+  return bilinear(map, clamp(gx, 0, map.nx - 1), clamp(gy, 0, map.ny - 1))
 }
 
-function buildGrid(): Float32Array {
+interface ThreatMap {
+  g: Float32Array
+  nx: number
+  ny: number
+}
+
+function buildMap(pitch: Pitch): ThreatMap {
+  const NX = Math.round((2 * pitch.halfLength) / CELL) + 1
+  const NY = Math.round((2 * pitch.halfWidth) / CELL) + 1
   const g = new Float32Array(NX * NY)
   for (let i = 0; i < NX; i++) {
-    for (let j = 0; j < NY; j++) g[i * NY + j] = shotChance(-PITCH_HALF_LENGTH + i * CELL, -PITCH_HALF_WIDTH + j * CELL)
+    for (let j = 0; j < NY; j++) g[i * NY + j] = shotChance(pitch, -pitch.halfLength + i * CELL, -pitch.halfWidth + j * CELL)
   }
   // Spread each value to its neighbours, discounted by distance, until nothing changes:
   // a forward sweep and a backward sweep each pass, like a distance transform.
@@ -82,10 +90,10 @@ function buildGrid(): Float32Array {
     }
     if (!changed) break
   }
-  return g
+  return { g, nx: NX, ny: NY }
 }
 
-function bilinear(g: Float32Array, x: number, y: number): number {
+function bilinear({ g, nx: NX, ny: NY }: ThreatMap, x: number, y: number): number {
   const i = Math.min(NX - 2, Math.floor(x))
   const j = Math.min(NY - 2, Math.floor(y))
   const fx = x - i

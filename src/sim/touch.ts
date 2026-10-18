@@ -1,7 +1,8 @@
 import { hasComponent, type World } from 'bitecs'
 import { Dribbler, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Sliding, TouchStyle, Velocity } from './components'
 import { angleDelta } from './angles'
-import { GOAL_HALF_WIDTH, GOAL_X, PITCH_HALF_WIDTH } from './constants'
+import { GOAL_HALF_WIDTH } from './constants'
+import type { Pitch } from './pitch'
 import { closeControlSpeed } from './grades'
 
 export interface TouchSpec {
@@ -58,15 +59,16 @@ export function touchAngle(eid: number, style: Exclude<TouchStyle, 0>, dirX: num
 }
 
 /**
- * How far (m) a ball at (x, y) can travel along the unit direction (dx, dy)
+ * How far (m) a ball at (x, y) on `pitch` can travel along the unit direction (dx, dy)
  * before leaving the pitch over a touchline or a goal line. Heading into a
  * goal mouth doesn't count as leaving.
  */
-export function roomAhead(x: number, y: number, dx: number, dy: number): number {
+export function roomAhead(pitch: Pitch, x: number, y: number, dx: number, dy: number): number {
+  const { halfLength: L, halfWidth: W } = pitch
   let room = Infinity
-  if (dy !== 0) room = Math.min(room, ((dy > 0 ? PITCH_HALF_WIDTH : -PITCH_HALF_WIDTH) - y) / dy)
+  if (dy !== 0) room = Math.min(room, ((dy > 0 ? W : -W) - y) / dy)
   if (dx !== 0) {
-    const t = ((dx > 0 ? GOAL_X : -GOAL_X) - x) / dx
+    const t = ((dx > 0 ? L : -L) - x) / dx
     if (Math.abs(y + dy * t) > GOAL_HALF_WIDTH) room = Math.min(room, t)
   }
   return Math.max(0, room)

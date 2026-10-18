@@ -30,7 +30,7 @@ import {
   TouchStyle,
   Velocity,
 } from './components'
-import { BALL_RADIUS, CIRCLE_RADIUS, FIXED_DT, GOAL_AREA_DEPTH, OUTFIELDERS_PER_SIDE, PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
+import { BALL_RADIUS, FIXED_DT, OUTFIELDERS_PER_SIDE } from './constants'
 import { clampGrade } from './grades'
 import { planShot } from './finishing'
 import { createRng, type Rng } from './rng'
@@ -57,6 +57,7 @@ import { rolesSystem } from './systems/roles'
 import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { attackDir, attackedGoalX, opponent, ownGoalX, TEAM_NAMES, type TeamName } from './teams'
+import { pitchFor, type Pitch } from './pitch'
 
 /** Open play, a shot on its way, a keeper with the ball in their hands, or the ball dead before a restart. */
 export type Phase = 'play' | 'shot' | 'held' | 'stopped'
@@ -193,6 +194,8 @@ export const gradeKeys = <R extends Role>(role: R) => Object.keys(GRADE_FIELDS[r
 
 export interface MatchContext {
   rng: Rng
+  /** The pitch this match is played on. */
+  pitch: Pitch
   /** Seconds since the match was created. */
   time: number
   phase: Phase
@@ -263,20 +266,21 @@ export interface MatchOptions {
   grades?: GradeOverrides
   /** Outfielders a side, besides the keeper. */
   outfielders?: number
+  /** The pitch to play on; by default, the one that suits the number of outfielders (see `pitchFor`). */
+  pitch?: Pitch
 }
 
 /** Seconds a player who has just lost the ball waits before challenging for it. */
 const CHALLENGE_DELAY_ON_LOSS = 0.6
-/** How far (m) opponents stand from a free kick: 9.15 m scaled to this pitch. */
-const FREE_KICK_DISTANCE = 5
 /** Reach (m) that counts as getting to the ball. */
 const CONTROL_REACH = 0.9
 
 const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, offsides: 0, attacks: 0 })
 
-export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE }: MatchOptions = {}): Match {
+export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE, pitch = pitchFor(outfielders) }: MatchOptions = {}): Match {
   const world = createWorld<MatchContext>({
     rng: createRng(seed),
+    pitch,
     time: 0,
     phase: 'play',
     phaseTime: 0,
@@ -539,7 +543,7 @@ export function endShot(world: Match, outcome: ShotOutcome, crossing: GoalPoint 
 /** A goal that went in without a shot being struck: counted as one, so goals stay a share of shots. */
 export function scoreFromPlay(world: Match, team: number) {
   // Straight in from an indirect free kick, nobody else touching it: a goal kick, not a goal.
-  if (world.indirectTaker !== -1) return ballOut(world, 'goal-kick', opponent(team), attackedGoalX(team), 0)
+  if (world.indirectTaker !== -1) return ballOut(world, 'goal-kick', opponent(team), attackedGoalX(world.pitch, team), 0)
   world.stats[team].shots++
   world.stats[team].goals++
   stopPlay(world, 'kick-off', opponent(team), 0, 0)
@@ -597,12 +601,12 @@ function record(world: Match, kind: MatchEventKind, team: number) {
 export function takeRestart(world: Match) {
   const restart = world.restart
   if (!restart) return
-  const { rng, ball } = world
+  const { rng, ball, pitch } = world
   const { kind, team } = restart
   const dir = attackDir(team)
-  const goalX = attackedGoalX(team)
-  const L = PITCH_HALF_LENGTH
-  const W = PITCH_HALF_WIDTH
+  const goalX = attackedGoalX(pitch, team)
+  const L = pitch.halfLength
+  const W = pitch.halfWidth
   const side = (y: number) => (y >= 0 ? 1 : -1)
 
   // Where the ball goes, which way the taker faces, and how far off the opponent stands.
@@ -610,7 +614,7 @@ export function takeRestart(world: Match) {
   let by = 0
   let faceX = dir
   let faceY = 0
-  let standOff = CIRCLE_RADIUS + 1
+  let standOff = pitch.circleRadius + 1
   if (kind === 'throw-in') {
     bx = clamp(restart.x, -L + 1, L - 1)
     by = side(restart.y) * (W - 0.3)
@@ -622,15 +626,16 @@ export function takeRestart(world: Match) {
     by = side(restart.y) * (W - 0.5)
     faceX = goalX - bx
     faceY = -by
-    standOff = 5
+    standOff = pitch.freeKickDistance
   } else if (kind === 'goal-kick') {
-    bx = ownGoalX(team) + dir * GOAL_AREA_DEPTH
+    bx = ownGoalX(pitch, team) + dir * pitch.goalAreaDepth
     by = (rng() < 0.5 ? -1 : 1) * 3
-    standOff = 12
+    // Opponents stand outside the penalty area.
+    standOff = pitch.penaltyAreaDepth + 2
   } else if (kind === 'free-kick') {
     bx = clamp(restart.x, -L + 1, L - 1)
     by = clamp(restart.y, -W + 1, W - 1)
-    standOff = FREE_KICK_DISTANCE
+    standOff = pitch.freeKickDistance
   }
   const faceLen = Math.hypot(faceX, faceY)
   faceX /= faceLen
@@ -646,7 +651,7 @@ export function takeRestart(world: Match) {
   }
   for (const t of [0, 1]) {
     const keeper = world.teams[t].keeper
-    setVec(Position, keeper, ownGoalX(t) + attackDir(t) * 0.5, 0, 0)
+    setVec(Position, keeper, ownGoalX(world.pitch, t) + attackDir(t) * 0.5, 0, 0)
     setVec(Velocity, keeper, 0, 0, 0)
     Goalkeeper.reactTimer[keeper] = 0
     Goalkeeper.recover[keeper] = 0
@@ -752,7 +757,8 @@ function restartSpot(world: Match, eid: number, kind: RestartKind, bx: number, b
     x = bx + awayX * standOff
     y = by + awayY * standOff
   }
-  return { x: clamp(x, -PITCH_HALF_LENGTH + 1, PITCH_HALF_LENGTH - 1), y: clamp(y, -PITCH_HALF_WIDTH + 1, PITCH_HALF_WIDTH - 1) }
+  const { halfLength: L, halfWidth: W } = world.pitch
+  return { x: clamp(x, -L + 1, L - 1), y: clamp(y, -W + 1, W - 1) }
 }
 
 export function requestShot(world: Match) {

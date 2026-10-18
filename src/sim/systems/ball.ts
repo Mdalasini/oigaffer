@@ -8,7 +8,6 @@ import {
   GOAL_DEPTH,
   GOAL_HALF_WIDTH,
   GOAL_HEIGHT,
-  GOAL_X,
   GRAVITY,
 } from '../constants'
 import type { Match } from '../match'
@@ -36,14 +35,14 @@ export function ballSystem(world: Match, dt: number) {
       }
     }
 
-    if (world.phase === 'stopped' && world.event?.kind === 'goal') containInNet(eid)
+    if (world.phase === 'stopped' && world.event?.kind === 'goal') containInNet(world, eid)
   }
 }
 
 /** After a goal, the net holds the ball. */
-function containInNet(eid: number) {
+function containInNet(world: Match, eid: number) {
   const end = Math.sign(Position.x[eid])
-  const back = GOAL_X + GOAL_DEPTH - BALL_RADIUS
+  const back = world.pitch.halfLength + GOAL_DEPTH - BALL_RADIUS
   if (Position.x[eid] * end > back) {
     Position.x[eid] = end * back
     Velocity.x[eid] *= -0.1

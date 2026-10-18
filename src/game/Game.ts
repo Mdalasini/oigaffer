@@ -119,7 +119,7 @@ export class Game {
   private render(renderer: Renderer, canvas: HTMLCanvasElement, inset: HTMLElement) {
     const dpr = renderer.resize()
     const main = { x: 0, y: 0, width: canvas.width, height: canvas.height }
-    const top = pitchCamera(main.width / main.height)
+    const top = pitchCamera(main.width / main.height, this.match.pitch)
     buildScene(this.batch, this.match, top, this.overlay)
     renderer.draw(this.batch, top.viewProjection, main, PITCH_SKY)
 
@@ -140,7 +140,7 @@ export class Game {
   /** The goal under attack, or the one a shot went at until play restarts. */
   private goalInView() {
     const m = this.match
-    return m.shot ? m.shot.goalX : attackedGoalX(Team.id[m.carrier])
+    return m.shot ? m.shot.goalX : attackedGoalX(m.pitch, Team.id[m.carrier])
   }
 
   private takeSnapshot(): GameSnapshot {

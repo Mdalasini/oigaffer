@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import { angleDelta } from './angles'
 import { Defender, DefenderMode, Facing, Position, TakeOn, Velocity } from './components'
-import { BALL_RADIUS, FIXED_DT, GOAL_X } from './constants'
+import { BALL_RADIUS, FIXED_DT } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { ballBodySystem, collisionSystem } from './systems/collision'
 import { contestSystem } from './systems/contest'
 import { defenderSystem } from './systems/defender'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 /** Carrier with the ball 20 m out, defender `gap` metres goal-side of it. */
 function faceOff(gap: number, grades: GradeOverrides = {}): Match {

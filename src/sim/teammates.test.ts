@@ -1,11 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { Facing, OffBall, Position, Velocity } from './components'
-import { BALL_RADIUS, CIRCLE_RADIUS, GOAL_X } from './constants'
+import { BALL_RADIUS } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, keeperClaims, setVec, stepMatch, type Match } from './match'
 import { along, onsideLimit } from './shape'
 import { bestReceiver, passToOutfielder } from './systems/keeper'
 import { ownGoalX } from './teams'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const CIRCLE_RADIUS = SMALL_SIDED_PITCH.circleRadius
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 const RED = 0
 const BLUE = 1
@@ -170,7 +175,7 @@ describe('moving like footballers', () => {
           if (along(team, Position.x[eid]) <= onsideLimit(world, team) + 1) onside++
         } else {
           coverSamples++
-          const goalX = ownGoalX(team)
+          const goalX = ownGoalX(world.pitch, team)
           if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
         }
       }
@@ -226,7 +231,7 @@ describe('moving like footballers, five a side', () => {
       const team = world.teams[RED].outfielders.includes(eid) ? RED : BLUE
       if (team === world.possession) continue
       coverSamples++
-      const goalX = ownGoalX(team)
+      const goalX = ownGoalX(world.pitch, team)
       if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
     }
   }

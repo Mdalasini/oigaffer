@@ -5,12 +5,11 @@ import { cue } from '../cues'
 import { teamView, type View } from '../perception'
 import { trapChance } from '../grades'
 import type { Match } from '../match'
-import { along, baseLine, homePosition, LINE_LIMITS, onsideLimit } from '../shape'
+import { along, baseLine, homePosition, lineLimits, onsideLimit } from '../shape'
 import { arrivalTime } from '../space/arrival'
 import { timeOnBall } from '../space/control'
 import { threat } from '../space/threat'
 import { attackDir, opponent, ownGoalX } from '../teams'
-import { PITCH_HALF_WIDTH } from '../constants'
 
 /** Scratch for where the defence reckons an attacker is. */
 const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
@@ -87,8 +86,8 @@ export function lineTarget(world: Match, team: number): number {
   if (team === world.possession || world.phase !== 'play') return base
   const ballU = along(team, Position.x[world.ball])
   if (trapping(world, team)) return Math.min(world.lines[team] + TRAP_STEP, ballU - STEP_UP_SHORT_OF_BALL)
-  if (canPlayForward(world)) return Math.max(LINE_LIMITS.deepest, base - DROP)
-  if (pressCue(world)) return Math.min(base + STEP_UP, ballU - STEP_UP_SHORT_OF_BALL, LINE_LIMITS.highest + STEP_UP)
+  if (canPlayForward(world)) return Math.max(lineLimits(world.pitch).deepest, base - DROP)
+  if (pressCue(world)) return Math.min(base + STEP_UP, ballU - STEP_UP_SHORT_OF_BALL, lineLimits(world.pitch).highest + STEP_UP)
   return base
 }
 
@@ -145,7 +144,7 @@ export function pressCue(world: Match): boolean {
   const team = world.possession
   const forward = attackDir(team) > 0 ? 0 : Math.PI
   if (world.pass) return along(team, world.pass.x) < along(team, Position.x[world.pass.from]) - 3
-  return Math.abs(angleDelta(Facing.angle[carrier], forward)) > FACING_BACK || Math.abs(Position.y[world.ball]) > PITCH_HALF_WIDTH - TOUCHLINE
+  return Math.abs(angleDelta(Facing.angle[carrier], forward)) > FACING_BACK || Math.abs(Position.y[world.ball]) > world.pitch.halfWidth - TOUCHLINE
 }
 
 /**
@@ -153,7 +152,7 @@ export function pressCue(world: Match): boolean {
  * middle of the goal, to step in if the presser is beaten.
  */
 export function coverSpot(world: Match, team: number) {
-  const goalX = ownGoalX(team)
+  const goalX = ownGoalX(world.pitch, team)
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
   const length = Math.hypot(goalX - bx, by) || 1
@@ -185,7 +184,7 @@ function shareMarking(world: Match, team: number) {
   const free = defenders.filter((d) => held || d !== world.presser)
   const attackers = world.teams[world.possession].outfielders.filter((a) => held || a !== world.carrier)
   if (!held) Mark.target[world.presser] = world.carrier
-  const goalX = ownGoalX(team)
+  const goalX = ownGoalX(world.pitch, team)
   const cover = coverSpot(world, team)
   const coverJob = !held && free.length > 1
   const cost = free.map((d) => {
@@ -198,7 +197,7 @@ function shareMarking(world: Match, team: number) {
       const length = Math.hypot(goalX - ax, ay) || 1
       const x = ax + ((goalX - ax) / length) * MARK_GAP
       const y = ay + (-ay / length) * MARK_GAP
-      const danger = threat(opponent(team), ax, ay)
+      const danger = threat(world.pitch, opponent(team), ax, ay)
       const zone = ZONE_COST * Math.hypot(ax - home.x, ay - home.y)
       return arrivalTime(world, d, x, y) + zone - DANGER * danger - (Mark.target[d] === a ? HANDOVER : 0)
     })

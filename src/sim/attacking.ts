@@ -1,11 +1,11 @@
 import { angleDelta } from './angles'
 import { Call, CallKind, Effort, OffBall, Outfielder, Position, Run, RunPhase } from './components'
-import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { cue } from './cues'
 import { gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
 import { seenFacing } from './perception'
+import type { Pitch } from './pitch'
 import { rateFeetPass } from './playmaking'
 import { gaussian } from './rng'
 import { along, homePosition, onsideLimit } from './shape'
@@ -21,11 +21,8 @@ export interface Intent {
   effort: Effort
 }
 
-const L = PITCH_HALF_LENGTH
-const W = PITCH_HALF_WIDTH
-
 /** Attackers keep at least this far (m) from the carrier, so they offer a pass rather than crowd them. */
-const SPACING = 0.16 * 2 * L
+const spacing = (pitch: Pitch) => 0.16 * 2 * pitch.halfLength
 
 // Showing for it: when the carrier has less than PRESSURED seconds on the
 // ball, or is facing their own goal, a teammate goes to the spot around them
@@ -180,6 +177,7 @@ export function clearIntentions(eid: number) {
 function hold(world: Match, eid: number, mayCall: boolean): Intent {
   let { x, y } = homePosition(world, eid)
   const carrier = world.carrier
+  const L = world.pitch.halfLength
   if (world.phase === 'play' && restDefender(world) === eid) {
     const team = world.possession
     x = Math.min(along(team, x), along(team, Position.x[world.ball]) - REST_BEHIND, L - 1) * attackDir(team)
@@ -188,6 +186,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = Math.hypot(dx, dy)
+    const SPACING = spacing(world.pitch)
     if (gap < SPACING) {
       // Slide away from the carrier, keeping on the side they're already on.
       const ux = gap > 0.5 ? dx / gap : 0
@@ -301,7 +300,7 @@ function showForIt(world: Match, eid: number): Intent {
       const angle = (i / SHOW_DIRECTIONS) * Math.PI * 2
       const x = bx + Math.cos(angle) * distance
       const y = by + Math.sin(angle) * distance
-      if (Math.abs(x) > L - 1.5 || Math.abs(y) > W - 1.5 || along(team, x) > limit) continue
+      if (Math.abs(x) > world.pitch.halfLength - 1.5 || Math.abs(y) > world.pitch.halfWidth - 1.5 || along(team, x) > limit) continue
       const s = score(x, y)
       if (s > bestScore) {
         best = { x, y }
@@ -322,7 +321,7 @@ function runCue(world: Match, eid: number): boolean {
   const carrier = world.carrier
   if (Run.rest[eid] > 0 || inOffsidePosition(world, eid)) return false
   const limit = onsideLimit(world, team)
-  if (L - limit < SPACE_BEHIND || limit - along(team, Position.x[eid]) > NEAR_LINE) return false
+  if (world.pitch.halfLength - limit < SPACE_BEHIND || limit - along(team, Position.x[eid]) > NEAR_LINE) return false
   const forward = attackDir(team) > 0 ? 0 : Math.PI
   // As they see it: a carrier they reckon has time and is facing forward.
   return timeOnBall(world, carrier, eid) >= CARRIER_TIME && Math.abs(angleDelta(seenFacing(world, eid, carrier), forward)) <= CARRIER_FACING
@@ -341,6 +340,7 @@ function runChance(eid: number): number {
 function runTarget(world: Match, eid: number) {
   const team = world.possession
   const limit = onsideLimit(world, team)
+  const { halfLength: L, halfWidth: W } = world.pitch
   let best: { x: number; y: number } | null = null
   let bestScore = 0
   for (const depth of RUN_DEPTHS) {
@@ -350,7 +350,7 @@ function runTarget(world: Match, eid: number) {
       const y = clamp(Position.y[eid] + across, -(W - 3), W - 3)
       const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, eid) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
       if (race < MIN_RACE) continue
-      const score = threat(team, x, y) * race
+      const score = threat(world.pitch, team, x, y) * race
       if (score > bestScore) {
         best = { x, y }
         bestScore = score

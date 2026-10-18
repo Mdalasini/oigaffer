@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { Dribbler, Facing, Offside, Position, Velocity } from './components'
-import { BALL_RADIUS, GOAL_X } from './constants'
+import { BALL_RADIUS } from './constants'
+import { SMALL_SIDED_PITCH } from './pitch'
 import { lookAround } from './perception'
 import { createMatch, endShot, handOver, requestShot, scoreFromPlay, setVec, stepMatch, winBall, type Match } from './match'
 import { inOffsidePosition } from './offside'
 import { passOptions, strikePass, type PassOption } from './playmaking'
 import { shotUnderway } from './testUtils'
 import { FOOT_OFFSET } from './touch'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 const RED = 0
 const BLUE = 1

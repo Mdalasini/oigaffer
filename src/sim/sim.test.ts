@@ -1,13 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import { BALL_RADIUS, GOAL_X, GRAVITY } from './constants'
+import { BALL_RADIUS, GRAVITY } from './constants'
+import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { reactionDelay, shotAngleError } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
 import { Mark, OffBall, OnBall, Position, Pressing } from './components'
-import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { createMatch, resetMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
+
+// These scenes play on the default five-a-side pitch.
+const GOAL_X = SMALL_SIDED_PITCH.halfLength
 
 describe('grades', () => {
   test('better shooters strike it truer', () => {
@@ -55,17 +58,19 @@ describe('match outcomes', () => {
     }
   })
 
-  test('eleven a side plays out: both sides attack, and everyone stays on the pitch', () => {
+  test('eleven a side plays out on a full-size pitch: both sides attack, and everyone stays on it', () => {
     const world = createMatch({ outfielders: 10, seed: 2 })
     expect(world.teams[0].outfielders).toHaveLength(10)
+    expect(world.pitch).toBe(FULL_PITCH)
+    const { halfLength, halfWidth } = world.pitch
     let spread = 0
     let samples = 0
     while (world.time < 5 * 60) {
       stepMatch(world)
       // Chasing a ball that goes out, players can run on a few metres past the line before play stops them.
       for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
-        expect(Math.abs(Position.x[eid])).toBeLessThan(PITCH_HALF_LENGTH + 6)
-        expect(Math.abs(Position.y[eid])).toBeLessThan(PITCH_HALF_WIDTH + 6)
+        expect(Math.abs(Position.x[eid])).toBeLessThan(halfLength + 6)
+        expect(Math.abs(Position.y[eid])).toBeLessThan(halfWidth + 6)
       }
       if (world.phase !== 'play') continue
       const ys = world.teams[world.possession].outfielders.map((e) => Position.y[e])
@@ -78,7 +83,12 @@ describe('match outcomes', () => {
       expect(s.won).toBeGreaterThan(2)
     }
     // The side on the ball spreads across most of the pitch's width.
-    expect(spread / samples).toBeGreaterThan(PITCH_HALF_WIDTH)
+    expect(spread / samples).toBeGreaterThan(halfWidth)
+  })
+
+  test('five a side keeps its small pitch unless a match asks for another', () => {
+    expect(createMatch({ seed: 1 }).pitch).toBe(SMALL_SIDED_PITCH)
+    expect(createMatch({ seed: 1, outfielders: 4, pitch: FULL_PITCH }).pitch).toBe(FULL_PITCH)
   })
 
   test('winning the ball back turns defence into attack', () => {

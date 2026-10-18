@@ -95,7 +95,7 @@ export function keeperSystem(world: Match, dt: number) {
 function setPosition(world: Match, eid: number, dt: number) {
   const ball = world.ball
   const team = Team.id[eid]
-  const lineX = ownGoalX(team)
+  const lineX = ownGoalX(world.pitch, team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
   const distance = Math.hypot(bx - lineX, by)
@@ -121,7 +121,7 @@ function setPosition(world: Match, eid: number, dt: number) {
 
 /** Whether any of `team`'s outfielders is nearer their own goal than the ball, `distance` from it, is. */
 function defenderGoalSide(world: Match, team: number, distance: number) {
-  const lineX = ownGoalX(team)
+  const lineX = ownGoalX(world.pitch, team)
   return world.teams[team].outfielders.some((eid) => Math.hypot(Position.x[eid] - lineX, Position.y[eid]) < distance - 1)
 }
 

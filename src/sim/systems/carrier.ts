@@ -1,7 +1,6 @@
 import { query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { Dribbler, Facing, Goalkeeper, MoveIntent, OffBalance, OnBall, Outfielder, Physical, Position, Run, Shield, TakeOn, Team, TouchStyle, Velocity } from '../components'
-import { PITCH_HALF_WIDTH } from '../constants'
 import { distanceToSegment } from '../geometry'
 import { closeControlSpeed, passWindup, reactionDelay } from '../grades'
 import { cue } from '../cues'
@@ -88,7 +87,7 @@ export function carrierSystem(world: Match, dt: number) {
     }
 
     const ball = world.ball
-    const goalX = attackedGoalX(Team.id[eid])
+    const goalX = attackedGoalX(world.pitch, Team.id[eid])
     const toGoalX = goalX - Position.x[ball]
     const toGoalY = -Position.y[ball]
     const distance = Math.hypot(toGoalX, toGoalY)
@@ -143,7 +142,7 @@ export function carrierSystem(world: Match, dt: number) {
     const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
     const roomToRun = distance - largeTouchTravel(speed) > shootDistance
     const style = roomToRun || chased ? TouchStyle.Large : TouchStyle.Small
-    carry(eid, ball, style, dirX, dirY)
+    carry(world, eid, ball, style, dirX, dirY)
   }
 }
 
@@ -253,7 +252,7 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
   if (TakeOn.side[eid] === 0) {
     // Go round the side the defender is leaning away from, or infield when near the touchline.
     const infield = -Math.sign(Position.y[ball]) * Math.sign(gx) || 1
-    const nearTouchline = Math.abs(Position.y[ball]) > PITCH_HALF_WIDTH - TOUCHLINE_MARGIN
+    const nearTouchline = Math.abs(Position.y[ball]) > world.pitch.halfWidth - TOUCHLINE_MARGIN
     const side = nearTouchline ? infield : lateral > 0.2 ? -1 : lateral < -0.2 ? 1 : rng() < 0.5 ? 1 : -1
     beginTakeOn(world, eid, side, rng() < FEINT_CHANCE)
   }
@@ -264,7 +263,7 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
 
   if (along < 0.3 || (distance < CUT_RANGE && clearance > BURST_CLEARANCE)) {
     const [x, y] = rotate(gx, gy, side * BURST_ANGLE)
-    carry(eid, ball, TouchStyle.Large, x, y)
+    carry(world, eid, ball, TouchStyle.Large, x, y)
   } else if (distance < CUT_RANGE) {
     let cutSide = side
     if (TakeOn.feintTimer[eid] > 0) {
@@ -295,10 +294,10 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
  * Dribbles, but only knocks the ball long if, the way the body will send it,
  * it would still be on the pitch when caught up with; otherwise keeps it close.
  */
-function carry(eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number) {
+function carry(world: Match, eid: number, ball: number, style: TouchStyle, dirX: number, dirY: number) {
   if (style === TouchStyle.Large) {
     const angle = touchAngle(eid, style, dirX, dirY)
-    const room = roomAhead(Position.x[ball], Position.y[ball], Math.cos(angle), Math.sin(angle))
+    const room = roomAhead(world.pitch, Position.x[ball], Position.y[ball], Math.cos(angle), Math.sin(angle))
     const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
     if (room < largeTouchTravel(speed) + LARGE_TOUCH_MARGIN) style = TouchStyle.Small
   }
