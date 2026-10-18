@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { Call, CallKind, Facing, Outfielder, Position, Velocity } from './components'
+import { attackingIntent } from './attacking'
+import { Call, CallKind, Facing, OffBall, Outfielder, Position, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { createMatch, handOver, setVec, type Match } from './match'
 import { knows, lookAround, maybeScanBeforeReceiving, perceptionSystem, seenX, sinceScan } from './perception'
+import { keepValue, passOptions } from './playmaking'
 import { timeOnBall } from './space/control'
 import { FOOT_OFFSET } from './touch'
 
@@ -111,5 +113,45 @@ describe('what players know', () => {
     lookAround(world)
     expect(timeOnBall(world, carrier, carrier)).toBeCloseTo(timeOnBall(world, carrier), 6)
     expect(sinceScan(world, carrier)).toBe(0)
+  })
+})
+
+describe('deciding from what they know, not the truth', () => {
+  test('the carrier judges a teammate onside against the line as they last saw it', () => {
+    const world = scene(7, [[0, 0, Math.PI / 2], [12, 6, Math.PI]], [[14, -4, Math.PI], [14, 2, Math.PI]])
+    Outfielder.decisions[world.teams[RED].outfielders[0]] = 20
+    const [carrier, mate] = world.teams[RED].outfielders
+    world.memory.nextScan[world.memory.index[carrier]] = Infinity
+    // Side-on, looking across the pitch, they don't see the line step up past their teammate.
+    for (const d of world.teams[BLUE].outfielders) Position.x[d] = 10
+    watch(world, 0.2)
+    expect(passOptions(world, carrier).some((o) => o.receiver === mate)).toBe(true)
+  })
+
+  test('keeping the ball is valued without a defender the carrier hasn’t seen close in', () => {
+    const world = scene(8, [[10, 0, 0], [0, 10, 0]], [[-5, 0, 0]])
+    const [carrier] = world.teams[RED].outfielders
+    const [defender] = world.teams[BLUE].outfielders
+    world.memory.nextScan[world.memory.index[carrier]] = Infinity
+    const before = keepValue(world, carrier)
+    // Right behind them, unseen.
+    place(defender, 8.5, 0.5, 0)
+    expect(keepValue(world, carrier)).toBeCloseTo(before, 9)
+  })
+
+  test('a teammate who hasn’t seen the carrier closed down doesn’t show for it', () => {
+    const world = scene(9, [[0, 0, 0], [-10, 8, Math.PI]], [[12, 0, Math.PI]])
+    const [carrier, mate] = world.teams[RED].outfielders
+    const [presser] = world.teams[BLUE].outfielders
+    world.memory.nextScan[world.memory.index[mate]] = Infinity
+    world.memory.nextScan[world.memory.index[carrier]] = Infinity
+    world.phase = 'play'
+    // The presser gets tight on the carrier, out of their teammate's sight and their own.
+    place(presser, 1.2, 0, Math.PI)
+    attackingIntent(world, mate)
+    expect(OffBall.showing[mate]).toBe(0)
+    lookAround(world)
+    attackingIntent(world, mate)
+    expect(OffBall.showing[mate]).toBe(1)
   })
 })

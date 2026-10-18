@@ -2,6 +2,7 @@ import { Position, Slot, Team } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { formationFor } from './formation'
 import type { Match } from './match'
+import { seenX } from './perception'
 import { attackDir, opponent } from './teams'
 
 const L = PITCH_HALF_LENGTH
@@ -37,15 +38,16 @@ export const along = (team: number, x: number) => x * attackDir(team)
 /**
  * The furthest up the pitch (in `along` terms) a player of `team` can stand
  * without being offside: level with the second-last opponent, or with the
- * ball if it is further forward, and never short of the halfway line.
+ * ball if it is further forward, and never short of the halfway line. Judged
+ * by `by`, it's against where they last saw each opponent (see `perception`).
  */
-export function onsideLimit(world: Match, team: number): number {
+export function onsideLimit(world: Match, team: number, by = -1): number {
   // The two opponents nearest their own goal line, keeper included.
   const { outfielders, keeper } = world.teams[opponent(team)]
-  let last = along(team, Position.x[keeper])
+  let last = along(team, seenX(world, by, keeper))
   let secondLast = -Infinity
   for (const eid of outfielders) {
-    const u = along(team, Position.x[eid])
+    const u = along(team, seenX(world, by, eid))
     if (u > last) {
       secondLast = last
       last = u

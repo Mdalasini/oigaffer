@@ -175,14 +175,14 @@ export function passOptions(world: Match, carrier: number): PassOption[] {
 }
 
 /**
- * Whether `mate` looks offside to `carrier`: judged by eye, so a teammate
- * near the line may be misjudged either way, by less the better their
- * decisions.
+ * Whether `mate` looks offside to `carrier`: judged by eye against the line
+ * as they last saw it, so a teammate near the line may be misjudged either
+ * way, by less the better their decisions.
  */
 function looksOffside(world: Match, carrier: number, mate: number): boolean {
   const team = Team.id[mate]
   const misjudged = along(team, seenX(world, carrier, mate)) + gaussian(world.rng) * offsideMisjudgement(Outfielder.decisions[carrier])
-  return misjudged > Math.max(onsideLimit(world, team), 0)
+  return misjudged > Math.max(onsideLimit(world, team, carrier), 0)
 }
 
 /** A pass to where `mate` will be, arriving at a pace they can take. */

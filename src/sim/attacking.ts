@@ -1,10 +1,11 @@
 import { angleDelta } from './angles'
-import { Call, CallKind, Effort, Facing, OffBall, Outfielder, Position, Run, RunPhase } from './components'
+import { Call, CallKind, Effort, OffBall, Outfielder, Position, Run, RunPhase } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
 import { cue } from './cues'
 import { gradeT } from './grades'
 import type { Match } from './match'
 import { inOffsidePosition } from './offside'
+import { seenFacing } from './perception'
 import { rateFeetPass } from './playmaking'
 import { gaussian } from './rng'
 import { along, homePosition, onsideLimit } from './shape'
@@ -136,7 +137,7 @@ export function attackingIntent(world: Match, eid: number): Intent {
     endRun(world, eid)
   }
 
-  if (pressured(world, carrier, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
+  if (pressured(world, eid, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
   OffBall.showing[eid] = 0
   if (runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
     const target = runTarget(world, eid)
@@ -253,10 +254,14 @@ function runnerFree(world: Match, eid: number): boolean {
   return squad.filter((mate) => mate !== eid && Run.phase[mate] !== RunPhase.None).length < limit
 }
 
-/** Whether the carrier needs a way out: less than `time` seconds before they're closed down, or facing their own goal. */
-function pressured(world: Match, carrier: number, time: number): boolean {
+/**
+ * Whether the carrier needs a way out, as `eid` sees it: less than `time`
+ * seconds before they're closed down, or facing their own goal.
+ */
+function pressured(world: Match, eid: number, time: number): boolean {
+  const carrier = world.carrier
   const forward = attackDir(world.possession) > 0 ? 0 : Math.PI
-  return timeOnBall(world, carrier) < time || Math.abs(angleDelta(Facing.angle[carrier], forward)) > FACING_BACK
+  return timeOnBall(world, carrier, eid) < time || Math.abs(angleDelta(seenFacing(world, eid, carrier), forward)) > FACING_BACK
 }
 
 /**
@@ -319,7 +324,8 @@ function runCue(world: Match, eid: number): boolean {
   const limit = onsideLimit(world, team)
   if (L - limit < SPACE_BEHIND || limit - along(team, Position.x[eid]) > NEAR_LINE) return false
   const forward = attackDir(team) > 0 ? 0 : Math.PI
-  return timeOnBall(world, carrier) >= CARRIER_TIME && Math.abs(angleDelta(Facing.angle[carrier], forward)) <= CARRIER_FACING
+  // As they see it: a carrier they reckon has time and is facing forward.
+  return timeOnBall(world, carrier, eid) >= CARRIER_TIME && Math.abs(angleDelta(seenFacing(world, eid, carrier), forward)) <= CARRIER_FACING
 }
 
 /** Chance, each time the cue is there, that they go: better movers spot the moment more often. */

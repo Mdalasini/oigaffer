@@ -5,6 +5,7 @@ import type { Match } from './match'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from './constants'
 import { chooseAim, VERTICAL_ERROR, type GoalPoint } from './shooting'
 import { diveReach } from './systems/keeper'
+import { seenX, seenY } from './perception'
 import { attackedGoalX } from './teams'
 
 // How hard (m/s) a shot is struck: placed from close in, driven from further
@@ -42,30 +43,35 @@ export interface ShotPlan {
 /**
  * How far off line `carrier`'s shot would go, in radians: their finishing,
  * made worse by an opponent close enough to hurry them and by having to
- * shoot across their body.
+ * shoot across their body. Reckoned by `by`, the hurry is from opponents
+ * where they last saw them; struck, it's from the real ones.
  */
-export function shotError(world: Match, carrier: number): number {
+export function shotError(world: Match, carrier: number, by = -1): number {
   const team = Team.id[carrier]
   const x = Position.x[carrier]
   const y = Position.y[carrier]
   let nearest = Infinity
-  for (const eid of world.teams[1 - team].outfielders) nearest = Math.min(nearest, Math.hypot(Position.x[eid] - x, Position.y[eid] - y))
+  for (const eid of world.teams[1 - team].outfielders) nearest = Math.min(nearest, Math.hypot(seenX(world, by, eid) - x, seenY(world, by, eid) - y))
   const hurried = 1 + (FULL_PRESSURE - 1) * Math.max(0, 1 - nearest / PRESSURE_RANGE)
   const toGoal = Math.atan2(-Position.y[world.ball], attackedGoalX(team) - Position.x[world.ball])
   const across = 1 + ACROSS_BODY * Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], toGoal)) - CLEAN_TURN)
   return shotAngleError(Outfielder.shooting[carrier]) * hurried * across
 }
 
-/** The shot `carrier` would take now, at the corner away from the keeper, aimed as safe as their expected miss needs. */
-export function planShot(world: Match, carrier: number): ShotPlan {
+/**
+ * The shot `carrier` would take now, at the corner away from the keeper,
+ * aimed as safe as their expected miss needs; as `judge` reckons it, or as
+ * it really is.
+ */
+export function planShot(world: Match, carrier: number, judge = -1): ShotPlan {
   const goalX = attackedGoalX(Team.id[carrier])
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  const keeperY = Position.y[world.keeper]
+  const keeperY = seenY(world, judge, world.keeper)
   const rough = chooseAim(by, keeperY, world.aimHigh)
   const distance = Math.hypot(goalX - bx, rough.y - by)
   const speed = Math.min(DRIVEN_SPEED, PLACED_SPEED + SPEED_PER_METRE * Math.max(0, distance - 6))
-  const error = Math.min(WILDEST, (shotError(world, carrier) * speed) / POWER_REFERENCE)
+  const error = Math.min(WILDEST, (shotError(world, carrier, judge) * speed) / POWER_REFERENCE)
   // The miss on the goal plane grows with the distance to the corner being aimed at.
   const miss = distance * Math.tan(error)
   return { goalX, error, miss, speed, aim: chooseAim(by, keeperY, world.aimHigh, miss) }
@@ -74,24 +80,26 @@ export function planShot(world: Match, carrier: number): ShotPlan {
 /**
  * What `carrier` reckons a shot from here is worth: the chance it goes in
  * between the post and as far as the keeper can reach in the time it takes
- * to get there, and under the bar. They see where the keeper is standing and
- * know how true they strike it, hurried or not.
+ * to get there, and under the bar. They judge it from where they last saw
+ * the keeper and anyone closing them down, and know how true they strike it.
  */
 export function shotValue(world: Match, carrier: number): number {
-  const { goalX, aim, miss, speed } = planShot(world, carrier)
+  const { goalX, aim, miss, speed } = planShot(world, carrier, carrier)
   const keeper = world.keeper
+  const kx = seenX(world, carrier, keeper)
+  const ky = seenY(world, carrier, keeper)
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
   const toGoal = goalX - bx
-  const toKeeper = Position.x[keeper] - bx
+  const toKeeper = kx - bx
   if (Math.abs(toGoal) < 0.1) return 0
   // A keeper the ball is already past can't stop it.
   if (toKeeper / toGoal <= 0) return landingChance(aim, miss, null)
   // The keeper's reach, seen from the ball, projected back onto the goal line.
   const scale = Math.abs(toKeeper) > 0.5 ? toGoal / toKeeper : 1
   const flight = Math.hypot(toKeeper, (aim.y - by) * (toKeeper / toGoal)) / speed
-  const centre = by + (Position.y[keeper] - by) * scale
-  const reach = diveReach(keeper, flight - TYPICAL_REACTION, Math.hypot(toKeeper, Position.y[keeper] - by)) * scale
+  const centre = by + (ky - by) * scale
+  const reach = diveReach(keeper, flight - TYPICAL_REACTION, Math.hypot(toKeeper, ky - by)) * scale
   return landingChance(aim, miss, { centre, reach })
 }
 
