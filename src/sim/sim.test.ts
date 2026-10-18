@@ -4,9 +4,9 @@ import { reactionDelay, shotAngleError } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
-import { OnBall, Position, Pressing } from './components'
+import { OffBall, OnBall, Position, Pressing } from './components'
 import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
-import { createMatch, stepMatch, winBall } from './match'
+import { createMatch, resetMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
 
 describe('grades', () => {
@@ -93,6 +93,31 @@ describe('match outcomes', () => {
     // Blue now attacks the goal at -x, defended by Red's keeper.
     expect(world.keeper).toBe(world.teams[0].keeper)
     expect(world.stats[1].won).toBe(1)
+  })
+
+  test('a turnover is announced once, with the new carrier and presser, and everyone reconsiders', () => {
+    const world = createMatch({ outfielders: 4, seed: 3 })
+    const red = world.carrier
+    const blue = world.presser
+    const cues: string[] = []
+    world.onCue = (c) => cues.push(c.kind === 'carrier' || c.kind === 'presser' ? `${c.kind} ${c.player} from ${c.previous}` : c.kind)
+    winBall(world, blue, 'tackled')
+    // Blue was pressing and is now on the ball, so nobody is left pressing to step off.
+    expect(cues).toEqual([`carrier ${blue} from ${red}`, 'possession', `presser ${red} from -1`])
+    expect(world.nextMarking).toEqual([0, 0])
+    for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
+      if (eid !== blue && eid !== red) expect(OffBall.decideIn[eid]).toBeGreaterThanOrEqual(0.2)
+    }
+  })
+
+  test('a restart while a pass is being shaped calls the pass off', () => {
+    const world = createMatch({ outfielders: 4, seed: 3 })
+    const cues: string[] = []
+    while (!world.windup) stepMatch(world)
+    world.onCue = (c) => cues.push(c.kind)
+    resetMatch(world)
+    expect(world.windup).toBeNull()
+    expect(cues[0]).toBe('passCalledOff')
   })
 
   test('a shot blocked straight back to the shooter is not struck again and again', () => {

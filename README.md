@@ -182,7 +182,7 @@ shape) and what each system cost per simulated minute.
 
 ## Layout
 
-- `src/sim` — the ECS world: components, teams, systems (roles, the carrier's and presser's decisions, off-ball movement, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), formations and team shape, the space model (`space/`), shooting model and grade curves. No DOM.
+- `src/sim` — the ECS world: components, teams, cues (the moments players react to, and how), systems (roles, the carrier's and presser's decisions, off-ball movement, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), formations and team shape, the space model (`space/`), shooting model and grade curves. No DOM.
 - `src/render` — WebGL renderer, cameras (top-down and goal-face orthographic) and the scene built from the world.
 - `src/game` — fixed-step loop tying the simulation to the renderer, plus a store for the UI.
 - `src/ui` — React HUD and controls.
