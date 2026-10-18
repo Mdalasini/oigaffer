@@ -71,6 +71,37 @@ describe('standing tackles', () => {
     expect(shielded).toBeLessThan(open / 2)
   })
 
+  test('timed for a ball between touches, an even tackle usually comes away with it', () => {
+    let won = 0
+    for (let seed = 1; seed <= 400; seed++) {
+      const world = setup(seed, 1.9, FOOT_OFFSET + 0.9)
+      resolveStandingTackle(world, world.presser)
+      if (world.lastChallenge?.result === 'won') won++
+    }
+    expect(won / 400).toBeGreaterThan(0.45)
+  })
+
+  /** Share of 200 seeds in which a jockeying defender, `gap` m in front of the carrier, goes in within a second. */
+  function goesIn(gap: number, ballAhead: number) {
+    let n = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      const world = setup(seed, gap, ballAhead)
+      const { presser: defender, ball } = world
+      Defender.mode[defender] = DefenderMode.Jockey
+      Defender.readX[defender] = Position.x[ball]
+      Defender.readY[defender] = Position.y[ball]
+      Defender.challengeDelay[defender] = 0
+      for (let i = 0; i < 120 && Defender.mode[defender] !== DefenderMode.StandTackle; i++) defenderSystem(world, FIXED_DT)
+      if (Defender.mode[defender] === DefenderMode.StandTackle) n++
+    }
+    return n / 200
+  }
+
+  test('a defender waits for the ball to come off the carrier’s feet, then goes in', () => {
+    expect(goesIn(1.2, FOOT_OFFSET + 0.1)).toBeLessThan(0.35)
+    expect(goesIn(1.9, FOOT_OFFSET + 0.9)).toBeGreaterThan(0.9)
+  })
+
   test('a ball out of reach is a miss that leaves the tackler off balance', () => {
     const world = setup(1, 4, FOOT_OFFSET)
     resolveStandingTackle(world, world.presser)

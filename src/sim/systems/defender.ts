@@ -5,7 +5,8 @@ import { Defender, DefenderMode, Pressing, Facing, MoveIntent, OffBalance, Outfi
 import { gradeT, readLag, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { attackedGoalX } from '../teams'
-import { CONTROL_RADIUS, footDistance } from '../touch'
+import { CONTROL_RADIUS, footDistance, footX, footY } from '../touch'
+import { STAND_WINDUP } from './challenge'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
 const STANDOFF = 1.7
@@ -24,8 +25,8 @@ const POSITION_GAIN = 3
  * on. Committing is a gamble, so they don't go every time they could.
  */
 const POUNCE_RATE = 4
-const STAND_RATE_BASE = 0.3
-const STAND_RATE_SKILL = 1
+const STAND_RATE_BASE = 0.1
+const STAND_RATE_SKILL = 0.3
 const STAND_RATE_SHIELDED = 0.4
 const BARGE_RATE = 1.2
 const SLIDE_RATE_BASE = 0.2
@@ -94,12 +95,14 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
   const carrierDistance = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
   const exposed = footDistance(carrier, ball) > EXPOSED_DISTANCE
+  // A standing tackle is timed for where the ball will be when the foot gets there: off the carrier's feet, ideally.
+  const exposedAtContact = exposedIn(world, eid, STAND_WINDUP)
   const shielded = Shield.active[carrier] === 1 || bodyBetween(carrier, eid, ball)
   const skill = gradeT(Outfielder.tackling[eid])
   const chance = (rate: number) => rng() < rate * dt
 
   if (ballDistance <= STAND_REACH && ballAhead <= STAND_CONE) {
-    const rate = exposed ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
+    const rate = exposedAtContact ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
     if (chance(rate)) return startStandingTackle(eid)
   }
   if (carrierDistance <= BARGE_RANGE && footDistance(carrier, ball) < CONTROL_RADIUS) {
@@ -113,6 +116,20 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   if (beaten && running && exposed && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
     if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
   }
+}
+
+/**
+ * Whether, `seconds` from now, the defender reckons the ball will be off the
+ * carrier's feet: the ball where they read it to be going, the carrier
+ * where they're running.
+ */
+function exposedIn(world: Match, eid: number, seconds: number): boolean {
+  const carrier = world.carrier
+  const bx = Defender.readX[eid] + Defender.readVx[eid] * seconds
+  const by = Defender.readY[eid] + Defender.readVy[eid] * seconds
+  const fx = footX(carrier) + Velocity.x[carrier] * seconds
+  const fy = footY(carrier) + Velocity.y[carrier] * seconds
+  return Math.hypot(bx - fx, by - fy) > EXPOSED_DISTANCE
 }
 
 function startAction(eid: number, mode: DefenderMode) {

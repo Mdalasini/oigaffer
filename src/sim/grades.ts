@@ -61,11 +61,12 @@ export function readLag(marking: number, running: boolean): number {
 }
 
 /**
- * Base chance (0–1) that a tackle by a defender with `tackling` gets the
- * ball off a carrier with `dribbling`, before reach and shielding.
+ * Chance (0–1) that a tackle by a defender with `tackling` gets the ball
+ * off a carrier with `dribbling` when it's timed for a ball between
+ * touches. Tighter control or a body in the way makes it harder.
  */
 export function tackleSkill(tackling: number, dribbling: number): number {
-  return Math.min(0.9, Math.max(0.1, 0.42 + (clampGrade(tackling) - clampGrade(dribbling)) * 0.025))
+  return Math.min(0.95, Math.max(0.3, 0.7 + (clampGrade(tackling) - clampGrade(dribbling)) * 0.03))
 }
 
 /** Chance (0–1) that a barge by a player with `strength` knocks one with `opponentStrength` off the ball. */

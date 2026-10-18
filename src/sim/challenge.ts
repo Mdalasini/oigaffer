@@ -26,7 +26,7 @@ const SLIDE_CONTACT = 0.45
 export const EXPOSED_DISTANCE = 0.7
 
 /** Share of successful challenges that come away with the ball cleanly, rather than poking it loose. */
-const CLEAN_WIN_SHARE: Record<ChallengeKind, number> = { stand: 0.6, slide: 0.3, barge: 0 }
+const CLEAN_WIN_SHARE: Record<ChallengeKind, number> = { stand: 0.75, slide: 0.3, barge: 0 }
 /** Tackling through the carrier's body rarely gets the ball. */
 const THROUGH_THE_BODY = 0.3
 
