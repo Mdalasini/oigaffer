@@ -773,26 +773,35 @@ export function setPhase(world: Match, phase: Phase) {
   world.phaseTime = 0
 }
 
+/**
+ * The systems a step runs, in order: the decisions first, from who has which
+ * role to where everyone wants to go, then the physics that carries them out.
+ * Named so a profiler can time each one.
+ */
+export const MATCH_SYSTEMS: readonly (readonly [string, (world: Match, dt: number) => void])[] = [
+  ['touchCooldown', touchCooldownSystem],
+  ['balance', balanceSystem],
+  ['roles', rolesSystem],
+  ['defending', defendingSystem],
+  ['carrier', carrierSystem],
+  ['defender', defenderSystem],
+  ['offBall', offBallSystem],
+  ['receive', receiveSystem],
+  ['touch', touchSystem],
+  ['locomotion', locomotionSystem],
+  ['challenge', challengeSystem],
+  ['keeper', keeperSystem],
+  ['collision', collisionSystem],
+  ['ball', ballSystem],
+  ['ballBody', ballBodySystem],
+  ['contest', contestSystem],
+  ['outcome', outcomeSystem],
+]
+
 export function stepMatch(world: Match, dt: number = FIXED_DT) {
   world.time += dt
   world.phaseTime += dt
-  touchCooldownSystem(world, dt)
-  balanceSystem(world, dt)
-  rolesSystem(world, dt)
-  defendingSystem(world, dt)
-  carrierSystem(world, dt)
-  defenderSystem(world, dt)
-  offBallSystem(world, dt)
-  receiveSystem(world, dt)
-  touchSystem(world, dt)
-  locomotionSystem(world, dt)
-  challengeSystem(world, dt)
-  keeperSystem(world, dt)
-  collisionSystem(world, dt)
-  ballSystem(world, dt)
-  ballBodySystem(world, dt)
-  contestSystem(world, dt)
-  outcomeSystem(world, dt)
+  for (const [, system] of MATCH_SYSTEMS) system(world, dt)
   // Anyone else touching the ball makes an indirect free kick live.
   if (world.indirectTaker !== -1 && world.lastTouchedBy !== world.indirectTaker) world.indirectTaker = -1
 }

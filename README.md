@@ -6,8 +6,9 @@ ball flight under gravity) and is drawn as a 2D top-down game with WebGL.
 Currently: five-a-side between two teams, Red and Blue, each with four outfielders
 and a goalkeeper, on a small-sided 60 m × 40 m pitch with full-size goals. Red
 attacks the goal at +x, Blue the one at -x. The four play a 1-2-1 diamond with
-the ball and a 2-2 box without it. The simulation can also be run with one or
-two outfielders a side.
+the ball and a 2-2 box without it. The simulation can also be run with one,
+two or ten outfielders a side; ten play a 4-3-3 with the ball and a 4-1-4-1
+without it, still on the small pitch for now.
 
 - **Teammates and shape** — each team has a formation that lives in a block
   moving with the ball. With the ball, the block stretches: one outfielder
@@ -175,7 +176,9 @@ bun run dev
 
 Space makes whoever has the ball shoot early, R starts a new match. Each team's
 grades are set from its tab in the control panel. `bun test` runs the simulation tests;
-`bun run build` typechecks and builds.
+`bun run build` typechecks and builds. `bun run measure [minutes] [outfielders] [seeds]`
+plays headless matches and reports how they played (tallies, effort, spacing,
+shape) and what each system cost per simulated minute.
 
 ## Layout
 

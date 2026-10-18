@@ -4,8 +4,9 @@ import { reactionDelay, shotAngleError } from './grades'
 import { createRng } from './rng'
 import { launchVelocity, sampleShotTarget } from './shooting'
 import { hasComponent } from 'bitecs'
-import { OnBall, Pressing } from './components'
-import { createMatch, winBall } from './match'
+import { OnBall, Position, Pressing } from './components'
+import { PITCH_HALF_LENGTH, PITCH_HALF_WIDTH } from './constants'
+import { createMatch, stepMatch, winBall } from './match'
 import { simulateMatch } from './simulate'
 
 describe('grades', () => {
@@ -52,6 +53,31 @@ describe('match outcomes', () => {
       expect(s.shots).toBeGreaterThan(2)
       expect(s.won).toBeGreaterThan(3)
     }
+  })
+
+  test('eleven a side plays out: both sides attack, and everyone stays on the pitch', () => {
+    const world = createMatch({ outfielders: 10, seed: 2 })
+    expect(world.teams[0].outfielders).toHaveLength(10)
+    let spread = 0
+    let samples = 0
+    while (world.time < 5 * 60) {
+      stepMatch(world)
+      for (const eid of [...world.teams[0].outfielders, ...world.teams[1].outfielders]) {
+        expect(Math.abs(Position.x[eid])).toBeLessThan(PITCH_HALF_LENGTH + 2)
+        expect(Math.abs(Position.y[eid])).toBeLessThan(PITCH_HALF_WIDTH + 2)
+      }
+      if (world.phase !== 'play') continue
+      const ys = world.teams[world.possession].outfielders.map((e) => Position.y[e])
+      spread += Math.max(...ys) - Math.min(...ys)
+      samples++
+    }
+    for (const s of world.stats) {
+      expect(s.goals + s.saved + s.missed).toBeLessThanOrEqual(s.shots)
+      expect(s.passes).toBeGreaterThan(10)
+      expect(s.won).toBeGreaterThan(2)
+    }
+    // The side on the ball spreads across most of the pitch's width.
+    expect(spread / samples).toBeGreaterThan(PITCH_HALF_WIDTH)
   })
 
   test('winning the ball back turns defence into attack', () => {

@@ -66,10 +66,47 @@ const DIAMOND: Formation = {
   ],
 }
 
+/**
+ * Ten outfielders, a 4-3-3. With the ball, the two centre-backs split and
+ * stay back with the holding midfielder in front of them, the full-backs push
+ * on to give width, the two eights take the half-spaces, and the wingers and
+ * centre-forward pin the back line. Without it, a 4-1-4-1: a flat back four,
+ * the holder screening it, a line of four in front, and the centre-forward
+ * leading the press. As in the diamond, each player's two places are close.
+ */
+const FOUR_THREE_THREE: Formation = {
+  name: '4-3-3',
+  inPossession: [
+    { depth: 0, width: -0.3 },
+    { depth: 0, width: 0.3 },
+    { depth: 0.4, width: -0.95 },
+    { depth: 0.4, width: 0.95 },
+    { depth: 0.25, width: 0 },
+    { depth: 0.6, width: -0.4 },
+    { depth: 0.6, width: 0.4 },
+    { depth: 0.95, width: -0.8 },
+    { depth: 0.95, width: 0.8 },
+    { depth: 1, width: 0 },
+  ],
+  outOfPossession: [
+    { depth: 0, width: -0.25 },
+    { depth: 0, width: 0.25 },
+    { depth: 0, width: -0.75 },
+    { depth: 0, width: 0.75 },
+    { depth: 0.3, width: 0 },
+    { depth: 0.55, width: -0.3 },
+    { depth: 0.55, width: 0.3 },
+    { depth: 0.6, width: -0.85 },
+    { depth: 0.6, width: 0.85 },
+    { depth: 1, width: 0 },
+  ],
+}
+
 /** The formation for a side of `outfielders`. */
 export function formationFor(outfielders: number): Formation {
   if (outfielders === 1) return ONE
   if (outfielders === 2) return ONE_ONE
   if (outfielders === 4) return DIAMOND
+  if (outfielders === 10) return FOUR_THREE_THREE
   throw new Error(`no formation for ${outfielders} outfielders`)
 }
