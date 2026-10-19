@@ -48,8 +48,13 @@ const names = (world: Match, players: number[]) => players.map((eid) => playerLa
 
 /** A loose ball is one off everyone's feet with no pass on its way. */
 const LOOSE_FROM = 2.5
-/** Chasing it: running at it at least this fast (m/s), closing on it at least this fast, from within this far (m). */
+/**
+ * Chasing it: running at it at least this fast (m/s), within this angle
+ * (rad) of straight at it, and closing on it at least this fast, from within
+ * this far (m).
+ */
 const CHASE_RUNNING = 2
+const CHASE_ANGLE = 0.5
 const CHASE_CLOSING = 3
 const CHASE_RANGE = 20
 
@@ -73,7 +78,8 @@ function doubleChase(): Detector {
           // Their own run at it, and how fast the gap is shrinking with the ball's movement counted too.
           const running = (Velocity.x[eid] * dx + Velocity.y[eid] * dy) / d
           const closing = running - (Velocity.x[ball] * dx + Velocity.y[ball] * dy) / d
-          return running >= CHASE_RUNNING && closing >= CHASE_CLOSING
+          const straightAt = running >= speed(eid) * cos(CHASE_ANGLE)
+          return running >= CHASE_RUNNING && straightAt && closing >= CHASE_CLOSING
         })
         if (chasing.length >= 2) found.set(`${team}`, { players: chasing, detail: `${names(world, chasing)} all running at the loose ball` })
       }

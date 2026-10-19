@@ -34,6 +34,10 @@ describe('detectors', () => {
     setVec(Velocity, a, 6, -3, 0)
     setVec(Velocity, b, 6, 3, 0)
     expect(d.look(world).get('0')?.players.sort()).toEqual([a, b].sort())
+    // Shifting across with the block, well off the ball's line, isn't chasing it either.
+    setVec(Velocity, b, 2, 6, 0)
+    expect(d.look(world).size).toBe(0)
+    setVec(Velocity, b, 6, 3, 0)
     // The cover running to his spot behind the ball isn't chasing it.
     Mark.cover[b] = 1
     expect(d.look(world).size).toBe(0)
