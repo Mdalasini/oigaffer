@@ -35,6 +35,12 @@ const FACING_BACK = 1.9
 const RELIEVED = 1.3
 const SHOW_DISTANCES = [8, 11, 14]
 const SHOW_DIRECTIONS = 12
+/**
+ * Having picked a spot to show in, they make for it for this long (s)
+ * before weighing the spots up again, as long as it stays onside and on the
+ * pitch: a movement is committed to, not re-judged from scratch every look.
+ */
+const SHOW_COMMIT = 1
 /** Another spot must beat the current one by this share of its value, and at least KEEP_SPOT_MIN, to be worth moving to. */
 const KEEP_SPOT = 0.2
 const KEEP_SPOT_MIN = 0.01
@@ -138,6 +144,15 @@ const RUN_REST = 2.5
  */
 export function attackingIntent(world: Match, eid: number): Intent {
   const carrier = world.carrier
+  // Showing for it when a pass is played elsewhere, they keep going where they were, the next pass may well come
+  // there, unless that's on top of the passer: then they'd only crowd him, and take up the shape instead. If the
+  // pass has made them the rest defence, that comes first.
+  const pass = world.pass
+  if (world.phase === 'play' && pass && pass.to !== eid && OffBall.showing[eid] && Run.phase[eid] === RunPhase.None && restDefender(world) !== eid) {
+    if (hypot(Call.x[eid] - Position.x[pass.from], Call.y[eid] - Position.y[pass.from]) >= SPACING) {
+      return because(world, { x: Call.x[eid], y: Call.y[eid], effort: Effort.Run }, 'keeps showing while the pass is on')
+    }
+  }
   // While the keeper has it, or a pass is on its way to someone else, they keep the shape; a run already going goes on.
   if (world.phase !== 'play' || carrier === eid || (world.pass && Run.phase[eid] !== RunPhase.Go)) {
     endRun(world, eid)
@@ -380,10 +395,13 @@ function showForIt(world: Match, eid: number): Intent {
     const overlap = others.reduce((sum, other) => sum + Math.max(0, 1 - Math.abs(angleDelta(angle, other)) / SAME_ANGLE), 0)
     return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y) - SAME_ANGLE_COST * overlap
   }
+  const onPitch = (x: number, y: number) => Math.abs(x) <= world.pitch.halfLength - 1.5 && Math.abs(y) <= world.pitch.halfWidth - 1.5
+  const keepable = OffBall.showing[eid] === 1 && along(team, Call.x[eid]) <= limit && onPitch(Call.x[eid], Call.y[eid])
+  if (keepable && world.time - OffBall.showSince[eid] < SHOW_COMMIT) return { x: Call.x[eid], y: Call.y[eid], effort: Effort.Run }
   // The spot they're already showing in keeps them unless another is clearly better.
   let best = { x: Position.x[eid], y: Position.y[eid] }
   let bestScore = -Infinity
-  if (OffBall.showing[eid] && along(team, Call.x[eid]) <= limit) {
+  if (keepable) {
     best = { x: Call.x[eid], y: Call.y[eid] }
     const current = score(best.x, best.y)
     bestScore = current + Math.abs(current) * KEEP_SPOT + KEEP_SPOT_MIN
@@ -393,7 +411,7 @@ function showForIt(world: Match, eid: number): Intent {
       const angle = (i / SHOW_DIRECTIONS) * Math.PI * 2
       const x = bx + cos(angle) * distance
       const y = by + sin(angle) * distance
-      if (Math.abs(x) > world.pitch.halfLength - 1.5 || Math.abs(y) > world.pitch.halfWidth - 1.5 || along(team, x) > limit) continue
+      if (!onPitch(x, y) || along(team, x) > limit) continue
       const s = score(x, y)
       if (s > bestScore) {
         best = { x, y }
@@ -401,6 +419,7 @@ function showForIt(world: Match, eid: number): Intent {
       }
     }
   }
+  if (!OffBall.showing[eid] || best.x !== Call.x[eid] || best.y !== Call.y[eid]) OffBall.showSince[eid] = world.time
   OffBall.showing[eid] = 1
   Call.kind[eid] = CallKind.Feet
   Call.x[eid] = best.x
