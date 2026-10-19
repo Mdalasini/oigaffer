@@ -97,8 +97,8 @@ function doubleChase(): Detector {
 const LEG = 0.5
 const LEG_GROUND = 1
 const REVERSAL = (2 * Math.PI) / 3
-/** This many reversals within this many seconds is dithering. */
-const DITHER_REVERSALS = 2
+/** This many reversals within this many seconds is dithering: back, forth and back again. Two is often just shifting with the ball as it is switched. */
+const DITHER_REVERSALS = 3
 const DITHER_WINDOW = 4
 
 /** An off-ball player going back and forth: changing their mind about where to go. */
