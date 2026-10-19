@@ -91,6 +91,8 @@ export const CONTROL_RADIUS = 1.5
 const CHASE_GAIN = 3
 /** Slower than this (m/s), a dribbler turns on the spot to face the way they're taking the ball. */
 const TURN_ON_BALL_BELOW = 1.5
+/** A dribbler with the ball just out of reach runs at least this much faster (m/s) than it rolls, to get back on it. */
+const CATCH_UP = 1
 /** Seconds ahead a dribbler reads the ball's roll. */
 const BALL_LOOKAHEAD = 0.15
 
@@ -112,7 +114,9 @@ export function dribble(eid: number, ball: number, style: TouchStyle, dirX: numb
   // the ball has got away and needs chasing down.
   const away = footDistance(eid, ball) > CONTROL_RADIUS
   const closeControl = style === TouchStyle.Small ? closeControlSpeed(Physical.pace[eid], Outfielder.dribbling[eid]) : Infinity
-  const cap = away ? Infinity : Math.min(maxSpeed, closeControl)
+  // Short strides or not, they have to be able to run the ball down for the next touch.
+  const catchUp = ballAtFeet(eid, ball) ? 0 : hypot(Velocity.x[ball], Velocity.y[ball]) + CATCH_UP
+  const cap = away ? Infinity : Math.min(maxSpeed, Math.max(closeControl, catchUp))
   const speed = hypot(vx, vy)
   if (speed > cap) {
     vx *= cap / speed

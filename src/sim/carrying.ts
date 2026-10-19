@@ -1,4 +1,4 @@
-import { Carry, Outfielder, Position, Team } from './components'
+import { Carry, Outfielder, Position, Team, Velocity } from './components'
 import { tackleSkill } from './grades'
 import type { Match } from './match'
 import { seenX, seenY } from './perception'
@@ -32,6 +32,11 @@ const SHIELDED_SHARE = 0.35
  */
 const IN_THE_WAY = 2
 const IN_THE_WAY_SLOPE = 0.6
+/**
+ * A direction needs room for the carry and for pulling up or turning at the
+ * end of it: the ground covered in this long (s) at the speed they're going.
+ */
+const TURN_TIME = 0.6
 /** Rethink this often (s). */
 const DECIDE_EVERY = 0.25
 
@@ -69,6 +74,7 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
   const tackled = TACKLE_SHARE * tackleSkill(Outfielder.tackling[presser], Outfielder.dribbling[carrier])
   const lost = threat(world.pitch, them, bx, by)
   const toGoal = atan2(-by, attackedGoalX(world.pitch, team) - bx)
+  const needed = CARRY_REACH + TURN_TIME * hypot(Velocity.x[carrier], Velocity.y[carrier])
 
   let best = -Infinity
   plan.dirX = cos(toGoal)
@@ -79,7 +85,7 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
     const angle = toGoal + (i / DIRECTIONS) * Math.PI * 2
     const dx = cos(angle)
     const dy = sin(angle)
-    if (roomAhead(world.pitch, bx, by, dx, dy) < CARRY_REACH) continue
+    if (roomAhead(world.pitch, bx, by, dx, dy) < needed) continue
     const x = bx + dx * CARRY_REACH
     const y = by + dy * CARRY_REACH
     const lead = teamArrival(world, them, x, y, CHALLENGE_REACH, carrier) - arrivalTime(world, carrier, x, y, 0, 0, carrier)
