@@ -10,6 +10,7 @@
     "test": "bun test",
     "measure": "bun scripts/measure.ts",
     "inspect": "bun scripts/inspect.ts",
+    "detect": "bun scripts/detect.ts",
     "preview": "vite preview"
   },
   "dependencies": {

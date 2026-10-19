@@ -7,7 +7,8 @@
 // onside; each team's shape; how passes, take-ons, big touches and challenges
 // go; and how long each system took per simulated minute, so a change can be
 // judged on gameplay and performance together. Counts marked /90 are per team
-// per 90 minutes.
+// per 90 minutes, except oddities (see `bun run detect`), which are for both
+// teams together.
 import { Position, TakeOn, TouchStyle, Velocity } from '../src/sim/components'
 import type { ChallengeKind } from '../src/sim/challenge'
 import { createMatch, MATCH_SYSTEMS, type Match } from '../src/sim/match'
@@ -15,6 +16,8 @@ import { FIXED_DT } from '../src/sim/constants'
 import { pitchFor } from '../src/sim/pitch'
 import { along, onsideLimit } from '../src/sim/shape'
 import { ownGoalX } from '../src/sim/teams'
+import { LOOK_EVERY, watchFor } from '../src/sim/detectors'
+import { ticksAt } from '../src/sim/replay'
 
 /** A carrier working a defender counts as a take-on once the defender is this close (m) to the ball. */
 const TAKE_ON_COUNTED = 3
@@ -40,14 +43,17 @@ for (const seed of seeds) {
   // Each player's heading at the last sample, to count sharp changes of direction.
   const heading = new Map<number, number>()
   const play = watchPlay(world)
+  const oddities = watchFor(world)
   const start = performance.now()
   for (let tick = 0; world.time < minutes * 60; tick++) {
     step(world, spent)
     play.afterStep()
+    if ((tick + 1) % ticksAt(LOOK_EVERY) === 0) oddities.look()
     if (tick % 12 || world.phase !== 'play') continue
     sample(world, tally, heading)
   }
   const ms = performance.now() - start
+  oddities.finish()
   const s = world.stats
   console.log(`seed ${seed}: goals ${s[0].goals}-${s[1].goals} shots ${s[0].shots}/${s[1].shots} saved ${s[0].saved}/${s[1].saved} passes ${s[0].passes}/${s[1].passes} done ${pct(s[0].completed, s[0].passes)}/${pct(s[1].completed, s[1].passes)} offsides ${s[0].offsides + s[1].offsides} won ${s[0].won}/${s[1].won}`)
   const t = tally
@@ -59,6 +65,7 @@ for (const seed of seeds) {
   console.log(`  on the ball: take-ons ${per90(p.takeOns)}/90, lost ${pct(p.takeOnsLost, p.takeOns)} | big touches ${per90(p.large)}/90, lost ${pct(p.largeLost, p.large)} | possessions ${per90(s[0].attacks + s[1].attacks)}/90`)
   const kinds = (['stand', 'slide', 'barge'] as ChallengeKind[]).map((k) => `${k} ${per90(p.challenges[k].n)}/90 won ${pct(p.challenges[k].won, p.challenges[k].n)} poked ${pct(p.challenges[k].poked, p.challenges[k].n)}`)
   console.log(`  challenges: ${kinds.join(' | ')}`)
+  console.log(`  oddities: ${oddities.detectors.map((d) => `${d.name} ${((oddities.findings.filter((f) => f.detector === d.name).length * 90) / minutes).toFixed(0)}/90`).join(', ')}`)
   const systems = [...spent].sort((a, b) => b[1] - a[1]).map(([name, time]) => `${name} ${(time / minutes).toFixed(1)}`)
   console.log(`  cost: ${(ms / minutes).toFixed(0)} ms per sim-minute | ${systems.join(', ')}`)
   for (const [name, time] of spent) totals.set(name, (totals.get(name) ?? 0) + time / minutes / seeds.length)
