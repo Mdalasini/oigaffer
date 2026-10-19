@@ -303,7 +303,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     }
   }
   Call.kind[eid] = CallKind.None
-  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid], eid).safety >= CALL_WHEN_SAFE) {
+  if (mayCall && rateFeetPass(world, world.possession, eid, Position.x[eid], Position.y[eid], eid, Position.x[world.ball], Position.y[world.ball], true).safety >= CALL_WHEN_SAFE) {
     Call.kind[eid] = CallKind.Feet
     Call.x[eid] = Position.x[eid]
     Call.y[eid] = Position.y[eid]

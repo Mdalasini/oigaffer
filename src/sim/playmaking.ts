@@ -59,6 +59,11 @@ const MAX_PASS_TURN = 2.4
 const CLEAN_PASS_TURN = 1
 /** Receiving with this many seconds before an opponent arrives counts as fully open. */
 const OPEN_TIME = 1.5
+/**
+ * How much of the threat where they'd get it hangs on being open: a receiver
+ * closed down at once keeps the rest, as most do keep a ball played to them.
+ */
+const OPEN_WEIGHT = 0.25
 /** How sharply a lead in the race to a through ball turns into winning it (s). */
 const RACE_SCALE = 0.25
 /** A pass has to be worth this much more than keeping the ball before it's played. */
@@ -266,19 +271,21 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   const y = my + seenVy(world, carrier, mate) * rough
   const distance = hypot(x - bx, y - by)
   if (!playable(world, carrier, bx, by, x, y, distance)) return null
-  const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier)
+  const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier, bx, by, true)
   return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
 }
 
 /**
  * How good a pass to `receiver`'s feet at (x, y) would be from where the
  * ball is now, or from (bx, by), as `judge` reckons it. Off-ball players use
- * it too, to pick a spot to show for it or to open a lane.
+ * it too, to pick a spot to show for it or to open a lane: only for a
+ * receiver who is `there` already does it count their coming to meet it.
  */
-export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball]) {
+export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball], there = false) {
   const distance = hypot(x - bx, y - by)
   const speed = rollSpeedFor(distance, FEET_ARRIVAL)
-  const safety = passSafety(world, team, bx, by, x, y, speed, judge)
+  // Only a receiver already about there steps in to meet it; one judging a spot to move to isn't there yet.
+  const safety = passSafety(world, team, bx, by, x, y, speed, judge, there ? receiver : -1)
   const value = passValue(world, team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance), judge), bx, by, x, y)
   return { speed, safety, value }
 }
@@ -337,7 +344,7 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
   const time = teamArrival(world, opponent(team), x, y, 0.95, judge) - arrive
   const open = clamp(time / OPEN_TIME, 0, 1)
   const forward = Math.max(0, cos(angleDelta(seenFacing(world, judge, receiver), attackDir(team) > 0 ? 0 : Math.PI)))
-  return threat(world.pitch, team, x, y) * (0.5 + 0.5 * open) * (0.85 + 0.15 * forward)
+  return threat(world.pitch, team, x, y) * (1 - OPEN_WEIGHT + OPEN_WEIGHT * open) * (0.85 + 0.15 * forward)
 }
 
 /**

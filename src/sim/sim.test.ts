@@ -50,11 +50,11 @@ describe('shooting', () => {
 
 describe('match outcomes', () => {
   test('every shot is accounted for, and both sides attack and win the ball back', () => {
-    // Over three ten-minute matches: one alone can leave a side with as few as two shots.
+    // Over three ten-minute five-a-side matches: one alone can leave a side with as few as two shots.
     const shots = [0, 0]
     const won = [0, 0]
     for (const seed of [5, 6, 7]) {
-      simulateMatch(10, { seed }).forEach((s, team) => {
+      simulateMatch(10, { seed, outfielders: 4 }).forEach((s, team) => {
         expect(s.goals + s.saved + s.missed).toBe(s.shots)
         shots[team] += s.shots
         won[team] += s.won

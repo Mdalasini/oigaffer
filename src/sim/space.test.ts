@@ -155,6 +155,22 @@ describe('control and passing lanes', () => {
     expect(passSafety(world, RED, -10, 0, -10, 12, 12)).toBeGreaterThan(0.9)
   })
 
+  test('a marker behind the receiver can’t cut out a pass to their feet; one in front of them still can', () => {
+    for (const [markerX, safe] of [[6.5, true], [3, false]] as const) {
+      const world = placed(-10, 0, markerX, 0)
+      const receiver = world.teams[RED].outfielders[1]
+      setVec(Position, receiver, 5, 0, 0)
+      Facing.angle[receiver] = Math.PI
+      const alone = passSafety(world, RED, -10, 0, 5, 0, 10)
+      const met = passSafety(world, RED, -10, 0, 5, 0, 10, -1, receiver)
+      if (safe) {
+        // Judged against the ball alone, the marker gets to the spot first; but the receiver is already there.
+        expect(alone).toBeLessThan(0.2)
+        expect(met).toBeGreaterThan(0.8)
+      } else expect(met).toBeLessThan(0.2)
+    }
+  })
+
   test('a pass that stops short of its target never gets there', () => {
     const world = placed(-10, 0, 10, 10)
     expect(passSafety(world, RED, -10, 0, 0, 0, 1)).toBe(0)
