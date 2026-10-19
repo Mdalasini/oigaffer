@@ -1,5 +1,5 @@
 import { hasComponent } from 'bitecs'
-import { DefenderMode, Defender, Mark, OffBalance, Position, Sliding, Team, Velocity } from './components'
+import { DefenderMode, Defender, Mark, OffBall, OffBalance, Position, Sliding, Team, Velocity } from './components'
 import type { Match } from './match'
 import { ownGoalX } from './teams'
 import { playerLabel } from './trace'
@@ -56,6 +56,8 @@ const LOOSE_FROM = 2.5
 const CHASE_RUNNING = 2
 const CHASE_ANGLE = 0.5
 const CHASE_CLOSING = 3
+/** An off-ball player is only after the ball itself if the spot they're making for is this close (m) to it. */
+const CHASE_TARGET = 3
 const CHASE_RANGE = 20
 
 /** Two or more of a team running at the same loose ball, besides their cover: one should go, the rest hold. */
@@ -75,6 +77,9 @@ function doubleChase(): Detector {
           const d = hypot(dx, dy)
           // The cover runs to his spot behind the ball, often along its path: that's his job, not a chase.
           if (down(world, eid) || d > CHASE_RANGE || Mark.cover[eid]) return false
+          // Others off the ball may be dropping into the block round it: only making for the ball itself is chasing it.
+          const onIt = eid === world.carrier || eid === world.presser
+          if (!onIt && hypot(OffBall.targetX[eid] - Position.x[ball], OffBall.targetY[eid] - Position.y[ball]) > CHASE_TARGET) return false
           // Their own run at it, and how fast the gap is shrinking with the ball's movement counted too.
           const running = (Velocity.x[eid] * dx + Velocity.y[eid] * dy) / d
           const closing = running - (Velocity.x[ball] * dx + Velocity.y[ball] * dy) / d

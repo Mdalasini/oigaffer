@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Mark, Position, Team, TouchStyle, Velocity } from './components'
+import { Mark, OffBall, Position, Team, TouchStyle, Velocity } from './components'
 import { createDetectors, LOOK_EVERY, watchFor, type Detector } from './detectors'
 import { createMatch, setVec, stepMatch, type Match } from './match'
 import { playBack, ticksAt, type Replay } from './replay'
@@ -33,7 +33,15 @@ describe('detectors', () => {
     setVec(Position, b, 0, -5, 0)
     setVec(Velocity, a, 6, -3, 0)
     setVec(Velocity, b, 6, 3, 0)
+    for (const eid of [a, b]) {
+      OffBall.targetX[eid] = 10
+      OffBall.targetY[eid] = 0
+    }
     expect(d.look(world).get('0')?.players.sort()).toEqual([a, b].sort())
+    // Running the same way, but to a place in the block 8 m short of the ball, b isn't after it.
+    OffBall.targetX[b] = 2
+    expect(d.look(world).size).toBe(0)
+    OffBall.targetX[b] = 10
     // Shifting across with the block, well off the ball's line, isn't chasing it either.
     setVec(Velocity, b, 2, 6, 0)
     expect(d.look(world).size).toBe(0)
