@@ -53,7 +53,7 @@ const CHASE_RUNNING = 2
 const CHASE_CLOSING = 3
 const CHASE_RANGE = 20
 
-/** Two or more of a team running at the same loose ball: one should go, the rest cover. */
+/** Two or more of a team running at the same loose ball, besides their cover: one should go, the rest hold. */
 function doubleChase(): Detector {
   return {
     name: 'doubleChase',
@@ -68,7 +68,8 @@ function doubleChase(): Detector {
           const dx = Position.x[ball] - Position.x[eid]
           const dy = Position.y[ball] - Position.y[eid]
           const d = hypot(dx, dy)
-          if (down(world, eid) || d > CHASE_RANGE) return false
+          // The cover runs to his spot behind the ball, often along its path: that's his job, not a chase.
+          if (down(world, eid) || d > CHASE_RANGE || Mark.cover[eid]) return false
           // Their own run at it, and how fast the gap is shrinking with the ball's movement counted too.
           const running = (Velocity.x[eid] * dx + Velocity.y[eid] * dy) / d
           const closing = running - (Velocity.x[ball] * dx + Velocity.y[ball] * dy) / d
