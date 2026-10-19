@@ -67,3 +67,20 @@ describe('replay', () => {
     expect(() => decodeFlag('hello')).toThrow()
   })
 })
+
+describe('decisions', () => {
+  test('reading decisions back never changes the match', () => {
+    const replay: Replay = { seed: 11, outfielders: 4, inputs: [] }
+    const quiet = fingerprints(replay, 60)
+    const said = new Map<number, number>()
+    const hashes: string[] = []
+    const match = playBack(replay, (world, tick) => {
+      world.onDecision ??= (player) => said.set(player, (said.get(player) ?? 0) + 1)
+      if (tick % ticksAt(1) === 0) hashes.push(stateHash(world))
+      return tick < ticksAt(60)
+    })
+    expect(hashes).toEqual(quiet)
+    // Every outfielder had something to say.
+    for (const team of match.teams) for (const eid of team.outfielders) expect(said.get(eid)).toBeGreaterThan(0)
+  })
+})

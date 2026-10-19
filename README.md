@@ -205,8 +205,11 @@ The sim is deterministic: a match is decided by its seed and the inputs made to
 it (grade changes, shots asked for, restarts), so any moment can be played again
 exactly. `bun run inspect --seed 1 --from 2:10 --to 2:20` replays a stretch and
 writes it out as text: every player's position, movement and job twice a second,
-with each cue and event as it happens. `--every`, `--players` and `--outfielders`
-narrow it down.
+with each cue and event as it happens, and each decision a player makes with
+why: the options a carrier weighed and what each was worth, an attacker's reason
+for showing, running or holding, a defender's marking job and how tightly they
+are picking their man up, a presser's challenges. `--every`, `--players`, `--no-why` and
+`--outfielders` narrow it down.
 
 ## Layout
 

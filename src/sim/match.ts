@@ -260,6 +260,12 @@ export interface MatchContext {
   onEvent?: (event: MatchEvent) => void
   /** Called with each moment players react to, before they do. */
   onCue?: (cue: Cue) => void
+  /**
+   * Called with each choice a player makes and why, for reading a match back
+   * (see `trace`). Explaining is skipped while nobody listens, and never
+   * changes what happens.
+   */
+  onDecision?: (player: number, text: string) => void
 }
 
 export type Match = World<MatchContext>

@@ -11,8 +11,8 @@ import { hypot } from './fmath'
  */
 
 const TEAM_LETTER = ['R', 'B']
-const EFFORT_NAME: Record<number, string> = Object.fromEntries(Object.entries(Effort).map(([name, value]) => [value, name.toLowerCase()]))
-const DEFENDER_MODE_NAME: Record<number, string> = Object.fromEntries(Object.entries(DefenderMode).map(([name, value]) => [value, name.toLowerCase()]))
+export const EFFORT_NAME: Record<number, string> = Object.fromEntries(Object.entries(Effort).map(([name, value]) => [value, name.toLowerCase()]))
+export const DEFENDER_MODE_NAME: Record<number, string> = Object.fromEntries(Object.entries(DefenderMode).map(([name, value]) => [value, name.toLowerCase()]))
 const RUN_PHASE_NAME: Record<number, string> = Object.fromEntries(Object.entries(RunPhase).map(([name, value]) => [value, name.toLowerCase()]))
 const CALL_NAME: Record<number, string> = Object.fromEntries(Object.entries(CallKind).map(([name, value]) => [value, name.toLowerCase()]))
 

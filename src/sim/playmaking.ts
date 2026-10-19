@@ -16,6 +16,7 @@ import { planCarry } from './carrying'
 import { shotChance, threat } from './space/threat'
 import { attackDir, attackedGoalX, opponent } from './teams'
 import { atan2, cos, exp, hypot, sin } from './fmath'
+import { playerLabel } from './trace'
 
 /** A pass the carrier could play, and what it's worth. */
 export interface PassOption {
@@ -117,25 +118,44 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
 
   const error = judgementError(Outfielder.decisions[carrier])
   const judged = (value: number) => value + gaussian(world.rng) * error * Math.max(Math.abs(value), MIN_JUDGED)
-  const keep = judged(keepValue(world, carrier))
+  const kept = keepValue(world, carrier)
+  const keep = judged(kept)
+  // What they weighed, as text, only for someone reading the match back.
+  const weighed: { judged: number; text: string }[] | null = world.onDecision ? [{ judged: keep + PASS_MARGIN, text: `keep ${worth(keep, kept)}` }] : null
   let best: PassOption | 'shoot' | null = null
   let bestJudged = keep + PASS_MARGIN
   if (shot !== null) {
     const v = judged(shot)
+    weighed?.push({ judged: v, text: `shoot ${worth(v, shot)}` })
     if (v > bestJudged) {
       best = 'shoot'
       bestJudged = v
     }
   }
   for (const option of passOptions(world, carrier)) {
-    const v = judged(option.value) - returnCost(world, carrier, option)
+    const back = returnCost(world, carrier, option)
+    const v = judged(option.value) - back
+    weighed?.push({ judged: v, text: `${option.kind} to ${playerLabel(world, option.receiver)} ${worth(v, option.value)} safety ${option.safety.toFixed(2)}${back ? ' straight back' : ''}` })
     if (v > bestJudged) {
       best = option
       bestJudged = v
     }
   }
+  if (weighed) {
+    const choice = best === null ? 'keeps the ball' : best === 'shoot' ? 'shoots' : `passes ${best.kind} to ${playerLabel(world, best.receiver)}`
+    weighed.sort((a, b) => b.judged - a.judged)
+    const shown = weighed.slice(0, WEIGHED_SHOWN).map((w) => w.text).join(', ')
+    const more = weighed.length > WEIGHED_SHOWN ? `, and ${weighed.length - WEIGHED_SHOWN} worse` : ''
+    world.onDecision!(carrier, `${choice} | best first, judged (true) xG: ${shown}${more}`)
+  }
   return best
 }
+
+/** How many of the options weighed to list, best first. */
+const WEIGHED_SHOWN = 5
+
+/** A value as judged, with its true value after it. */
+const worth = (judged: number, truth: number) => `${judged.toFixed(3)} (${truth.toFixed(3)})`
 
 /**
  * What it costs to give the ball straight back to whoever just passed it:

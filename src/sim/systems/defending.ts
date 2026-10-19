@@ -11,6 +11,7 @@ import { timeOnBall } from '../space/control'
 import { threat } from '../space/threat'
 import { attackDir, opponent, ownGoalX } from '../teams'
 import { hypot } from '../fmath'
+import { playerLabel } from '../trace'
 
 /** Scratch for where the defence reckons an attacker is. */
 const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
@@ -212,8 +213,16 @@ function shareMarking(world: Match, team: number) {
   })
   const jobs = assign(cost)
   free.forEach((d, i) => {
+    const before = world.onDecision && jobName(world, d)
     Mark.target[d] = jobs[i] === -1 || jobs[i] === attackers.length ? -1 : attackers[jobs[i]]
     // A lone defender behind the presser has to cover and mark at once.
     Mark.cover[d] = !held && (!coverJob || jobs[i] === attackers.length) ? 1 : 0
+    if (world.onDecision && jobName(world, d) !== before) world.onDecision(d, `team gives them a new job: ${jobName(world, d)} (was ${before})`)
   })
+}
+
+/** A defender's marking job, in words. */
+function jobName(world: Match, d: number): string {
+  const man = Mark.target[d] === -1 ? '' : `mark ${playerLabel(world, Mark.target[d])}`
+  return [Mark.cover[d] ? 'cover' : '', man].filter(Boolean).join(' and ') || 'hold the zone'
 }

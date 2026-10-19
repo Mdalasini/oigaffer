@@ -5,15 +5,17 @@
 //
 // <flag> is the text the game copies when you flag a moment. Options:
 //   --every <s>         seconds between snapshots of every player (default 0.5)
-//   --players R3,B2,BK  only list these players in snapshots
+//   --players R3,B2,BK  only list these players, in snapshots and decisions
+//   --no-why            leave out players' decisions
 //   --outfielders <n>   outfielders a side, with --seed (default 4)
 //
-// Cues (passes, turnovers, runs…) and events (tackles, shots, restarts) are
-// listed as they happen, between snapshots.
+// Cues (passes, turnovers, runs…), events (tackles, shots, restarts) and
+// players' decisions, with what they weighed, are listed as they happen,
+// between snapshots.
 import { OUTFIELDERS_PER_SIDE } from '../src/sim/constants'
 import { decodeFlag, playBack, secondsAt, ticksAt, type Flag } from '../src/sim/replay'
 import { stateHash } from '../src/sim/state'
-import { clock, describeCue, describeEvent, describePlayers, describeSituation, parseClock, TRACE_LEGEND } from '../src/sim/trace'
+import { clock, playerLabel, describeCue, describeEvent, describePlayers, describeSituation, parseClock, TRACE_LEGEND } from '../src/sim/trace'
 
 const args = process.argv.slice(2)
 const option = (name: string) => {
@@ -49,6 +51,12 @@ playBack(flag, (world, tick) => {
   if (tick === flag.from) {
     world.onCue = (c) => console.log(`    ${clock(world.time)}  cue: ${describeCue(world, c)}`)
     world.onEvent = (e) => console.log(`    ${clock(world.time)}  event: ${describeEvent(e)}`)
+    if (!args.includes('--no-why')) {
+      world.onDecision = (player, text) => {
+        const label = playerLabel(world, player)
+        if (!only || only.has(label)) console.log(`    ${clock(world.time)}  ${label}: ${text}`)
+      }
+    }
   }
   if (tick >= flag.from && ((tick - flag.from) % every === 0 || tick === flag.to)) {
     console.log(`\n${describeSituation(world)}`)

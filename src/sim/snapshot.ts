@@ -16,7 +16,7 @@ export interface SavedState {
 }
 
 /** Context that never changes during a match, or that belongs to whoever is watching it, not to the match. */
-const KEPT: ReadonlySet<string> = new Set(['rng', 'pitch', 'teams', 'onEvent', 'onCue'])
+const KEPT: ReadonlySet<string> = new Set(['rng', 'pitch', 'teams', 'onEvent', 'onCue', 'onDecision'])
 
 const copy = (view: ArrayBufferView) => (view as Float32Array).slice()
 

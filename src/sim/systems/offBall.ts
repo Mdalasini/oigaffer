@@ -8,6 +8,7 @@ import { setTarget, steer } from '../movement'
 import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
 import { hypot } from '../fmath'
+import { EFFORT_NAME, playerLabel } from '../trace'
 
 /**
  * Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so
@@ -82,6 +83,7 @@ export function offBallSystem(world: Match, dt: number) {
       if (attacking) {
         const intent = attackingIntent(world, eid)
         go(world, eid, intent.x, intent.y, intent.effort)
+        if (world.onDecision) world.onDecision(eid, `${intent.why ?? 'moves'}: to ${spot(intent.x, intent.y)} at a ${EFFORT_NAME[intent.effort]}`)
       } else defend(world, eid)
       // How soon they look again depends on what they've just decided: setting off on a run keeps them alert.
       OffBall.decideIn[eid] = nextLook(world, eid)
@@ -132,6 +134,8 @@ function defend(world: Match, eid: number) {
   const by = Position.y[ball]
   let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : homePosition(world, eid)
   const man = Mark.target[eid]
+  // How far they've come off their spot to pick up their man, for someone reading the match back.
+  let pickedUp = 0
   if (man !== -1) {
     view(world, eid, man, seen)
     const mx = seen.x
@@ -155,14 +159,23 @@ function defend(world: Match, eid: number) {
     const w = clamp((ahead + MARK_FROM_BEHIND) / (MARK_WHEN_AHEAD + MARK_FROM_BEHIND), 0, 1)
     x += (markX - x) * w
     y += (markY - y) * w
+    pickedUp = w
   }
   // Never behind their own goal line.
   const dir = attackDir(team)
   x = clamp(x, -world.pitch.halfLength + 1, world.pitch.halfLength - 1)
   if ((x - goalX) * dir < 1) x = goalX + dir
   y = clamp(y, -world.pitch.halfWidth + 1, world.pitch.halfWidth - 1)
-  go(world, eid, x, y, effortFor(world, eid, x, y, true))
+  const effort = effortFor(world, eid, x, y, true)
+  go(world, eid, x, y, effort)
+  if (world.onDecision) {
+    const from = Mark.cover[eid] ? 'covers behind the ball' : 'holds their place in the block'
+    const marking = man === -1 ? ', no man to mark' : `, ${Math.round(pickedUp * 100)}% of the way to marking ${playerLabel(world, man)} where they reckon he is ${spot(seen.x, seen.y)}${pressCue(world) ? ', tight on a pressing cue' : ''}`
+    world.onDecision(eid, `${from}${marking}: to ${spot(x, y)} at a ${EFFORT_NAME[effort]}`)
+  }
 }
+
+const spot = (x: number, y: number) => `(${x.toFixed(1)}, ${y.toFixed(1)})`
 
 /**
  * How hard to work to get there: a sprint to recover when a defender is on

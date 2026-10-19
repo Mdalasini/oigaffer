@@ -77,6 +77,7 @@ export function defenderSystem(world: Match, dt: number) {
       continue
     }
     const next = chooseMode(eid, goalX)
+    if (world.onDecision && next !== mode) world.onDecision(eid, next === DefenderMode.Run ? 'runs at the ball: too far off it, or not goal-side' : 'jockeys: close enough and goal-side')
     Defender.mode[eid] = next
     if (next === DefenderMode.Jockey) jockey(eid, goalX)
     else run(eid, goalX)
@@ -102,20 +103,30 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   const skill = gradeT(Outfielder.tackling[eid])
   const chance = (rate: number) => rng() < rate * dt
 
+  const said = (text: string) => world.onDecision?.(eid, `${text} (ball read ${ballDistance.toFixed(1)} m away, ${Math.round((ballAhead * 180) / Math.PI)}° off their facing)`)
   if (ballDistance <= STAND_REACH && ballAhead <= STAND_CONE) {
     const rate = exposedAtContact ? POUNCE_RATE : shielded ? STAND_RATE_SHIELDED : STAND_RATE_BASE + STAND_RATE_SKILL * skill
-    if (chance(rate)) return startStandingTackle(eid)
+    if (chance(rate)) {
+      said(`goes in with a standing tackle: ${exposedAtContact ? 'the ball will be off his feet' : shielded ? 'into a shielding carrier' : 'the ball in reach'}`)
+      return startStandingTackle(eid)
+    }
   }
   if (carrierDistance <= BARGE_RANGE && footDistance(carrier, ball) < CONTROL_RADIUS) {
     // Shoulder in on a carrier who is shielding, or who has the ball alongside.
     const rate = Shield.active[carrier] || Defender.mode[eid] === DefenderMode.Run ? BARGE_RATE : 0
-    if (chance(rate)) return startBarge(eid, carrier)
+    if (chance(rate)) {
+      said(`barges ${Shield.active[carrier] ? 'a shielding carrier' : 'the carrier, running alongside'}`)
+      return startBarge(eid, carrier)
+    }
   }
   // A slide is the last resort of a beaten defender at full tilt, for a ball the carrier has let out of their feet.
   const beaten = Defender.mode[eid] === DefenderMode.Run
   const running = hypot(Velocity.x[eid], Velocity.y[eid]) >= SLIDE_FROM_SPEED
   if (beaten && running && exposedIn(world, eid, 0) && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
-    if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
+    if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) {
+      said('slides in: beaten, at full tilt, and the ball is off his feet')
+      startSlide(world, eid)
+    }
   }
 }
 
