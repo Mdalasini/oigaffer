@@ -145,9 +145,10 @@ const RUN_REST = 2.5
 export function attackingIntent(world: Match, eid: number): Intent {
   const carrier = world.carrier
   // Showing for it when a pass is played elsewhere, they keep going where they were, the next pass may well come
-  // there, unless that's on top of the passer: then they'd only crowd him, and take up the shape instead.
+  // there, unless that's on top of the passer: then they'd only crowd him, and take up the shape instead. If the
+  // pass has made them the rest defence, that comes first.
   const pass = world.pass
-  if (world.phase === 'play' && pass && pass.to !== eid && OffBall.showing[eid] && Run.phase[eid] === RunPhase.None) {
+  if (world.phase === 'play' && pass && pass.to !== eid && OffBall.showing[eid] && Run.phase[eid] === RunPhase.None && restDefender(world) !== eid) {
     if (hypot(Call.x[eid] - Position.x[pass.from], Call.y[eid] - Position.y[pass.from]) >= SPACING) {
       return because(world, { x: Call.x[eid], y: Call.y[eid], effort: Effort.Run }, 'keeps showing while the pass is on')
     }

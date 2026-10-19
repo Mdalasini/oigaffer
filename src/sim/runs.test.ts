@@ -263,6 +263,27 @@ describe('five a side: complementary support', () => {
     expect(OffBall.showing[a]).toBe(0)
   })
 
+  test('a pass that makes someone showing for it the rest defence sends them back, not on', () => {
+    const world = closedDown(-5, 0, [[-16, 0], [-6, 9], [-3, 11]], [[-3.8, 0], [0, -5], [-2, -9], [6, 2]])
+    const [base, wide, , pivot] = world.teams[RED].outfielders
+    // The pivot has it, closed down, with the base player resting behind; the wide player shows for it.
+    handOver(world, pivot)
+    place(pivot, -5, 0)
+    expect(restDefender(world)).toBe(base)
+    const spot = attackingIntent(world, wide)
+    expect(OffBall.showing[wide]).toBe(1)
+    // The pivot, having moved off the other way, plays it back to the base player, who as its receiver is now the
+    // carrier: the wide player is deepest.
+    place(pivot, -12, -6)
+    world.pass = { from: pivot, to: base, kind: 'feet', x: -16, y: 0, time: world.time }
+    handOver(world, base)
+    expect(restDefender(world)).toBe(wide)
+    world.time += 2
+    const during = attackingIntent(world, wide)
+    expect(OffBall.showing[wide]).toBe(0)
+    expect(along(RED, during.x)).toBeLessThan(along(RED, spot.x))
+  })
+
   test('the rest defence is whoever plays deepest, and changes when they have the ball', () => {
     const world = createMatch({ seed: 3 })
     const reds = world.teams[RED].outfielders
