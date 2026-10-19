@@ -3,6 +3,7 @@ import { DefenderMode, Defender, Mark, OffBalance, Position, Sliding, Team, Velo
 import type { Match } from './match'
 import { ownGoalX } from './teams'
 import { playerLabel } from './trace'
+import { atan2, cos, hypot, sin } from './fmath'
 
 /**
  * Detectors for behaviour that looks wrong to someone watching: each spots
@@ -38,8 +39,8 @@ export interface Finding extends Sighting {
 /** Detectors look this often (s). */
 export const LOOK_EVERY = 0.1
 
-const speed = (eid: number) => Math.hypot(Velocity.x[eid], Velocity.y[eid])
-const distance = (a: number, b: number) => Math.hypot(Position.x[a] - Position.x[b], Position.y[a] - Position.y[b])
+const speed = (eid: number) => hypot(Velocity.x[eid], Velocity.y[eid])
+const distance = (a: number, b: number) => hypot(Position.x[a] - Position.x[b], Position.y[a] - Position.y[b])
 const down = (world: Match, eid: number) => hasComponent(world, eid, Sliding) || OffBalance.timer[eid] > 0
 /** The outfielders not on the ball and not pressing it. */
 const offBall = (world: Match, team: number) => world.teams[team].outfielders.filter((eid) => eid !== world.carrier && eid !== world.presser)
@@ -66,7 +67,7 @@ function doubleChase(): Detector {
         const chasing = world.teams[team].outfielders.filter((eid) => {
           const dx = Position.x[ball] - Position.x[eid]
           const dy = Position.y[ball] - Position.y[eid]
-          const d = Math.hypot(dx, dy)
+          const d = hypot(dx, dy)
           if (down(world, eid) || d > CHASE_RANGE) return false
           // Their own run at it, and how fast the gap is shrinking with the ball's movement counted too.
           const running = (Velocity.x[eid] * dx + Velocity.y[eid] * dy) / d
@@ -123,10 +124,10 @@ function dithering(): Detector {
             const dy = Position.y[eid] - start.y
             legStart.set(eid, { time: world.time, x: Position.x[eid], y: Position.y[eid] })
             // A leg that went nowhere doesn't set a direction, but doesn't break the run of legs either.
-            if (Math.hypot(dx, dy) >= LEG_GROUND) {
-              const angle = Math.atan2(dy, dx)
+            if (hypot(dx, dy) >= LEG_GROUND) {
+              const angle = atan2(dy, dx)
               const before = lastLeg.get(eid)
-              if (before != null && Math.abs(Math.atan2(Math.sin(angle - before), Math.cos(angle - before))) > REVERSAL) turned.push(world.time)
+              if (before != null && Math.abs(atan2(sin(angle - before), cos(angle - before))) > REVERSAL) turned.push(world.time)
               lastLeg.set(eid, angle)
             }
           }
@@ -156,7 +157,7 @@ function lostMan(): Detector {
       for (const eid of offBall(world, team)) {
         const man = Mark.target[eid]
         if (man === -1 || Mark.cover[eid] || man === world.carrier || down(world, eid)) continue
-        const toGoal = (p: number) => Math.hypot(goalX - Position.x[p], Position.y[p])
+        const toGoal = (p: number) => hypot(goalX - Position.x[p], Position.y[p])
         const gap = distance(eid, man)
         if (toGoal(man) > world.pitch.halfLength || toGoal(eid) - toGoal(man) < LOST_BEHIND || gap < LOST_DISTANCE) continue
         found.set(`${eid}`, { players: [eid, man], detail: `${playerLabel(world, eid)} ${gap.toFixed(1)} m off ${playerLabel(world, man)}, who is goal-side of them` })
@@ -220,19 +221,33 @@ function crowding(): Detector {
       if (world.phase !== 'play') return found
       for (const team of [0, 1]) {
         const players = offBall(world, team)
-        for (const a of players) {
-          const near = players.filter((b) => b !== a && distance(a, b) <= CROWD)
-          const crowd = [a, ...near].filter((p, _, all) => all.every((q) => distance(p, q) <= CROWD))
-          if (crowd.length >= 3) {
-            crowd.sort((x, y) => x - y)
-            found.set(`${team}:${crowd.join(',')}`, { players: crowd, detail: `${names(world, crowd)} bunched within ${CROWD} m` })
-            break
-          }
-        }
+        const crowd = crowdIn(players)
+        if (crowd) found.set(`${team}:${crowd.join(',')}`, { players: crowd, detail: `${names(world, crowd)} bunched within ${CROWD} m` })
       }
       return found
     },
   }
+}
+
+/**
+ * Three or more of `players` all within CROWD of each other, if there are:
+ * the first such three found, joined by anyone else close to all of them.
+ * Ordered by entity, so the same crowd is recognised from look to look.
+ */
+function crowdIn(players: number[]): number[] | null {
+  const close = (p: number, q: number) => distance(p, q) <= CROWD
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      if (!close(players[i], players[j])) continue
+      for (let k = j + 1; k < players.length; k++) {
+        if (!close(players[i], players[k]) || !close(players[j], players[k])) continue
+        const crowd = [players[i], players[j], players[k]]
+        for (const p of players) if (!crowd.includes(p) && crowd.every((q) => close(p, q))) crowd.push(p)
+        return crowd.sort((x, y) => x - y)
+      }
+    }
+  }
+  return null
 }
 
 /** A fresh set of every detector, for one match. */

@@ -109,6 +109,19 @@ describe('detectors', () => {
     expect(d.look(world).size).toBe(0)
   })
 
+  test('a crowd is found even with others nearby who are close to only some of it', () => {
+    const d = detector('crowding')
+    const world = createMatch({ seed: 1, outfielders: 10 })
+    world.phase = 'play'
+    world.carrier = world.teams[1].outfielders[0]
+    world.presser = world.teams[0].outfielders[0]
+    world.teams.forEach((team, t) => team.outfielders.forEach((eid, i) => setVec(Position, eid, (t ? 1 : -1) * (4 + 4 * (i % 5)), -18 + 9 * Math.floor(i / 5) + (t ? 0 : 30), 0)))
+    const [, a, b, c, e, f, g] = world.teams[0].outfielders
+    const spots: [number, number, number][] = [[a, 0, 0], [b, 4, 0], [c, 2, 3], [e, -4, 0], [f, 8, 0], [g, 2, 7]]
+    for (const [eid, x, y] of spots) setVec(Position, eid, x - 30, y, 0)
+    expect(d.look(world).get(`0:${[a, b, c].sort((x, y) => x - y).join(',')}`)).toBeDefined()
+  })
+
   test('an oddity counts only once it has lasted long enough', () => {
     const world = scene()
     const watch = watchFor(world, [detector('idlePresser')])
