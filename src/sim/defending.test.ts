@@ -358,4 +358,18 @@ describe('eleven a side: defending near goal on a full-size pitch', () => {
       expect(fromGoalLine).toBeLessThanOrEqual(9 + 18 + 1e-6)
     }
   })
+
+  test('at five and eleven a side, with the ball in behind the line by the goal line, the screen drops to the edge of the box', () => {
+    for (const outfielders of [4, 10]) {
+      const world = createMatch({ outfielders, seed: 1 })
+      const L = world.pitch.halfLength
+      world.possession = RED
+      // Red has the ball 3 m from Blue's goal line, wide of the post: behind Blue's deepest line.
+      setVec(Position, world.ball, L - 3, 9, BALL_RADIUS)
+      world.lines[BLUE] = baseLine(world, BLUE)
+      // The block's front comes back to 12 m ahead of the ball, keeping at least 8 m of depth in front of the line.
+      const front = Math.max(along(BLUE, L - 3) + 12, world.lines[BLUE] + 8)
+      for (const eid of world.teams[BLUE].outfielders) expect(along(BLUE, homePosition(world, eid).x)).toBeLessThanOrEqual(front + 1e-6)
+    }
+  })
 })

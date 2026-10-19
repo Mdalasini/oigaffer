@@ -37,6 +37,14 @@ const LINE_BEHIND_BALL = 15
 const LINE_DEEPEST_FROM_GOAL = 9
 /** From the back line to the front of the block without the ball (m). */
 const DEFEND_LENGTH = 18
+/**
+ * ...but the front of the block is never more than this far (m) ahead of the
+ * ball: with the ball in behind the line, down by the goal line, the screen
+ * drops to the edge of the box rather than leaving the space in front of
+ * the line to the attackers. The block keeps at least this depth (m).
+ */
+const DEFEND_FRONT_AHEAD_OF_BALL = 12
+const MIN_DEFEND_LENGTH = 8
 
 const ONSIDE_MARGIN = 1
 const ATTACK_BALL_SHIFT = 0.25
@@ -100,7 +108,8 @@ export function block(world: Match, team: number) {
   }
   const back = world.lines[team]
   const room = d.W - d.DEFEND_HALF_WIDTH
-  return { back, front: back + DEFEND_LENGTH, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: d.DEFEND_HALF_WIDTH }
+  const front = clamp(ballU + DEFEND_FRONT_AHEAD_OF_BALL, back + MIN_DEFEND_LENGTH, back + DEFEND_LENGTH)
+  return { back, front, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: d.DEFEND_HALF_WIDTH }
 }
 
 /**
