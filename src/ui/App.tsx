@@ -4,6 +4,7 @@ import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
 import { DefenderMode } from '../sim/components'
 import type { MatchEventKind, RestartKind, TeamStats } from '../sim/match'
 import { ControlPanel } from './ControlPanel'
+import { FlagPanel } from './FlagPanel'
 import { TEAM_STYLE } from './teamStyle'
 
 const RESTART_TEXT: Record<Exclude<RestartKind, 'kick-off'>, string> = {
@@ -50,13 +51,14 @@ export function App() {
   const snapshot = useSyncExternalStore(game.subscribe, game.getSnapshot)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const insetRef = useRef<HTMLDivElement>(null)
+  const labelsRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   // Start folded away on narrow screens, where the panel would cover the play.
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth >= 1000)
 
   useEffect(() => {
     try {
-      return game.mount(canvasRef.current!, insetRef.current!)
+      return game.mount(canvasRef.current!, insetRef.current!, labelsRef.current!)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -64,8 +66,16 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return
-      if (e.code === 'Space') {
+      if (e.target instanceof HTMLTextAreaElement || (e.target instanceof HTMLInputElement && e.target.type !== 'range')) return
+      if (game.getSnapshot().flag) {
+        if (e.code === 'Space') {
+          e.preventDefault()
+          game.toggleFlagPlay()
+        } else if (e.code === 'Escape') game.endFlag()
+        return
+      }
+      if (e.code === 'KeyF') game.startFlag()
+      else if (e.code === 'Space') {
         e.preventDefault()
         game.shoot()
       } else if (e.code === 'KeyR') game.reset()
@@ -81,6 +91,12 @@ export function App() {
     <main className="relative h-full w-full overflow-hidden bg-neutral-950 font-sans text-neutral-100 select-none">
       {/* On wide screens the pitch makes room for the open control panel rather than sitting under it. */}
       <canvas ref={canvasRef} className={`absolute inset-y-0 left-0 h-full w-full ${panelOpen ? 'lg:w-[calc(100%-19rem)]' : ''}`} />
+      {/* Player labels while flagging, placed by the game over the canvas. */}
+      <div
+        ref={labelsRef}
+        hidden
+        className={`pointer-events-none absolute inset-y-0 left-0 h-full w-full ${panelOpen ? 'lg:w-[calc(100%-19rem)]' : ''} [&>span]:absolute [&>span]:-translate-x-1/2 [&>span]:-translate-y-[170%] [&>span]:rounded [&>span]:bg-black/60 [&>span]:px-1 [&>span]:text-[11px] [&>span]:font-semibold [&>span]:leading-4`}
+      />
 
       <div className="absolute top-4 left-4 flex flex-col items-start gap-2">
         <Scoreboard stats={snapshot.stats} possession={snapshot.possession} />
@@ -128,6 +144,10 @@ export function App() {
       </div>
 
       <ControlPanel game={game} snapshot={snapshot} open={panelOpen} onOpenChange={setPanelOpen} />
+      {/* Over the pitch, not the control panel. */}
+      <div className={`pointer-events-none absolute inset-y-0 left-0 w-full ${panelOpen ? 'lg:w-[calc(100%-19rem)]' : ''} [&>*]:pointer-events-auto`}>
+        <FlagPanel game={game} flag={snapshot.flag} />
+      </div>
 
       {error && (
         <div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center text-rose-300">{error}</div>

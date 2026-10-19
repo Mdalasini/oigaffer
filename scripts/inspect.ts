@@ -12,6 +12,7 @@
 // listed as they happen, between snapshots.
 import { OUTFIELDERS_PER_SIDE } from '../src/sim/constants'
 import { decodeFlag, playBack, secondsAt, ticksAt, type Flag } from '../src/sim/replay'
+import { stateHash } from '../src/sim/state'
 import { clock, describeCue, describeEvent, describePlayers, describeSituation, parseClock, TRACE_LEGEND } from '../src/sim/trace'
 
 const args = process.argv.slice(2)
@@ -42,7 +43,9 @@ const earlier = flag.inputs.filter((i) => i.tick < flag.to)
 if (earlier.length) console.log(`inputs: ${earlier.map((i) => `${clock(secondsAt(i.tick))} ${i.kind === 'grade' ? `${i.team} ${i.role} ${i.key} → ${i.grade}` : i.kind}`).join(', ')}`)
 console.log(TRACE_LEGEND)
 
+let verified: boolean | undefined
 playBack(flag, (world, tick) => {
+  if (tick === flag.check?.tick) verified = stateHash(world) === flag.check.hash
   if (tick === flag.from) {
     world.onCue = (c) => console.log(`    ${clock(world.time)}  cue: ${describeCue(world, c)}`)
     world.onEvent = (e) => console.log(`    ${clock(world.time)}  event: ${describeEvent(e)}`)
@@ -53,3 +56,9 @@ playBack(flag, (world, tick) => {
   }
   return tick < flag.to
 })
+
+if (verified === false) {
+  console.log(`\nWARNING: the replay doesn't match the live game at ${clock(secondsAt(flag.check!.tick))}: the code has changed since the flag was made, or something in the sim isn't deterministic. The trace above isn't what was watched.`)
+} else if (verified) {
+  console.log(`\nReplay checked: it matches the live game exactly at ${clock(secondsAt(flag.check!.tick))}.`)
+}

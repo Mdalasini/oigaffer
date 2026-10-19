@@ -4,7 +4,7 @@ import type { Overlay } from '../render/overlay'
 import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
-import { Defender, DefenderMode, Shield, Team } from '../sim/components'
+import { Defender, DefenderMode, Position, Shield, Team } from '../sim/components'
 import { FIXED_DT, OUTFIELDERS_PER_SIDE } from '../sim/constants'
 import {
   createMatch,
@@ -21,7 +21,10 @@ import {
   type Role,
   type TeamStats,
 } from '../sim/match'
-import { applyInput, type Input, type Replay } from '../sim/replay'
+import { applyInput, encodeFlag, ticksAt, type Input, type Replay } from '../sim/replay'
+import { restoreState, saveState, type SavedState } from '../sim/snapshot'
+import { playerLabel } from '../sim/trace'
+import { Rewind } from './Rewind'
 import { attackedGoalX, TEAM_NAMES, type TeamName } from '../sim/teams'
 
 export interface GameSnapshot {
@@ -40,7 +43,27 @@ export interface GameSnapshot {
   /** The latest tackle or barge, for a moment after it happens. */
   challenge: { kind: ChallengeKind; result: ChallengeResult } | null
   overlay: Overlay
+  /** While a moment is being flagged, the stretch that can be looked back over and the part chosen, in steps. */
+  flag: FlagView | null
 }
+
+export interface FlagView {
+  earliest: number
+  latest: number
+  /** The step being shown. */
+  at: number
+  from: number
+  to: number
+  playing: boolean
+}
+
+interface Flagging extends FlagView {
+  /** The live match as it was when it was paused, to go back to. */
+  live: SavedState
+}
+
+/** A flag starts out covering the last this many seconds. */
+const FLAG_LENGTH = 10
 
 /** How long (s) a challenge result or a turnover stays on screen. */
 const CHALLENGE_SHOWN_FOR = 1.4
@@ -61,10 +84,13 @@ export class Game {
   private readonly record: Replay
   /** Steps taken since the match was created. */
   private tick = 0
+  private readonly rewind: Rewind
+  private flagging: Flagging | null = null
 
   constructor() {
     this.record = { seed: Date.now() >>> 0, outfielders: OUTFIELDERS_PER_SIDE, inputs: [] }
     this.match = createMatch({ seed: this.record.seed, outfielders: this.record.outfielders })
+    this.rewind = new Rewind(this.match, this.record)
     this.snapshot = this.takeSnapshot()
   }
 
@@ -73,8 +99,11 @@ export class Game {
     return { ...this.record, inputs: [...this.record.inputs] }
   }
 
-  /** Starts drawing into `canvas`; the goal view fills `inset`'s on-screen box. */
-  mount(canvas: HTMLCanvasElement, inset: HTMLElement): () => void {
+  /**
+   * Starts drawing into `canvas`; the goal view fills `inset`'s on-screen
+   * box, and while flagging, each player's label is placed in `labels`.
+   */
+  mount(canvas: HTMLCanvasElement, inset: HTMLElement, labels: HTMLElement): () => void {
     const renderer = new Renderer(canvas)
     let raf = 0
     let last = performance.now()
@@ -85,11 +114,20 @@ export class Game {
       accumulator += dt
       last = now
       while (accumulator >= FIXED_DT) {
-        stepMatch(this.match, FIXED_DT)
-        this.tick++
         accumulator -= FIXED_DT
+        const flag = this.flagging
+        if (!flag) {
+          stepMatch(this.match, FIXED_DT)
+          this.tick++
+          this.rewind.stepped(this.tick)
+        } else if (flag.playing && flag.at < flag.latest) {
+          this.rewind.step(flag.at++)
+        } else if (flag.playing) {
+          flag.playing = false
+        }
       }
       this.render(renderer, canvas, inset)
+      this.placeLabels(canvas, labels)
       this.publishIfChanged()
       raf = requestAnimationFrame(frame)
     }
@@ -123,8 +161,70 @@ export class Game {
     this.input({ tick: this.tick, kind: 'reset' })
   }
 
-  /** Every change from outside goes through here, so the record misses none. */
+  /** Pauses the match to flag a moment in its last two minutes. */
+  startFlag() {
+    if (this.flagging) return
+    const latest = this.tick
+    const earliest = this.rewind.earliest
+    const from = Math.max(earliest, latest - ticksAt(FLAG_LENGTH))
+    this.flagging = { live: saveState(this.match), earliest, latest, at: latest, from, to: latest, playing: false }
+    this.seek(from)
+  }
+
+  /** Shows the match as it was after `tick` steps. */
+  seek(tick: number) {
+    const flag = this.flagging
+    if (!flag) return
+    flag.at = Math.round(Math.min(flag.latest, Math.max(flag.earliest, tick)))
+    this.rewind.seek(flag.at)
+    this.publishIfChanged()
+  }
+
+  /** Marks the moment shown as the start or the end of the flagged stretch. */
+  markFlag(end: 'from' | 'to') {
+    const flag = this.flagging
+    if (!flag) return
+    flag[end] = flag.at
+    if (flag.from > flag.to) [flag.from, flag.to] = [flag.to, flag.from]
+    this.publishIfChanged()
+  }
+
+  /** Plays the flagged stretch on from the moment shown, or stops it. */
+  toggleFlagPlay() {
+    const flag = this.flagging
+    if (!flag) return
+    if (!flag.playing && flag.at >= flag.latest) this.seek(flag.from)
+    flag.playing = !flag.playing
+    this.publishIfChanged()
+  }
+
+  /** The flag as text to paste: the match's seed and inputs, the stretch chosen and a note. */
+  flagText(note: string): string {
+    const flag = this.flagging
+    if (!flag) return ''
+    const replay = this.replay()
+    return encodeFlag({
+      ...replay,
+      inputs: replay.inputs.filter((i) => i.tick < flag.to),
+      from: flag.from,
+      to: flag.to,
+      note: note.trim() || undefined,
+      check: this.rewind.checkpoint(flag.to),
+    })
+  }
+
+  /** Puts the live match back as it was when paused, and plays on. */
+  endFlag() {
+    const flag = this.flagging
+    if (!flag) return
+    restoreState(this.match, flag.live)
+    this.flagging = null
+    this.publishIfChanged()
+  }
+
+  /** Every change from outside goes through here, so the record misses none. Nothing changes while flagging. */
   private input(input: Input) {
+    if (this.flagging) return
     this.record.inputs.push(input)
     applyInput(this.match, input)
     this.publishIfChanged()
@@ -175,7 +275,35 @@ export class Game {
       carrierShielding: this.carrierShielding(),
       challenge: this.recentChallenge(),
       overlay: this.overlay,
+      flag: this.flagView(),
     }
+  }
+
+  private flagView(): FlagView | null {
+    const f = this.flagging
+    return f && { earliest: f.earliest, latest: f.latest, at: f.at, from: f.from, to: f.to, playing: f.playing }
+  }
+
+  /** While flagging, a label over each player, so they can be named in a note. */
+  private placeLabels(canvas: HTMLCanvasElement, labels: HTMLElement) {
+    labels.hidden = !this.flagging
+    if (!this.flagging) return
+    const m = this.match
+    const players = m.teams.flatMap((t) => [...t.outfielders, t.keeper])
+    while (labels.children.length < players.length) labels.append(document.createElement('span'))
+    const { width, height } = canvas.getBoundingClientRect()
+    const vp = pitchCamera(canvas.width / canvas.height, m.pitch).viewProjection
+    players.forEach((eid, i) => {
+      const x = Position.x[eid]
+      const y = Position.y[eid]
+      // The pitch camera is orthographic, so clip space needs no divide.
+      const cx = vp[0] * x + vp[4] * y + vp[12]
+      const cy = vp[1] * x + vp[5] * y + vp[13]
+      const label = labels.children[i] as HTMLElement
+      label.textContent = playerLabel(m, eid)
+      label.style.left = `${((cx + 1) / 2) * width}px`
+      label.style.top = `${((1 - cy) / 2) * height}px`
+    })
   }
 
   private carrierShielding() {
@@ -217,6 +345,8 @@ export class Game {
       challenge && `${challenge.kind}:${challenge.result}:${m.lastChallenge?.time}`,
       ...grades,
       this.overlay,
+      // While playing a flag back, the panel's clock is shown to a tenth of a second.
+      this.flagging && [this.flagging.earliest, this.flagging.latest, Math.round(this.flagging.at / ticksAt(0.1)), this.flagging.from, this.flagging.to, this.flagging.playing].join(','),
     ].join('|')
     if (key === this.snapshotKey) return
     this.snapshotKey = key
