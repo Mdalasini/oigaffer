@@ -289,6 +289,40 @@ describe('choosing a pass', () => {
     expect(back / passes).toBeLessThan(0.2)
   })
 
+  test('pressed deep in their own half, two players stop knocking it between themselves after a few passes', () => {
+    /** How often they give it straight back, after `exchanges` passes in a row between the two of them. */
+    const backShare = (exchanges: number) => {
+      let back = 0
+      for (let seed = 1; seed <= 60; seed++) {
+        const world = createMatch({ outfielders: 4, seed, grades: { red: { outfielder: { decisions: 20 } } } })
+        const [carrier, from, ahead, wide] = world.teams[RED].outfielders
+        handOver(world, carrier)
+        place(carrier, -18, 0)
+        setVec(Position, world.ball, -18 + FOOT_OFFSET, 0, BALL_RADIUS)
+        setVec(Velocity, world.ball, 0, 0, 0)
+        place(from, -17, -14, 0)
+        place(ahead, -4, 2, 0)
+        place(wide, -2, 14, 0)
+        // One presses the carrier and one waits upfield of the other back player; the rest mark tight.
+        const [presser, screen, onAhead, onWide] = world.teams[BLUE].outfielders
+        place(presser, -15, -1, Math.PI)
+        place(screen, -8, -10, Math.PI)
+        place(onAhead, -5, 2, Math.PI)
+        place(onWide, -3, 13, Math.PI)
+        lookAround(world)
+        Passer.receivedFrom[carrier] = from
+        Passer.receivedAt[carrier] = world.time
+        Passer.exchanges[carrier] = exchanges
+        if (choosePass(world, carrier)?.receiver === from) back++
+      }
+      return back / 60
+    }
+    // The pass back is their safest option, and the first few are free; by the sixth they keep it or look forward.
+    expect(backShare(1)).toBeGreaterThan(0.8)
+    expect(backShare(2)).toBeGreaterThan(0.8)
+    expect(backShare(6)).toBeLessThan(0.2)
+  })
+
   test('every pass back to whoever just played it is marked down alike, so a worse one never looks better', () => {
     const world = scene(1, 0, 0, -5, 7)
     const [carrier, from] = world.teams[RED].outfielders

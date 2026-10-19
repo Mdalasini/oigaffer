@@ -138,6 +138,8 @@ export const Passer = {
   /** Who last passed the ball to them (-1 if nobody), and the match time they took it. */
   receivedFrom: new Int32Array(MAX_ENTITIES),
   receivedAt: new Float32Array(MAX_ENTITIES),
+  /** How many passes in a row, ending with the one they took, the two of them have played to each other. */
+  exchanges: new Int32Array(MAX_ENTITIES),
 }
 
 /** Knocked off balance: can't play the ball and barely accelerates until the timer runs out. */

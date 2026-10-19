@@ -10,6 +10,7 @@ import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
 import { ballAtFeet, canPlayBall, touchAngle } from '../touch'
 import { playFirstTime } from './carrier'
+import { RETURN_WINDOW } from '../playmaking'
 import { cos, hypot, sin } from '../fmath'
 
 /** How close (m) to the ball's path the receiver needs to be to take it. */
@@ -98,6 +99,9 @@ export function receiveSystem(world: Match, _dt: number) {
 
   world.stats[world.possession].completed++
   world.pass = null
+  // Giving it straight back to whoever had just passed it adds to the run of passes between the two of them.
+  const back = Passer.receivedFrom[pass.from] === eid && world.time - Passer.receivedAt[pass.from] <= RETURN_WINDOW
+  Passer.exchanges[eid] = back ? Passer.exchanges[pass.from] + 1 : 1
   Passer.receivedFrom[eid] = pass.from
   Passer.receivedAt[eid] = world.time
   if (playFirstTime(world, eid)) return
