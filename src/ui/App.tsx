@@ -46,8 +46,7 @@ const EVENT_BANNER: Record<MatchEventKind, { text: string; className: string; wi
   out: null,
 }
 
-export function App() {
-  const [game] = useState(() => new Game())
+export function App({ game }: { game: Game }) {
   const snapshot = useSyncExternalStore(game.subscribe, game.getSnapshot)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const insetRef = useRef<HTMLDivElement>(null)
