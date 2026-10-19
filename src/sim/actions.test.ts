@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { recordActions, summarise, METRIC_KEYS, SHARE_KEYS, type ActionLog } from './actions'
-import { createMatch, stepMatch, type Match } from './match'
+import { Facing, Position, Team, Velocity } from './components'
+import { BALL_RADIUS } from './constants'
+import { createMatch, requestShot, setVec, stepMatch, type Match } from './match'
+import { attackedGoalX, opponent } from './teams'
+import { FOOT_OFFSET } from './touch'
 
 const MINUTES = 3
 
@@ -52,6 +56,27 @@ describe('recordActions', () => {
     }
     const total = spells.reduce((a, s) => a + (s.end - s.start), 0)
     expect(Math.abs(total - world.time)).toBeLessThan(0.5)
+  })
+
+  test('a shot blocked in the step it is struck is recorded as blocked, not as a goal', () => {
+    const scene = createMatch({ seed: 1, outfielders: 10 })
+    const rec = recordActions(scene)
+    const { carrier, ball } = scene
+    const goalX = attackedGoalX(scene.pitch, Team.id[carrier])
+    const dir = Math.sign(goalX)
+    // Facing goal 20 m out, the ball at their feet and a defender right on it.
+    setVec(Position, carrier, goalX - dir * 20, 0, 0)
+    setVec(Velocity, carrier, 0, 0, 0)
+    Facing.angle[carrier] = dir > 0 ? 0 : Math.PI
+    setVec(Position, ball, goalX - dir * (20 - FOOT_OFFSET), 0, BALL_RADIUS)
+    setVec(Velocity, ball, 0, 0, 0)
+    setVec(Position, scene.teams[opponent(Team.id[carrier])].outfielders[0], goalX - dir * (19.3 - FOOT_OFFSET), 0, 0)
+    requestShot(scene)
+    stepMatch(scene)
+    rec.afterStep()
+    expect(scene.stats[Team.id[carrier]].shots).toBe(1)
+    expect(scene.event?.kind).toBe('blocked')
+    expect(rec.finish().shots.map((s) => s.outcome)).toEqual(['blocked'])
   })
 
   test('the recorder chains an existing cue handler', () => {

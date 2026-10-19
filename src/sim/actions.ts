@@ -187,7 +187,8 @@ export function recordActions(world: Match) {
             outcome: unclaimed.get(t) ?? 'pending',
           }
         } else {
-          // A goal scored without a shot being struck.
+          // A goal scored without a shot being struck, or a shot blocked in the step it was struck, so already
+          // gone from the world: counted from where the ball is, at most a step and a body's width from the strike.
           const x = Position.x[world.ball]
           const y = Position.y[world.ball]
           action = {
@@ -196,7 +197,7 @@ export function recordActions(world: Match) {
             u: along(t, x),
             y,
             distance: hypot(x - attackedGoalX(pitch, t), y),
-            outcome: 'goal',
+            outcome: unclaimed.get(t) ?? 'goal',
           }
         }
         log.shots.push(action)
