@@ -211,6 +211,14 @@ for showing, running or holding, a defender's marking job and how tightly they
 are picking their man up, a presser's challenges. `--every`, `--players`, `--no-why` and
 `--outfielders` narrow it down.
 
+`bun run detect [minutes] [outfielders] [seeds]` looks for behaviour that would
+look wrong to a watcher: teammates chasing the same loose ball, players going back
+and forth, a marker losing his man, the presser standing off the ball, a carrier
+running the ball out, teammates bunching. It reports how often each happens per 90
+minutes and lists the cases, each with the `inspect` command that reads it back;
+`--only` and `--examples` narrow it down. `measure` reports the same rates, so a
+fix can be judged across many matches rather than one clip.
+
 ## Layout
 
 - `src/sim` — the ECS world: components, teams, cues (the moments players react to, and how), systems (roles, the carrier's and presser's decisions, off-ball movement, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), formations and team shape, the space model (`space/`), shooting model and grade curves. No DOM.
