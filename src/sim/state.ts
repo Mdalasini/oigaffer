@@ -24,7 +24,7 @@ export function stateHash(world: Match): string {
     const b = new Uint8Array(view.buffer, view.byteOffset + from, to - from)
     for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i], 0x01000193)
   }
-  // Stores are shared by every match, so only the slots of this match's entities, for components they have, are its own.
+  // Stores are shared by every match, so only this match's entities' slots are its own.
   const slot = (view: ArrayBufferView, eid: number) => {
     const size = (view as Float32Array).BYTES_PER_ELEMENT
     bytes(view, eid * size, (eid + 1) * size)
@@ -35,9 +35,9 @@ export function stateHash(world: Match): string {
   const entities = getAllEntities(world)
   for (const [name, store] of COMPONENTS) {
     text(name)
-    const members = entities.filter((eid) => hasComponent(world, eid, store))
-    text(members.join(','))
-    for (const field of Object.values(store)) for (const eid of members) slot(field, eid)
+    text(entities.filter((eid) => hasComponent(world, eid, store)).join(','))
+    // Every slot of the match's entities, not just the components they have: code may read the others.
+    for (const field of Object.values(store)) for (const eid of entities) slot(field, eid)
   }
   text(String(world.rng.state))
   for (const [key, value] of Object.entries(world)) {

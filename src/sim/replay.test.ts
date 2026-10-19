@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { createMatch, stepMatch } from './match'
 import { decodeFlag, encodeFlag, playBack, ticksAt, type Flag, type Replay } from './replay'
-import { stateHash } from './state'
+import { COMPONENTS, stateHash } from './state'
+import { getAllEntities, hasComponent } from 'bitecs'
+import { Offside } from './components'
 
 /** The state hash once a second for `seconds` of `replay`. */
 function fingerprints(replay: Replay, seconds: number): string[] {
@@ -26,6 +28,21 @@ describe('replay', () => {
       for (let i = 0; i < ticksAt(30); i++) stepMatch(other)
       expect(fingerprints(replay, 90)).toEqual(first)
     }
+  })
+
+  test('a new match starts clean, whatever an earlier one left in the shared stores', () => {
+    const big = createMatch({ seed: 2, outfielders: 10 })
+    for (let eid = 0; eid < 64; eid++) Offside.flagged[eid] = 1
+    for (let i = 0; i < ticksAt(5); i++) stepMatch(big)
+    const world = createMatch({ seed: 1, outfielders: 4 })
+    const dirty: string[] = []
+    for (const eid of getAllEntities(world)) {
+      for (const [name, store] of COMPONENTS) {
+        if (hasComponent(world, eid, store)) continue
+        for (const [field, values] of Object.entries(store)) if ((values as Float32Array)[eid] !== 0) dirty.push(`${name}.${field}[${eid}]`)
+      }
+    }
+    expect(dirty).toEqual([])
   })
 
   test('inputs change the match, and replay the same each time', () => {

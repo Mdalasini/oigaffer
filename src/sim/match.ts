@@ -32,6 +32,7 @@ import {
   Velocity,
 } from './components'
 import { BALL_RADIUS, FIXED_DT, OUTFIELDERS_PER_SIDE } from './constants'
+import { COMPONENTS } from './state'
 import { clampGrade } from './grades'
 import { planShot } from './finishing'
 import { createRng, type Rng } from './rng'
@@ -319,6 +320,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
   })
 
   world.ball = addEntity(world)
+  clearSlots(world.ball)
   addFresh(world, world.ball, Position)
   addFresh(world, world.ball, Velocity)
   addFresh(world, world.ball, Ball)
@@ -349,6 +351,7 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
  */
 function addOutfielder(world: Match, team: number, slot: number): number {
   const eid = addEntity(world)
+  clearSlots(eid)
   for (const component of [Position, Velocity, Body, Outfielder, Facing, MoveIntent, Physical, OffBalance, Team, Dribbler, TakeOn, Carry, Shield, Defender, Slot, OffBall, Passer, Offside, Run, Call, Mark]) {
     addFresh(world, eid, component)
   }
@@ -363,6 +366,7 @@ function addOutfielder(world: Match, team: number, slot: number): number {
 
 function addKeeper(world: Match, team: number): number {
   const eid = addEntity(world)
+  clearSlots(eid)
   for (const component of [Position, Velocity, Body, Goalkeeper, Facing, Team]) addFresh(world, eid, component)
   Team.id[eid] = team
   Body.radius[eid] = 0.4
@@ -378,6 +382,16 @@ function addKeeper(world: Match, team: number): number {
 function addFresh(world: Match, eid: number, component: Record<string, unknown>) {
   addComponent(world, eid, component)
   for (const field of Object.values(component)) if (ArrayBuffer.isView(field)) (field as Float32Array)[eid] = 0
+}
+
+/**
+ * Zeroes `eid`'s slot in every component store, those it won't have too.
+ * Code that reads a component an entity lacks (a keeper's offside flag, say)
+ * would otherwise see what the same id held in an earlier match, and a
+ * replay would play differently depending on what ran before it.
+ */
+function clearSlots(eid: number) {
+  for (const [, store] of COMPONENTS) for (const field of Object.values(store)) (field as Float32Array)[eid] = 0
 }
 
 const gradeStore = (role: Role, key: string): Uint8Array => (GRADE_FIELDS[role] as Record<string, Uint8Array>)[key]
