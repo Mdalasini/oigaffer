@@ -28,6 +28,8 @@ const dimensions = perPitch(({ halfLength: L, halfWidth: W }: Pitch) => {
     LINE_DEEPEST: -L + LINE_DEEPEST_FROM_GOAL,
     LINE_HIGHEST: -0.05 * LENGTH,
     DEFEND_HALF_WIDTH: 0.55 * W,
+    // Four lines of an eleven-a-side block need more room front to back than the two of a small-sided one.
+    DEFEND_LENGTH: Math.max(MIN_BLOCK_DEPTH, DEFEND_LENGTH_SHARE * LENGTH),
   }
 })
 
@@ -35,8 +37,13 @@ const dimensions = perPitch(({ halfLength: L, halfWidth: W }: Pitch) => {
 const LINE_BEHIND_BALL = 15
 /** ...and no nearer its own goal line than this (m): about the edge of the six-yard box on a full-size pitch. */
 const LINE_DEEPEST_FROM_GOAL = 9
-/** From the back line to the front of the block without the ball (m). */
-const DEFEND_LENGTH = 18
+/**
+ * From the back line to the front of the block without the ball: this share
+ * of the pitch's length, about 23 m on a full-size pitch, as compact real
+ * blocks are, and never less than MIN_BLOCK_DEPTH (m).
+ */
+const DEFEND_LENGTH_SHARE = 0.22
+const MIN_BLOCK_DEPTH = 18
 /**
  * ...but the front of the block is never more than this far (m) ahead of the
  * ball: with the ball in behind the line, down by the goal line, the screen
@@ -108,7 +115,7 @@ export function block(world: Match, team: number) {
   }
   const back = world.lines[team]
   const room = d.W - d.DEFEND_HALF_WIDTH
-  const front = clamp(ballU + DEFEND_FRONT_AHEAD_OF_BALL, back + MIN_DEFEND_LENGTH, back + DEFEND_LENGTH)
+  const front = clamp(ballU + DEFEND_FRONT_AHEAD_OF_BALL, back + MIN_DEFEND_LENGTH, back + d.DEFEND_LENGTH)
   return { back, front, centreY: clamp(ballY * DEFEND_BALL_SHIFT, -room, room), halfWidth: d.DEFEND_HALF_WIDTH }
 }
 

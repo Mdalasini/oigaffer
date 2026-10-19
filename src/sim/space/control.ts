@@ -77,9 +77,11 @@ export function timeOnBall(world: Match, eid: number, by = -1): number {
  * At each step along the ball's path it compares when the ball arrives with
  * when each opponent could. An opponent who could be there first is likely
  * to intercept, and the pass gets through only if every opponent misses it.
- * Judged by `by`, it's against where they reckon each opponent is.
+ * Judged by `by`, it's against where they reckon each opponent is. Given
+ * the `receiver` of a pass to feet, an opponent has to beat them to it too:
+ * one marking from behind them can only challenge once it's received.
  */
-export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number, by = -1): number {
+export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number, by = -1, receiver = -1): number {
   const length = hypot(toX - fromX, toY - fromY)
   if (length === 0) return 1
   // A pass that stops short never gets there.
@@ -92,6 +94,21 @@ export function passSafety(world: Match, team: number, fromX: number, fromY: num
     sampleY[n] = fromY + ((toY - fromY) * s) / length
     n++
     if (s === length) break
+  }
+  // The receiver comes to meet it: past the first spot they can get to before the ball, it's theirs, and an
+  // opponent there with them has to beat them to it, not just the ball.
+  let meet = n - 1
+  let met = Infinity
+  if (receiver !== -1) {
+    for (let i = 0; i < n; i++) {
+      const t = arrivalTime(world, receiver, sampleX[i], sampleY[i], INTERCEPT_REACH, REACTION_TIME, by)
+      if (t <= sampleT[i]) {
+        meet = i
+        met = t
+        break
+      }
+    }
+    n = meet + 1
   }
   let safety = 1
   for (const eid of playersOf(world, 1 - team)) {
@@ -107,7 +124,9 @@ export function passSafety(world: Match, team: number, fromX: number, fromY: num
       const dx = sampleX[i] - px
       const dy = sampleY[i] - py
       if (sampleT[i] - (Math.sqrt(dx * dx + dy * dy) - reach) / top <= lead) continue
-      if (canContest(world, eid, sampleX[i], sampleY[i])) lead = Math.max(lead, sampleT[i] - arrivalTime(world, eid, sampleX[i], sampleY[i], reach, REACTION_TIME, by))
+      if (!canContest(world, eid, sampleX[i], sampleY[i])) continue
+      const first = i === meet && met !== Infinity ? met : sampleT[i]
+      lead = Math.max(lead, first - arrivalTime(world, eid, sampleX[i], sampleY[i], reach, REACTION_TIME, by))
     }
     if (lead > -Infinity) safety *= 1 - sigmoid(lead / INTERCEPT_SCALE)
   }

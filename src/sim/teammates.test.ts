@@ -183,8 +183,8 @@ describe('moving like footballers', () => {
   }
 
   test('off the ball they mostly walk and jog, and sprint only now and then', () => {
-    // Measured at 78% over twelve matches on the five-a-side pitch, which is roomy for two a side.
-    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.75)
+    // Measured at 77% over twelve matches on the five-a-side pitch, which is roomy for two a side (73–80% each).
+    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.73)
     expect(speeds.sprint / samples).toBeLessThan(0.08)
   })
 

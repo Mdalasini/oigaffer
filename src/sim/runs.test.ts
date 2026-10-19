@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Call, CallKind, Facing, OffBall, Outfielder, Position, Run, RunPhase, Velocity } from './components'
+import { Call, CallKind, Facing, OffBall, Outfielder, Passer, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { lookAround } from './perception'
@@ -37,6 +37,14 @@ function scene(seed: number, x: number, y: number, mx: number, my: number, blue:
   return world
 }
 
+/**
+ * The carrier holds on rather than passing, so a test is of the runner alone:
+ * with a marker only goal-side of them, a pass to their feet is on too.
+ */
+function holdOn(world: Match) {
+  Passer.nextLook[world.teams[RED].outfielders[0]] = Infinity
+}
+
 /** Steps the match, watching `eid`; returns whether `seen` became true within `seconds`. */
 function within(world: Match, seconds: number, seen: () => boolean) {
   for (let i = 0; i < seconds * 120 && world.phase === 'play' && world.possession === RED; i++) {
@@ -51,6 +59,7 @@ describe('running in behind', () => {
     const grades = { red: { outfielder: { offTheBall: 20 } } }
     // Red has time in midfield; Blue's line is high, with space behind it.
     const world = scene(1, -8, 0, 4, 6, [[6, -4], [6, 8]], grades)
+    holdOn(world)
     const mate = world.teams[RED].outfielders[1]
     let prepared = false
     const ran = within(world, 6, () => {
@@ -68,6 +77,7 @@ describe('running in behind', () => {
     const grades = { red: { outfielder: { offTheBall: 20 } } }
     // The carrier is deep, over 30 m from the forward on Blue's line.
     const world = scene(2, -20, 0, 12, 4, [[14, -4], [14, 8]], grades)
+    holdOn(world)
     const mate = world.teams[RED].outfielders[1]
     let wait = -1
     within(world, 6, () => {
@@ -153,6 +163,7 @@ describe('run bookkeeping', () => {
 
   test('a check away is a real step towards the ball, even from standing', () => {
     const world = scene(-8, 0, 0, 4, 6, [[6, -4], [6, 8]], { red: { outfielder: { offTheBall: 1 } } })
+    holdOn(world)
     const mate = world.teams[RED].outfielders[1]
     // Settled where they are, then the run starts.
     OffBall.targetX[mate] = Position.x[mate]
