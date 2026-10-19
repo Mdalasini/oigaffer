@@ -146,15 +146,20 @@ function dithering(): Detector {
   }
 }
 
-/** A marker this far (m) from their man, with him this much nearer their goal (m), has lost him. */
+/**
+ * A marker this far (m) from their man, with him this much nearer their
+ * goal (m), has lost him, unless they're getting back towards goal at least
+ * this fast (m/s): a recovery run after the ball is lost is the right thing.
+ */
 const LOST_DISTANCE = 5
 const LOST_BEHIND = 2
+const RECOVERING = 3
 
-/** A defender whose man is in their half and goal-side of them, well away from them. */
+/** A defender whose man is in their half and goal-side of them, well away from them, and who isn't getting back. */
 function lostMan(): Detector {
   return {
     name: 'lostMan',
-    about: `a marker ${LOST_DISTANCE}+ m from their man, who is in their half and ${LOST_BEHIND}+ m nearer their goal`,
+    about: `a marker ${LOST_DISTANCE}+ m from their man, who is in their half and ${LOST_BEHIND}+ m nearer their goal, and not getting back`,
     lasting: 1.5,
     look(world) {
       const found = new Map<string, Sighting>()
@@ -167,6 +172,8 @@ function lostMan(): Detector {
         const toGoal = (p: number) => hypot(goalX - Position.x[p], Position.y[p])
         const gap = distance(eid, man)
         if (toGoal(man) > world.pitch.halfLength || toGoal(eid) - toGoal(man) < LOST_BEHIND || gap < LOST_DISTANCE) continue
+        const back = (Velocity.x[eid] * (goalX - Position.x[eid]) - Velocity.y[eid] * Position.y[eid]) / toGoal(eid)
+        if (back >= RECOVERING) continue
         found.set(`${eid}`, { players: [eid, man], detail: `${playerLabel(world, eid)} ${gap.toFixed(1)} m off ${playerLabel(world, man)}, who is goal-side of them` })
       }
       return found

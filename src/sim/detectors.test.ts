@@ -80,6 +80,10 @@ describe('detectors', () => {
     setVec(Position, marker, 10, 0, 0)
     setVec(Position, man, 20, 2, 0)
     expect(d.look(world).get(`${marker}`)?.players).toEqual([marker, man])
+    // Sprinting back towards goal, he's recovering, not lost.
+    setVec(Velocity, marker, 6, 0, 0)
+    expect(d.look(world).size).toBe(0)
+    setVec(Velocity, marker, 0, 0, 0)
     setVec(Position, man, 13, 2, 0)
     expect(d.look(world).size).toBe(0)
   })
