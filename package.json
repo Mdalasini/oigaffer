@@ -9,6 +9,7 @@
     "typecheck": "tsc -b",
     "test": "bun test",
     "measure": "bun scripts/measure.ts",
+    "realism": "bun scripts/realism.ts",
     "inspect": "bun scripts/inspect.ts",
     "detect": "bun scripts/detect.ts",
     "preview": "vite preview"
