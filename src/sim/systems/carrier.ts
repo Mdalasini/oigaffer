@@ -16,7 +16,7 @@ import { chooseAction, strikePass } from '../playmaking'
 import { chooseCarry } from '../carrying'
 import { meetTheBall } from './receive'
 import { seenX, seenY } from '../perception'
-import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
+import { ballAtFeet, canPlayBall, dribble, FOOT_OFFSET, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
 import { atan2, cos, hypot, sin } from '../fmath'
 
 /** Seconds after shooting before the shooter can play the ball again. */
@@ -95,6 +95,8 @@ const SHIELD_REST = 1.5
 const SPIN_COMMIT = 0.6
 /** Barely move while shielding (m/s). */
 const SHIELD_PACE = 1.2
+/** Shaping to pass, a carrier closes the gap to where they want to stand over about this long (s). */
+const SET_FEET_TIME = 0.1
 
 /** The carrier's decisions: dribble at goal with touches, then shoot. */
 export function carrierSystem(world: Match, dt: number) {
@@ -227,13 +229,23 @@ function cancelWindup(world: Match) {
   world.windup = null
 }
 
-/** Winding up a pass: stay with the ball without touching it, turning towards where it's going. */
+/**
+ * Winding up a pass: stay with the ball without touching it, turning towards
+ * where it's going, and stepping so the ball ends up at the foot they'll
+ * strike it with once turned. Only keeping pace with it, the turn swings
+ * the foot off a ball that isn't right under it.
+ */
 function setUpPass(eid: number, ball: number, x: number, y: number) {
   Dribbler.style[eid] = TouchStyle.None
-  MoveIntent.vx[eid] = Velocity.x[ball]
-  MoveIntent.vy[eid] = Velocity.y[ball]
-  MoveIntent.faceX[eid] = x - Position.x[ball]
-  MoveIntent.faceY[eid] = y - Position.y[ball]
+  const faceX = x - Position.x[ball]
+  const faceY = y - Position.y[ball]
+  const length = hypot(faceX, faceY) || 1
+  const standX = Position.x[ball] - (faceX / length) * FOOT_OFFSET
+  const standY = Position.y[ball] - (faceY / length) * FOOT_OFFSET
+  MoveIntent.vx[eid] = Velocity.x[ball] + (standX - Position.x[eid]) / SET_FEET_TIME
+  MoveIntent.vy[eid] = Velocity.y[ball] + (standY - Position.y[eid]) / SET_FEET_TIME
+  MoveIntent.faceX[eid] = faceX
+  MoveIntent.faceY[eid] = faceY
 }
 
 /** Whether a defender who has been beaten is close behind. */

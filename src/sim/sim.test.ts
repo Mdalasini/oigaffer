@@ -140,6 +140,21 @@ describe('match outcomes', () => {
     expect(cues[0]).toBe('passCalledOff')
   })
 
+  test('a pass shaped is nearly always played: turning to it keeps the ball at their foot', () => {
+    let shaped = 0
+    let calledOff = 0
+    for (const seed of [1, 2, 3]) {
+      const world = createMatch({ outfielders: 4, seed })
+      world.onCue = (c) => {
+        if (c.kind === 'passShaped' && c.windup > 0) shaped++
+        if (c.kind === 'passCalledOff') calledOff++
+      }
+      while (world.time < 5 * 60) stepMatch(world)
+    }
+    // Measured at 5–9% a match; only keeping pace with the ball, the turn lost it off their foot 24–40% of the time.
+    expect(calledOff / shaped).toBeLessThan(0.15)
+  }, 20_000)
+
   test('players far from the ball look again less often, and a pass struck makes everyone look sooner', () => {
     const world = createMatch({ outfielders: 4, seed: 6 })
     const near: number[] = []

@@ -304,8 +304,8 @@ describe('outcomes', () => {
     const tackledRate = (tackling: number, dribbling: number) => {
       let tackled = 0
       let attacks = 0
-      // One match alone varies a lot with how its attacks go, so three are pooled.
-      for (const seed of [4, 5, 6]) {
+      // One match alone varies a lot with how its attacks go, so six are pooled.
+      for (const seed of [4, 5, 6, 7, 8, 9]) {
         const world = createMatch({ outfielders: 2, seed, grades: { blue: { outfielder: { tackling } }, red: { outfielder: { dribbling } } } })
         world.onEvent = (e) => {
           if (e.team === BLUE && e.kind === 'tackled') tackled++
@@ -315,8 +315,8 @@ describe('outcomes', () => {
       }
       return tackled / attacks
     }
-    // Measured at 0.12–0.22 against 0.01–0.07 for single seeds. Counting interceptions too, as this once did, mostly
-    // measures how attacks end, which shifted once players stopped shooting at the first chance.
-    expect(tackledRate(20, 5)).toBeGreaterThan(tackledRate(5, 20) + 0.08)
-  }, 40_000)
+    // Pooled over six seeds, measured at 0.13–0.15 against 0.04–0.07: a gap of 0.06–0.11. Counting interceptions too, as
+    // this once did, mostly measures how attacks end, which shifted once players stopped shooting at the first chance.
+    expect(tackledRate(20, 5)).toBeGreaterThan(tackledRate(5, 20) + 0.04)
+  }, 60_000)
 })
