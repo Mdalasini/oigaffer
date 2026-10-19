@@ -5,15 +5,12 @@ import { Renderer } from '../render/renderer'
 import { buildScene } from '../render/scene'
 import type { ChallengeKind, ChallengeResult } from '../sim/challenge'
 import { Defender, DefenderMode, Shield, Team } from '../sim/components'
-import { FIXED_DT } from '../sim/constants'
+import { FIXED_DT, OUTFIELDERS_PER_SIDE } from '../sim/constants'
 import {
   createMatch,
   getGrade,
   gradeKeys,
-  requestShot,
-  resetMatch,
   ROLES,
-  setGrade,
   stepMatch,
   type GradeKey,
   type Grades,
@@ -24,6 +21,7 @@ import {
   type Role,
   type TeamStats,
 } from '../sim/match'
+import { applyInput, type Input, type Replay } from '../sim/replay'
 import { attackedGoalX, TEAM_NAMES, type TeamName } from '../sim/teams'
 
 export interface GameSnapshot {
@@ -59,10 +57,20 @@ export class Game {
   private snapshot: GameSnapshot
   private snapshotKey = ''
   private overlay: Overlay = 'off'
+  /** The seed and every input so far, so any moment of this match can be played again exactly. */
+  private readonly record: Replay
+  /** Steps taken since the match was created. */
+  private tick = 0
 
   constructor() {
-    this.match = createMatch()
+    this.record = { seed: Date.now() >>> 0, outfielders: OUTFIELDERS_PER_SIDE, inputs: [] }
+    this.match = createMatch({ seed: this.record.seed, outfielders: this.record.outfielders })
     this.snapshot = this.takeSnapshot()
+  }
+
+  /** The match so far as a replay: its seed and inputs. */
+  replay(): Replay {
+    return { ...this.record, inputs: [...this.record.inputs] }
   }
 
   /** Starts drawing into `canvas`; the goal view fills `inset`'s on-screen box. */
@@ -78,6 +86,7 @@ export class Game {
       last = now
       while (accumulator >= FIXED_DT) {
         stepMatch(this.match, FIXED_DT)
+        this.tick++
         accumulator -= FIXED_DT
       }
       this.render(renderer, canvas, inset)
@@ -96,8 +105,7 @@ export class Game {
   getSnapshot = () => this.snapshot
 
   setGrade<R extends Role>(team: TeamName, role: R, key: GradeKey<R>, grade: number) {
-    setGrade(this.match, team, role, key, grade)
-    this.publishIfChanged()
+    this.input({ tick: this.tick, kind: 'grade', team, role, key, grade })
   }
 
   /** Shows the space model over the pitch, or hides it. */
@@ -107,12 +115,18 @@ export class Game {
   }
 
   shoot() {
-    requestShot(this.match)
+    this.input({ tick: this.tick, kind: 'shoot' })
   }
 
   /** A fresh match: score cleared, red to kick off. */
   reset() {
-    resetMatch(this.match)
+    this.input({ tick: this.tick, kind: 'reset' })
+  }
+
+  /** Every change from outside goes through here, so the record misses none. */
+  private input(input: Input) {
+    this.record.inputs.push(input)
+    applyInput(this.match, input)
     this.publishIfChanged()
   }
 

@@ -4,6 +4,7 @@ import { BALL_RADIUS } from './constants'
 import { SMALL_SIDED_PITCH } from './pitch'
 import { lookAround, perceptionSystem } from './perception'
 import { createRng } from './rng'
+import { stubRng } from './testUtils'
 import { createMatch, handOver, resetMatch, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { strikePass } from './playmaking'
 import { along, baseLine, homePosition } from './shape'
@@ -190,10 +191,8 @@ describe('the offside trap', () => {
         const world = scene(-10, 0, 0, 7.5, 4, [[-8, 0], [8, 4]], { blue: { outfielder: { positioning } } })
         world.presser = world.teams[BLUE].outfielders[0]
         world.trap = [0, 0]
-        world.rng = (() => {
-          const values = [i / 100]
-          return () => values.shift() ?? 0.5
-        })()
+        const values = [i / 100]
+        world.rng = stubRng(() => values.shift() ?? 0.5)
         maybeSpringTrap(world, 0.2)
         if (trapping(world, BLUE)) count++
       }
@@ -204,7 +203,7 @@ describe('the offside trap', () => {
 
   test('with nobody on the line, there’s no trap to spring', () => {
     const world = scene(-10, 0, 0, -15, 4, [[-8, 0], [8, 4]], { blue: { outfielder: { positioning: 20 } } })
-    world.rng = () => 0
+    world.rng = stubRng(() => 0)
     maybeSpringTrap(world, 0.2)
     expect(trapping(world, BLUE)).toBe(false)
   })
@@ -221,7 +220,7 @@ describe('review fixes', () => {
     OffBall.radius[blueB] = 2
     OffBall.settled[blueB] = 1
     OffBall.decideIn[blueB] = 1
-    world.rng = () => 0
+    world.rng = stubRng(() => 0)
     maybeSpringTrap(world, 0.25)
     expect(trapping(world, BLUE)).toBe(true)
     // Half a second: from standing, a defender covers only about 0.1 m in the first quarter.

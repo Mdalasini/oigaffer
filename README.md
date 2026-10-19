@@ -197,6 +197,13 @@ grades are set from its tab in the control panel. `bun test` runs the simulation
 plays headless matches and reports how they played (tallies, effort, spacing,
 shape) and what each system cost per simulated minute.
 
+The sim is deterministic: a match is decided by its seed and the inputs made to
+it (grade changes, shots asked for, restarts), so any moment can be played again
+exactly. `bun run inspect --seed 1 --from 2:10 --to 2:20` replays a stretch and
+writes it out as text: every player's position, movement and job twice a second,
+with each cue and event as it happens. `--every`, `--players` and `--outfielders`
+narrow it down.
+
 ## Layout
 
 - `src/sim` — the ECS world: components, teams, cues (the moments players react to, and how), systems (roles, the carrier's and presser's decisions, off-ball movement, touches, locomotion, challenges, keeper, collisions, ball, contests, outcome), formations and team shape, the space model (`space/`), shooting model and grade curves. No DOM.
