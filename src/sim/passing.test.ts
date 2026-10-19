@@ -141,7 +141,7 @@ describe('getting a pass away', () => {
     const world = scene(7, -10, 0, -4, 0)
     const [passer, mate] = world.teams[RED].outfielders
     setVec(Velocity, passer, 3, 0, 0)
-    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -4, y: 0, speed: 4, safety: 1, value: 1 })
+    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -4, y: 0, speed: 4, flight: 0, safety: 1, value: 1 })
     for (let i = 0; i < 20; i++) stepMatch(world)
     expect(world.pass?.to).toBe(mate)
     expect(world.carrier).toBe(mate)
@@ -151,7 +151,7 @@ describe('getting a pass away', () => {
     const world = scene(8, -10, 0, -14, 7, [], { red: { outfielder: { passing: 20 } } })
     const [passer, mate] = world.teams[RED].outfielders
     // Facing +x, passing back and to the side.
-    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -14, y: 7, speed: 9, safety: 1, value: 1 })
+    strikePass(world, passer, { receiver: mate, kind: 'feet', x: -14, y: 7, speed: 9, flight: 0, safety: 1, value: 1 })
     for (let i = 0; i < 20; i++) stepMatch(world)
     expect(world.pass?.to).toBe(mate)
   })
@@ -160,7 +160,7 @@ describe('getting a pass away', () => {
     const world = scene(9, -10, 0, -4, 0)
     const [passer, mate] = world.teams[RED].outfielders
     const keeper = world.teams[RED].keeper
-    world.pass = { from: passer, to: mate, kind: 'through', x: 20, y: 0, time: world.time }
+    world.pass = { from: passer, to: mate, kind: 'through', lofted: false, x: 20, y: 0, time: world.time }
     handOver(world, mate)
     passToOutfielder(world, keeper, mate, Position.x[keeper], Position.y[keeper])
     expect(world.pass).toBeNull()
@@ -185,7 +185,7 @@ describe('first touch', () => {
       Facing.angle[mate] = Math.PI
       setVec(Position, world.ball, -3, 0, BALL_RADIUS)
       setVec(Velocity, world.ball, speed, 0, 0)
-      world.pass = { from: passer, to: mate, kind: 'feet', x: 0, y: 0, time: world.time }
+      world.pass = { from: passer, to: mate, kind: 'feet', lofted: false, x: 0, y: 0, time: world.time }
       handOver(world, mate)
       world.stats[RED].passes++
       for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
@@ -215,7 +215,7 @@ describe('first touch', () => {
     Facing.angle[mate] = Math.PI
     setVec(Position, world.ball, -3, 0, BALL_RADIUS)
     setVec(Velocity, world.ball, 8, 0, 0)
-    world.pass = { from: passer, to: mate, kind: 'feet', x: 0, y: 0, time: world.time }
+    world.pass = { from: passer, to: mate, kind: 'feet', lofted: false, x: 0, y: 0, time: world.time }
     handOver(world, mate)
     for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
     return Dribbler.cooldown[mate]
@@ -243,7 +243,7 @@ describe('first time', () => {
       setVec(Position, world.ball, -4, 0, BALL_RADIUS)
       setVec(Velocity, world.ball, 8, 0, 0)
       lookAround(world)
-      world.pass = { from: passer, to: receiver, kind: 'feet', x: 0, y: 0, time: world.time }
+      world.pass = { from: passer, to: receiver, kind: 'feet', lofted: false, x: 0, y: 0, time: world.time }
       handOver(world, receiver)
       for (let i = 0; i < 90 && world.stats[RED].completed === 0; i++) stepMatch(world)
       if (world.stats[RED].completed === 1 && world.pass?.from === receiver) n++

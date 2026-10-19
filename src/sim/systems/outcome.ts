@@ -1,13 +1,11 @@
-import { query } from 'bitecs'
-import { Body, Goalkeeper, Outfielder, Position, Team, Velocity } from '../components'
+import { Goalkeeper, Position, Team, Velocity } from '../components'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from '../constants'
 import { catchChance } from '../grades'
 import { ballOut, endShot, keeperClaims, scoreFromPlay, takeRestart, type Match } from '../match'
-import { ARM_REACH, bestReceiver, keeperReach, passToOutfielder } from './keeper'
+import { bestReceiver, claimingKeeper, keeperReach, passToOutfielder } from './keeper'
 import { gaussian } from '../rng'
 import type { GoalPoint } from '../shooting'
 import { attackDir, opponent } from '../teams'
-import { ballAtFeet } from '../touch'
 import { hypot } from '../fmath'
 
 const KEEPER_MAX_HEIGHT = 2.5
@@ -28,8 +26,8 @@ export function outcomeSystem(world: Match, _dt: number) {
     return
   }
   if (world.phase === 'play') {
-    const keeper = keeperWithinReach(world)
-    if (keeper === null) leftThePitch(world)
+    const keeper = claimingKeeper(world)
+    if (keeper === -1) leftThePitch(world)
     // A teammate played it to them, so it's feet only: knock it straight back out to a teammate.
     else if (isBackPass(world, keeper)) {
       const x = Position.x[world.ball]
@@ -95,21 +93,6 @@ function leftThePitch(world: Match) {
   if (Math.abs(Position.y[ball]) > world.pitch.halfWidth + BALL_RADIUS) {
     ballOut(world, 'throw-in', opponent(lastTeam), Position.x[ball], Position.y[ball])
   }
-}
-
-/**
- * A keeper who can get to the loose ball: within reach, not at an
- * outfielder's feet, and not just after parrying it or playing it out.
- */
-function keeperWithinReach(world: Match): number | null {
-  const { ball } = world
-  if (Position.z[ball] > KEEPER_MAX_HEIGHT || query(world, [Outfielder]).some((eid) => ballAtFeet(eid, ball))) return null
-  for (const keeper of query(world, [Goalkeeper, Position, Body])) {
-    if (Goalkeeper.recover[keeper] > 0) continue
-    const reach = Body.radius[keeper] + ARM_REACH
-    if (hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
-  }
-  return null
 }
 
 /** Where the ball passed through the plane x = planeX, moving in direction `dir` (±1 along x), during the last step. */

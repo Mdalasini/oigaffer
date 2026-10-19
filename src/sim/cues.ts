@@ -36,6 +36,8 @@ export type Cue =
   | { kind: 'passCalledOff'; option: PassOption }
   /** `team`'s line is stepping up together to catch a runner offside. */
   | { kind: 'trap'; team: number }
+  /** A ball in the air has come loose: `player` didn't bring it down, or headed it away. */
+  | { kind: 'loose'; player: number }
 
 /** Players take this long, plus up to as long again, to react to the ball changing hands. */
 const TURNOVER_REACTION = 0.2
@@ -86,6 +88,12 @@ export function cue(world: Match, c: Cue) {
     case 'passCalledOff':
       // A runner waiting to burst for it stays put.
       Run.burstAt[c.option.receiver] = 0
+      return
+    case 'loose':
+      // Everyone sees where it's gone, and reacts as they would to a pass.
+      for (const t of [0, 1]) {
+        for (const eid of world.teams[t].outfielders) OffBall.decideIn[eid] = Math.min(OffBall.decideIn[eid], BALL_MOVED_REACTION + world.rng() * BALL_MOVED_REACTION)
+      }
       return
     case 'trap':
       for (const d of world.teams[c.team].outfielders) {

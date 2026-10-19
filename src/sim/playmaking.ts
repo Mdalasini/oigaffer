@@ -1,7 +1,7 @@
 import { angleDelta } from './angles'
 import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
-import { gradeT, judgementError, offsideMisjudgement, passAngleError, passWeightError } from './grades'
+import { aerialControlChance, gradeT, judgementError, loftCarryError, offsideMisjudgement, passAngleError, passWeightError } from './grades'
 import { cue } from './cues'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
@@ -10,7 +10,8 @@ import { along, onsideLimit } from './shape'
 import { knows, seenFacing, seenVx, seenVy, seenX, seenY } from './perception'
 import { gaussian } from './rng'
 import { arrivalTime, REACTION_TIME } from './space/arrival'
-import { passSafety, teamArrival, timeOnBall } from './space/control'
+import { loftSafety, passSafety, teamArrival, timeOnBall } from './space/control'
+import { launchUp, loftFlightTime } from './flight'
 import { shotValue } from './finishing'
 import { planCarry } from './carrying'
 import { shotChance, threat } from './space/threat'
@@ -25,8 +26,10 @@ export interface PassOption {
   /** Where the ball is aimed: the receiver's feet, or the spot they'll meet it. */
   x: number
   y: number
-  /** How hard (m/s) to strike it along the ground. */
+  /** How hard (m/s) to strike it: along the ground, or for a lofted pass, its pace over the ground. */
   speed: number
+  /** Seconds a lofted pass is in the air before it lands; 0 for a pass along the ground. */
+  flight: number
   /** Chance it gets there without being cut out. */
   safety: number
   /** What it's worth to the team: expected threat if it gets there, less the other team's if it's cut out. */
@@ -49,6 +52,25 @@ const THROUGH_LAG = 0.1
  */
 const MAX_PASS = 35
 const MAX_PASS_SHARE = 0.45
+/**
+ * Passes of at least LOFT_MIN metres, up to LOFT_MAX, may be lofted: a
+ * switch, a ball over the top, a long ball forward. From wide in the final
+ * third a cross into the box may be as short as CROSS_MIN.
+ */
+const LOFT_MIN = 22
+const LOFT_MAX = 55
+const CROSS_MIN = 8
+/** A lofted pass is dropped at least this far (m) inside the lines. */
+const LOFT_INSIDE = 3
+/** How far ahead (m) of a teammate running in behind to drop a ball over the top for them to run onto. */
+const LOFT_LEADS = [5, 10, 15]
+/** A ball over the top should land no more than this long (s) before the runner gets there, or it bounces away from them. */
+const LOFT_EARLY = 0.8
+/**
+ * Of the dropping balls a receiver doesn't control, the share their team
+ * still comes away with: it's loose at their feet, and theirs as often as not.
+ */
+const MISCONTROL_KEPT = 0.5
 /** Shortest pass (m) worth playing: any closer and they'd be better keeping it. */
 const MIN_PASS = 4
 /**
@@ -108,6 +130,9 @@ const EXCHANGE_SHARE = 0.05
 const PASSER_RECOVER = 0.4
 /** A pass played on first time goes this many times further astray than one from a ball they've set. */
 const FIRST_TIME_ERROR = 1.4
+/** A ground pass's line error grows by its own size every LINE_DISTANCE metres it travels; a lofted pass's every LOFT_LINE_DISTANCE. */
+const LINE_DISTANCE = 30
+const LOFT_LINE_DISTANCE = 60
 /** An opponent within this distance (m) of the passer hurries the pass. */
 const PRESSURE_RANGE = 2
 
@@ -149,14 +174,14 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
   for (const option of passOptions(world, carrier)) {
     const back = returnCost(world, carrier, option)
     const v = judged(option.value) - back
-    weighed?.push({ judged: v, text: `${option.kind} to ${playerLabel(world, option.receiver)} ${worth(v, option.value)} safety ${option.safety.toFixed(2)}${back ? ' straight back' : ''}` })
+    weighed?.push({ judged: v, text: `${describe(option)} to ${playerLabel(world, option.receiver)} ${worth(v, option.value)} safety ${option.safety.toFixed(2)}${back ? ' straight back' : ''}` })
     if (v > bestJudged) {
       best = option
       bestJudged = v
     }
   }
   if (weighed) {
-    const choice = best === null ? 'keeps the ball' : best === 'shoot' ? 'shoots' : `passes ${best.kind} to ${playerLabel(world, best.receiver)}`
+    const choice = best === null ? 'keeps the ball' : best === 'shoot' ? 'shoots' : `passes ${describe(best)} to ${playerLabel(world, best.receiver)}`
     weighed.sort((a, b) => b.judged - a.judged)
     const shown = weighed.slice(0, WEIGHED_SHOWN).map((w) => w.text).join(', ')
     const more = weighed.length > WEIGHED_SHOWN ? `, and ${weighed.length - WEIGHED_SHOWN} worse` : ''
@@ -164,6 +189,9 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
   }
   return best
 }
+
+/** A pass's kind, as read back: `feet`, `through`, or either `lofted`. */
+const describe = (option: PassOption) => (option.flight > 0 ? `lofted ${option.kind}` : option.kind)
 
 /** How many of the options weighed to list, best first. */
 const WEIGHED_SHOWN = 5
@@ -215,11 +243,12 @@ export function keepValue(world: Match, carrier: number): number {
 
 /**
  * A pass's worth: the receiver's value if it gets through, less the threat
- * the other team has from where it would be cut out.
+ * the other team has from where it would be cut out, `lossAlong` of the way
+ * to (x, y).
  */
-function passValue(world: Match, team: number, safety: number, received: number, bx: number, by: number, x: number, y: number) {
-  const lostX = bx + (x - bx) * LOSS_ALONG
-  const lostY = by + (y - by) * LOSS_ALONG
+function passValue(world: Match, team: number, safety: number, received: number, bx: number, by: number, x: number, y: number, lossAlong = LOSS_ALONG) {
+  const lostX = bx + (x - bx) * lossAlong
+  const lostY = by + (y - by) * lossAlong
   return safety * received - (1 - safety) * threat(world.pitch, opponent(team), lostX, lostY)
 }
 
@@ -230,6 +259,7 @@ function passValue(world: Match, team: number, safety: number, received: number,
 export function passOptions(world: Match, carrier: number): PassOption[] {
   const team = Team.id[carrier]
   const options: PassOption[] = []
+  const cross = crossSpots(world, team)
   for (const mate of world.teams[team].outfielders) {
     // A teammate who looks offside now would be offside the moment it's played.
     if (mate === carrier || !knows(world, carrier, mate) || looksOffside(world, carrier, mate)) continue
@@ -237,11 +267,28 @@ export function passOptions(world: Match, carrier: number): PassOption[] {
     if (feet) options.push(feet)
     // Into space towards goal, or towards where they're calling for it.
     const calling = Call.kind[mate] === CallKind.Space
+    const goalX = attackedGoalX(world.pitch, team)
     for (const lead of THROUGH_LEADS) {
-      const through = intoSpace(world, carrier, mate, lead, attackedGoalX(world.pitch, team), 0)
+      const through = intoSpace(world, carrier, mate, lead, goalX, 0)
       if (through) options.push(through)
       const called = calling ? intoSpace(world, carrier, mate, lead, Call.x[mate], Call.y[mate]) : null
       if (called) options.push(called)
+    }
+    // Or in the air: to them, or, when they're calling for it in behind, over the top for them to run onto.
+    const lofted = loftToFeet(world, carrier, mate)
+    if (lofted) options.push(lofted)
+    if (calling) {
+      for (const lead of LOFT_LEADS) {
+        const over = loftIntoSpace(world, carrier, mate, lead, Call.x[mate], Call.y[mate])
+        if (over) options.push(over)
+      }
+    }
+    // From out wide in the final third, crossed into the box for them to attack.
+    if (cross) {
+      for (const [u, y] of cross) {
+        const into = loftInto(world, carrier, mate, u * attackDir(team), y)
+        if (into) options.push(into)
+      }
     }
   }
   return options
@@ -272,7 +319,7 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   const distance = hypot(x - bx, y - by)
   if (!playable(world, carrier, bx, by, x, y, distance)) return null
   const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier, bx, by, true)
-  return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
+  return { receiver: mate, kind: 'feet', x, y, speed, flight: 0, safety, value }
 }
 
 /**
@@ -323,7 +370,116 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
   const race = 1 / (1 + exp(-(teamArrival(world, opponent(team), x, y, 0.5, carrier) - meet) / RACE_SCALE))
   const safety = passSafety(world, team, bx, by, x, y, speed, carrier) * race
   const value = passValue(world, team, safety, receiveValue(world, mate, x, y, meet, carrier), bx, by, x, y)
-  return { receiver: mate, kind: 'through', x, y, speed, safety, value }
+  return { receiver: mate, kind: 'through', x, y, speed, flight: 0, safety, value }
+}
+
+/**
+ * A ball lofted to drop where `mate` will be once it comes down: over
+ * anyone in the way, to be won in the air or brought down where it lands.
+ */
+function loftToFeet(world: Match, carrier: number, mate: number): PassOption | null {
+  const team = Team.id[carrier]
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const mx = seenX(world, carrier, mate)
+  const my = seenY(world, carrier, mate)
+  // Lead them by where they're running, about as long as the ball will hang.
+  let x = mx
+  let y = my
+  for (let i = 0; i < 2; i++) {
+    const flight = loftFlightTime(hypot(x - bx, y - by))
+    x = mx + seenVx(world, carrier, mate) * flight
+    y = my + seenVy(world, carrier, mate) * flight
+  }
+  const distance = hypot(x - bx, y - by)
+  if (!loftable(world, carrier, bx, by, x, y, distance)) return null
+  const flight = loftFlightTime(distance)
+  const safety = loftSafety(world, team, bx, by, x, y, flight, mate, carrier) * controlled(mate)
+  const value = passValue(world, team, safety, receiveValue(world, mate, x, y, flight, carrier), bx, by, x, y, 1)
+  return { receiver: mate, kind: 'feet', x, y, speed: distance / flight, flight, safety, value }
+}
+
+/**
+ * A ball lofted over the top, to drop `lead` metres ahead of `mate` in the
+ * direction of (towardX, towardY), for them to run onto.
+ */
+function loftIntoSpace(world: Match, carrier: number, mate: number, lead: number, towardX: number, towardY: number): PassOption | null {
+  const mx = seenX(world, carrier, mate)
+  const my = seenY(world, carrier, mate)
+  const gx = towardX - mx
+  const gy = towardY - my
+  const glen = hypot(gx, gy)
+  if (glen < 1) return null
+  const { halfLength: L, halfWidth: W } = world.pitch
+  return loftInto(world, carrier, mate, clamp(mx + (gx / glen) * lead, -L + 1, L - 1), clamp(my + (gy / glen) * lead, -W + 1, W - 1))
+}
+
+/**
+ * A ball lofted into the space at (x, y), to drop there just before `mate`
+ * gets there, bouncing on as it is if they're not there yet.
+ */
+function loftInto(world: Match, carrier: number, mate: number, x: number, y: number): PassOption | null {
+  const team = Team.id[carrier]
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const distance = hypot(x - bx, y - by)
+  if (!loftable(world, carrier, bx, by, x, y, distance)) return null
+  const flight = loftFlightTime(distance)
+  const runner = arrivalTime(world, mate, x, y, 0.5, REACTION_TIME, carrier)
+  // Landing too far ahead of them, it bounces on out of their reach.
+  if (flight < runner - LOFT_EARLY) return null
+  const meet = Math.max(runner, flight)
+  const safety = loftSafety(world, team, bx, by, x, y, flight, mate, carrier) * controlled(mate)
+  const value = passValue(world, team, safety, receiveValue(world, mate, x, y, meet, carrier), bx, by, x, y, 1)
+  return { receiver: mate, kind: 'through', x, y, speed: distance / flight, flight, safety, value }
+}
+
+/**
+ * Where in the box a cross from where the ball is could be aimed, as
+ * (along, y): the near post, the penalty spot and the far post. Null unless
+ * the ball is out wide in the final third.
+ */
+function crossSpots(world: Match, team: number): [number, number][] | null {
+  const { pitch } = world
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const L = pitch.halfLength
+  if (along(team, bx) <= L / 3 || Math.abs(by) <= pitch.penaltyAreaHalfWidth) return null
+  const side = Math.sign(by)
+  return [
+    [L - NEAR_POST[0], side * NEAR_POST[1]],
+    [L - pitch.penaltySpotDistance, 0],
+    [L - FAR_POST[0], -side * FAR_POST[1]],
+  ]
+}
+
+/** Where (m out from the goal line, and across from the middle towards the ball, or away from it) crosses are aimed at the near and far posts. */
+const NEAR_POST: [number, number] = [6, 3]
+const FAR_POST: [number, number] = [7, 4]
+
+/** The share of lofted balls `mate` would bring down, or be first to once they've got away from them. */
+function controlled(mate: number): number {
+  const c = aerialControlChance(Outfielder.firstTouch[mate])
+  return c + (1 - c) * MISCONTROL_KEPT
+}
+
+/**
+ * Whether a pass from (bx, by) to (x, y) can be lofted: long enough to be
+ * worth putting in the air, or a cross from wide into the box, to drop
+ * inside the lines, and one the carrier can play from how they stand.
+ */
+function loftable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
+  if (distance > LOFT_MAX || distance < (crossing(world, Team.id[carrier], bx, by, x, y) ? CROSS_MIN : LOFT_MIN)) return false
+  // Dropped near a line, it's as likely to bounce out as to be taken.
+  if (Math.abs(x) > world.pitch.halfLength - LOFT_INSIDE || Math.abs(y) > world.pitch.halfWidth - LOFT_INSIDE) return false
+  return Math.abs(angleDelta(Facing.angle[carrier], atan2(y - by, x - bx))) <= MAX_PASS_TURN
+}
+
+/** Whether a ball from (bx, by) to (x, y) is a cross: from wide in the final third into the box `team` attacks. */
+function crossing(world: Match, team: number, bx: number, by: number, x: number, y: number): boolean {
+  const { pitch } = world
+  const L = pitch.halfLength
+  return along(team, bx) > L / 3 && Math.abs(by) > pitch.penaltyAreaHalfWidth && along(team, x) > L - pitch.penaltyAreaDepth && Math.abs(y) < pitch.penaltyAreaHalfWidth
 }
 
 /** Whether a pass from (bx, by) to (x, y) is one the carrier can play from how they stand. */
@@ -350,8 +506,9 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
 /**
  * Strikes the pass. It goes off line and off weight with an error that
  * shrinks with the passing grade, grows with distance, and grows when the
- * passer is hurried, or plays it on first time. The receiver takes over as
- * the carrier while it travels.
+ * passer is hurried, or plays it on first time; a lofted pass carries too
+ * far or not far enough by a share of its length. The receiver takes over
+ * as the carrier while it travels.
  */
 export function strikePass(world: Match, carrier: number, option: PassOption, firstTime = false) {
   if (!playBall(world, carrier)) return
@@ -365,9 +522,18 @@ export function strikePass(world: Match, carrier: number, option: PassOption, fi
   const passing = Outfielder.passing[carrier]
   const aim = atan2(option.y - by, option.x - bx)
   const across = 1 + Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], aim)) - CLEAN_PASS_TURN)
-  const angle = aim + gaussian(rng) * passAngleError(passing) * hurried * across * (1 + distance / 30)
-  const speed = option.speed * Math.max(0.3, 1 + gaussian(rng) * passWeightError(passing) * hurried)
-  setVec(Velocity, ball, cos(angle) * speed, sin(angle) * speed, 0)
+  const lofted = option.flight > 0
+  // Struck along the ground, a pass strays further the further it goes; in the air its line is truer, but it goes as
+  // far as it was struck to, more or less: a share of its length off, either way.
+  const angle = aim + gaussian(rng) * passAngleError(passing) * hurried * across * (1 + distance / (lofted ? LOFT_LINE_DISTANCE : LINE_DISTANCE))
+  if (lofted) {
+    const carry = distance * Math.max(0.3, 1 + gaussian(rng) * loftCarryError(passing) * hurried)
+    const flight = loftFlightTime(carry)
+    setVec(Velocity, ball, (cos(angle) * carry) / flight, (sin(angle) * carry) / flight, launchUp(flight))
+  } else {
+    const speed = option.speed * Math.max(0.3, 1 + gaussian(rng) * passWeightError(passing) * hurried)
+    setVec(Velocity, ball, cos(angle) * speed, sin(angle) * speed, 0)
+  }
   Position.z[ball] = BALL_RADIUS
 
   Dribbler.style[carrier] = TouchStyle.None
@@ -377,7 +543,7 @@ export function strikePass(world: Match, carrier: number, option: PassOption, fi
   world.lastTouchDeliberate = true
   const team = Team.id[carrier]
   world.stats[team].passes++
-  world.pass = { from: carrier, to: option.receiver, kind: option.kind, x: option.x, y: option.y, time: world.time }
+  world.pass = { from: carrier, to: option.receiver, kind: option.kind, lofted: option.flight > 0, x: option.x, y: option.y, time: world.time }
   handOver(world, option.receiver)
   cue(world, { kind: 'passStruck', passer: carrier, receiver: option.receiver })
 }

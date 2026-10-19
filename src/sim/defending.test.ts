@@ -235,7 +235,7 @@ describe('review fixes', () => {
     const [carrier, runner] = world.teams[RED].outfielders
     setVec(Velocity, runner, 0, 0, 0)
     Run.burstAt[runner] = world.time + 0.6
-    strikePass(world, carrier, { receiver: runner, kind: 'through', x: 12, y: 6, speed: 14, safety: 1, value: 1 })
+    strikePass(world, carrier, { receiver: runner, kind: 'through', x: 12, y: 6, speed: 14, flight: 0, safety: 1, value: 1 })
     const start = Position.x[runner]
     for (let i = 0; i < 60; i++) stepMatch(world)
     expect(world.pass?.to).toBe(runner)
@@ -280,7 +280,7 @@ describe('review fixes', () => {
 
   test('a restart calls off a pass being wound up', () => {
     const world = scene(-5, 0, 0, 8, 8, [[-3, 0], [6, 6]])
-    world.windup = { carrier: world.carrier, option: { receiver: world.teams[RED].outfielders[1], kind: 'feet', x: 8, y: 8, speed: 9, safety: 1, value: 1 }, at: world.time + 0.2 }
+    world.windup = { carrier: world.carrier, option: { receiver: world.teams[RED].outfielders[1], kind: 'feet', x: 8, y: 8, speed: 9, flight: 0, safety: 1, value: 1 }, at: world.time + 0.2 }
     resetMatch(world)
     expect(world.windup).toBeNull()
   })

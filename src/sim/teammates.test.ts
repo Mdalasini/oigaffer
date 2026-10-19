@@ -173,7 +173,8 @@ describe('moving like footballers', () => {
         if (team === world.possession) {
           attackerSamples++
           if (along(team, Position.x[eid]) <= onsideLimit(world, team) + 1) onside++
-        } else {
+        } else if (!world.pass?.lofted) {
+          // A ball lofted over their head is behind them for a moment however they stand.
           coverSamples++
           const goalX = ownGoalX(world.pitch, team)
           if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
@@ -183,8 +184,9 @@ describe('moving like footballers', () => {
   }
 
   test('off the ball they mostly walk and jog, and sprint only now and then', () => {
-    // Measured at 77% over twelve matches on the five-a-side pitch, which is roomy for two a side (73–80% each).
-    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.73)
+    // Measured at 71% over twelve matches on the five-a-side pitch, which is roomy for two a side (68–73% each). It
+    // was 77% before balls could be lofted: with one man to beat, two a side go long over him often, and chase it.
+    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.68)
     expect(speeds.sprint / samples).toBeLessThan(0.08)
   })
 

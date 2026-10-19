@@ -7,11 +7,16 @@ import { playBall } from '../offside'
 import { seenX, seenY } from '../perception'
 import { gaussian } from '../rng'
 import { arrivalTime } from '../space/arrival'
+import { HEADER_HEIGHT } from '../space/control'
 import { attackedGoalX, opponent } from '../teams'
-import { ballAtFeet, canPlayBall, touchAngle } from '../touch'
+import { ballAtFeet, canPlayBall, touchAngle, withinAerialReach } from '../touch'
+import { airborne, dropPoint, MEET_HEIGHT } from '../flight'
+import { aerialControlChance } from '../grades'
+import { cue } from '../cues'
 import { playFirstTime } from './carrier'
+import { claimingKeeper } from './keeper'
 import { RETURN_WINDOW } from '../playmaking'
-import { cos, hypot, sin } from '../fmath'
+import { atan2, cos, hypot, sin } from '../fmath'
 
 /** How close (m) to the ball's path the receiver needs to be to take it. */
 const RECEIVE_REACH = 0.5
@@ -28,6 +33,24 @@ const PASS_EXPIRY = 6
 const SET_PUSH = 0.8
 /** Opponents within this distance (m) make the receiver take it away from them. */
 const PRESSURE_RANGE = 5
+/**
+ * A dropping ball coming at them at up to EASY_DROP m/s is as easy to bring
+ * down as it gets; each m/s faster costs DROP_PACE_COST of that chance, down
+ * to FASTEST_DROP_SHARE of it.
+ */
+const EASY_DROP = 10
+const DROP_PACE_COST = 0.012
+const FASTEST_DROP_SHARE = 0.6
+/** A dropping ball is set this many times less truly than one along the ground, and this much later (s). */
+const AERIAL_TOUCH_ERROR = 1.5
+const AERIAL_SETTLE = 0.25
+/** Having jumped with an opponent for it, a player brings the ball down this share as often. */
+const CONTESTED_SHARE = 0.5
+/** A dropping ball that gets away goes off at between these paces (m/s), within about this angle (rad) of the way it came, and up to this fast (m/s) upwards. */
+const SPILL_SLOWEST = 2.5
+const SPILL_FASTEST = 6
+const SPILL_SPREAD = 0.8
+const SPILL_UP = 2
 
 /**
  * The receiver of a pass goes to meet it: they head for the first point on
@@ -37,6 +60,21 @@ const PRESSURE_RANGE = 5
  */
 export function meetTheBall(world: Match, eid: number) {
   const ball = world.ball
+  // A ball in the air they attack where it comes down, as anyone going for it would.
+  const drop = world.pass?.lofted ? dropPoint(world, MEET_HEIGHT) : null
+  if (drop) {
+    const dx = drop.x - Position.x[eid]
+    const dy = drop.y - Position.y[eid]
+    const distance = hypot(dx, dy)
+    const pace = distance < 0.2 ? 0 : Math.min(topSpeed(Physical.pace[eid]), distance / Math.max(drop.t, 0.15))
+    MoveIntent.vx[eid] = distance > 0 ? (dx / distance) * pace : 0
+    MoveIntent.vy[eid] = distance > 0 ? (dy / distance) * pace : 0
+    const near = distance < 4 || pace < 3
+    MoveIntent.faceX[eid] = near ? Position.x[ball] - Position.x[eid] : 0
+    MoveIntent.faceY[eid] = near ? Position.y[ball] - Position.y[eid] : 0
+    Dribbler.style[eid] = TouchStyle.None
+    return
+  }
   const speed = hypot(Velocity.x[ball], Velocity.y[ball])
   let tx = Position.x[ball]
   let ty = Position.y[ball]
@@ -94,27 +132,74 @@ export function receiveSystem(world: Match, _dt: number) {
   }
   const eid = pass.to
   const ball = world.ball
-  if (!canPlayBall(world, eid) || !ballAtFeet(eid, ball)) return
+  if (!canPlayBall(world, eid)) return
+  // A lofted pass still in the air is cushioned down off the head, chest or thigh as it drops, or as it bounces up at them.
+  const dropping = pass.lofted && airborne(world)
+  if (dropping && claimingKeeper(world) !== -1) return
+  if (dropping ? !withinAerialReach(eid, ball, HEADER_HEIGHT) && !ballAtFeet(eid, ball) : !ballAtFeet(eid, ball)) return
   if (!playBall(world, eid)) return
+  received(world, eid, pass.from)
+  if (dropping) return controlDroppingBall(world, eid)
+  if (playFirstTime(world, eid)) return
+  firstTouch(world, eid, 1, 0)
+}
 
+/** `eid` has the pass from `from`: it counts as completed, and as part of any run of passes between the two of them. */
+export function received(world: Match, eid: number, from: number) {
   world.stats[world.possession].completed++
   world.pass = null
   // Giving it straight back to whoever had just passed it adds to the run of passes between the two of them.
-  const back = Passer.receivedFrom[pass.from] === eid && world.time - Passer.receivedAt[pass.from] <= RETURN_WINDOW
-  Passer.exchanges[eid] = back ? Passer.exchanges[pass.from] + 1 : 1
-  Passer.receivedFrom[eid] = pass.from
+  const back = Passer.receivedFrom[from] === eid && world.time - Passer.receivedAt[from] <= RETURN_WINDOW
+  Passer.exchanges[eid] = back ? Passer.exchanges[from] + 1 : 1
+  Passer.receivedFrom[eid] = from
   Passer.receivedAt[eid] = world.time
-  if (playFirstTime(world, eid)) return
+}
 
+/**
+ * Bringing down a ball that's dropping on them: harder than taking one
+ * along the ground, the harder the faster it comes, and harder still having
+ * just jumped with someone for it (`contested`). With a good first touch
+ * it's under control, a little less truly set and a little later than a
+ * ground pass would be; otherwise it gets away from them, loose for
+ * whoever is first to it.
+ */
+export function controlDroppingBall(world: Match, eid: number, contested = false) {
+  const ball = world.ball
+  const { rng } = world
+  const rx = Velocity.x[ball] - Velocity.x[eid]
+  const ry = Velocity.y[ball] - Velocity.y[eid]
+  const pace = hypot(hypot(rx, ry), Velocity.z[ball])
+  const harder = Math.max(FASTEST_DROP_SHARE, 1 - Math.max(0, pace - EASY_DROP) * DROP_PACE_COST)
+  if (rng() < aerialControlChance(Outfielder.firstTouch[eid]) * harder * (contested ? CONTESTED_SHARE : 1)) return firstTouch(world, eid, AERIAL_TOUCH_ERROR, AERIAL_SETTLE)
+  // It comes off them the way it was going, more or less, at a pace they can't stay with at once.
+  const angle = atan2(ry, rx) + gaussian(rng) * SPILL_SPREAD
+  const speed = SPILL_SLOWEST + rng() * (SPILL_FASTEST - SPILL_SLOWEST)
+  Velocity.x[ball] = Velocity.x[eid] + cos(angle) * speed
+  Velocity.y[ball] = Velocity.y[eid] + sin(angle) * speed
+  Velocity.z[ball] = SPILL_UP * rng()
+  Dribbler.cooldown[eid] = AERIAL_SETTLE
+  world.lastTouch = null
+  world.lastTouchedBy = eid
+  world.lastTouchDeliberate = false
+  cue(world, { kind: 'loose', player: eid })
+}
+
+/**
+ * The receiver's first touch: they cushion it, however hard it came, and set
+ * it for their next action, its direction off by `errorScale` times their
+ * usual error, and ready to play again `settle` seconds later than usual.
+ */
+function firstTouch(world: Match, eid: number, errorScale: number, settle: number) {
+  const ball = world.ball
   const firstTouch = Outfielder.firstTouch[eid]
   const want = touchDirection(world, eid)
-  const angle = touchAngle(eid, TouchStyle.Small, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch)
+  const angle = touchAngle(eid, TouchStyle.Small, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch) * errorScale
   Velocity.x[ball] = Velocity.x[eid] + cos(angle) * SET_PUSH
   Velocity.y[ball] = Velocity.y[eid] + sin(angle) * SET_PUSH
   Velocity.z[ball] = 0
   Position.z[ball] = BALL_RADIUS
 
-  Dribbler.cooldown[eid] = controlTime(firstTouch)
+  Dribbler.cooldown[eid] = controlTime(firstTouch) + settle
   world.lastTouch = { by: eid, style: TouchStyle.Small, time: world.time, x: Position.x[ball], y: Position.y[ball] }
   world.lastTouchedBy = eid
   world.lastTouchDeliberate = true
