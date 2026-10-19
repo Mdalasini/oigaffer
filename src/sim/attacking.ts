@@ -19,6 +19,8 @@ export interface Intent {
   x: number
   y: number
   effort: Effort
+  /** Why, when someone is reading the match back (`onDecision`). */
+  why?: string
 }
 
 /** Attackers keep at least this far (m) from the carrier, so they offer a pass rather than crowd them. */
@@ -139,18 +141,18 @@ export function attackingIntent(world: Match, eid: number): Intent {
   // While the keeper has it, or a pass is on its way to someone else, they keep the shape; a run already going goes on.
   if (world.phase !== 'play' || carrier === eid || (world.pass && Run.phase[eid] !== RunPhase.Go)) {
     endRun(world, eid)
-    return hold(world, eid, false)
+    return because(world, hold(world, eid, false), world.phase !== 'play' ? 'holds the shape: the keeper has it' : 'holds the shape: a pass is on to someone else')
   }
 
   // The rest defence gives up any run they were on: someone has to stay back.
   const rest = restDefender(world) === eid
   if (rest) {
     endRun(world, eid)
-    return hold(world, eid, true)
+    return because(world, hold(world, eid, true), 'holds back as rest defence')
   }
 
   if (Run.phase[eid] === RunPhase.Prepare) {
-    if (Run.timer[eid] > 0) return checkAway(world, eid)
+    if (Run.timer[eid] > 0) return because(world, checkAway(world, eid), 'checks away before the run in behind')
     Run.phase[eid] = RunPhase.Go
     Run.timer[eid] = GO_WINDOW
     cue(world, { kind: 'run', runner: eid })
@@ -160,12 +162,15 @@ export function attackingIntent(world: Match, eid: number): Intent {
       Call.kind[eid] = CallKind.Space
       Call.x[eid] = Run.targetX[eid]
       Call.y[eid] = Run.targetY[eid]
-      return { x: Run.targetX[eid], y: Run.targetY[eid], effort: Effort.Sprint }
+      return because(world, { x: Run.targetX[eid], y: Run.targetY[eid], effort: Effort.Sprint }, 'runs in behind, calling for it in space')
     }
+    if (world.onDecision) world.onDecision(eid, Run.timer[eid] > 0 ? 'gives up the run: offside' : 'gives up the run: not found in time')
     endRun(world, eid)
   }
 
-  if (pressured(world, eid, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) return showForIt(world, eid)
+  if (pressured(world, eid, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) {
+    return because(world, showForIt(world, eid), 'shows for it: the carrier is under pressure and they are among the nearest')
+  }
   OffBall.showing[eid] = 0
   if (runnerFree(world, eid) && runCue(world, eid) && world.rng() < runChance(eid)) {
     const target = runTarget(world, eid)
@@ -174,10 +179,16 @@ export function attackingIntent(world: Match, eid: number): Intent {
       Run.timer[eid] = PREPARE_SLOW + (PREPARE_QUICK - PREPARE_SLOW) * gradeT(Outfielder.offTheBall[eid])
       Run.targetX[eid] = target.x
       Run.targetY[eid] = target.y
-      return checkAway(world, eid)
+      return because(world, checkAway(world, eid), `sets off on a run in behind to (${target.x.toFixed(1)}, ${target.y.toFixed(1)}): checks away first`)
     }
   }
-  return hold(world, eid, true)
+  return because(world, hold(world, eid, true), 'holds their place in the shape')
+}
+
+/** Notes why on `intent`, ahead of anything it already says, if someone is reading the match back. */
+function because(world: Match, intent: Intent, why: string): Intent {
+  if (world.onDecision) intent.why = intent.why ? `${why} (${intent.why})` : why
+  return intent
 }
 
 /**
@@ -246,6 +257,8 @@ export function clearIntentions(eid: number) {
  * far forward their place would be.
  */
 function hold(world: Match, eid: number, mayCall: boolean): Intent {
+  // What moved them off their spot, only gathered for someone reading the match back.
+  const notes: string[] | null = world.onDecision ? [] : null
   let { x, y } = homePosition(world, eid)
   const carrier = world.carrier
   const L = world.pitch.halfLength
@@ -257,11 +270,16 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     x = Math.min(along(team, x), ball - behind, L - 1) * attackDir(team)
     x = clamp(x, -(L - 1), L - 1)
   } else if (world.phase !== 'held' && carrier !== eid) {
-    if (world.phase === 'play') ({ x, y } = openLane(world, eid, x, y))
+    if (world.phase === 'play') {
+      const home = { x, y }
+      ;({ x, y } = openLane(world, eid, x, y))
+      if (x !== home.x || y !== home.y) notes?.push('shifted off their spot to open a lane')
+    }
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
     const gap = hypot(dx, dy)
     if (gap < SPACING) {
+      notes?.push(`kept ${SPACING} m off the carrier`)
       // Slide away from the carrier, keeping on the side they're already on.
       const ux = gap > 0.5 ? dx / gap : 0
       const uy = gap > 0.5 ? dy / gap : Math.sign(y - Position.y[carrier]) || 1
@@ -274,9 +292,10 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     Call.kind[eid] = CallKind.Feet
     Call.x[eid] = Position.x[eid]
     Call.y[eid] = Position.y[eid]
+    notes?.push('free, so calling for it to feet')
   }
   const distance = hypot(x - Position.x[eid], y - Position.y[eid])
-  return { x, y, effort: distance > 10 ? Effort.Run : distance > 3 ? Effort.Jog : Effort.Walk }
+  return { x, y, effort: distance > 10 ? Effort.Run : distance > 3 ? Effort.Jog : Effort.Walk, why: notes?.join('; ') || undefined }
 }
 
 /**

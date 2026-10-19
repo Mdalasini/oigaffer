@@ -131,6 +131,7 @@ export function carrierSystem(world: Match, dt: number) {
     const chased = isChased(world, dirX, dirY)
     const shootDistance = world.shootDistance + (chased ? CHASED_SHOOT_EARLIER : 0)
     if (canPlayBall(world, eid) && wantsToShoot(world, eid, goalX) && ballAtFeet(eid, ball) && Dribbler.cooldown[eid] === 0) {
+      world.onDecision?.(eid, 'shoots: asked to from outside (Space)')
       shoot(world, eid, goalX)
       continue
     }

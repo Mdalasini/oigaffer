@@ -9,6 +9,7 @@ import { gaussian } from '../rng'
 import { passSafety } from '../space/control'
 import { ownGoalX } from '../teams'
 import { atan2, cos, exp, hypot, sin } from '../fmath'
+import { playerLabel } from '../trace'
 
 // How far off the line (m) the keeper stands, along the bisector of the
 // angle the ball makes with the posts: a share of the ball's distance,
@@ -174,6 +175,7 @@ function holdAndRollOut(world: Match, eid: number) {
     const look = bestReceiver(world, eid, Position.x[eid], Position.y[eid])
     Goalkeeper.receiver[eid] = look.receiver
     Goalkeeper.safety[eid] = look.safety
+    world.onDecision?.(eid, `looks to roll it to ${playerLabel(world, look.receiver)}, the safest pass (${look.safety.toFixed(2)}), ${look.safety < SAFE_ENOUGH ? 'but waits: not safe enough yet' : 'safe enough to play'}`)
   }
   const receiver = Goalkeeper.receiver[eid]
   const safety = Goalkeeper.safety[eid]

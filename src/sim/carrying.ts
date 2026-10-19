@@ -125,6 +125,10 @@ export function chooseCarry(world: Match, carrier: number) {
   if (world.time < Carry.nextLook[carrier]) return
   Carry.nextLook[carrier] = world.time + DECIDE_EVERY
   const plan = planCarry(world, carrier, scratch)
+  if (world.onDecision && (plan.takeOn ? 1 : 0) !== Carry.takeOn[carrier]) {
+    const heading = Math.round((atan2(plan.dirY, plan.dirX) * 180) / Math.PI)
+    world.onDecision(carrier, plan.takeOn ? `takes their man on, heading ${heading}°: no way round him (reckons ${Math.round(plan.kept * 100)}% to keep it)` : `carries it on, heading ${heading}°: there's a way round`)
+  }
   Carry.dirX[carrier] = plan.dirX
   Carry.dirY[carrier] = plan.dirY
   Carry.takeOn[carrier] = plan.takeOn ? 1 : 0
