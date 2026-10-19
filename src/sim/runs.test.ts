@@ -277,31 +277,34 @@ describe('five a side: complementary support', () => {
     expect(restDefender(createMatch({ outfielders: 2, seed: 1 }))).toBe(-1)
   })
 
-  describe('over five minutes of play', () => {
-    const world = createMatch({ seed: 11 })
+  // Pooled over several matches: one match's share swings from 60% to 95% with the seed.
+  describe('over five minutes of play, in each of six matches', () => {
     let settled = 0
     let restBehind = 0
     let tooManyRunning = 0
-    let possession = world.possession
-    let carrier = world.carrier
-    let changed = 0
-    for (let tick = 0; world.time < 300; tick++) {
-      stepMatch(world)
-      if (world.possession !== possession || world.carrier !== carrier) changed = world.time
-      possession = world.possession
-      carrier = world.carrier
-      if (tick % 12 || world.phase !== 'play') continue
-      const squad = world.teams[possession].outfielders
-      if (squad.filter((eid) => Run.phase[eid] !== RunPhase.None).length > 1) tooManyRunning++
-      // Right after the ball changes hands, or while it's travelling, the shape is still reforming.
-      if (world.pass || world.time - changed < 3) continue
-      settled++
-      if (along(possession, Position.x[restDefender(world)]) <= along(possession, Position.x[world.ball]) + 1) restBehind++
+    for (const seed of [11, 1, 2, 3, 4, 5]) {
+      const world = createMatch({ seed })
+      let possession = world.possession
+      let carrier = world.carrier
+      let changed = 0
+      for (let tick = 0; world.time < 300; tick++) {
+        stepMatch(world)
+        if (world.possession !== possession || world.carrier !== carrier) changed = world.time
+        possession = world.possession
+        carrier = world.carrier
+        if (tick % 12 || world.phase !== 'play') continue
+        const squad = world.teams[possession].outfielders
+        if (squad.filter((eid) => Run.phase[eid] !== RunPhase.None).length > 1) tooManyRunning++
+        // Right after the ball changes hands, or while it's travelling, the shape is still reforming.
+        if (world.pass || world.time - changed < 3) continue
+        settled++
+        if (along(possession, Position.x[restDefender(world)]) <= along(possession, Position.x[world.ball]) + 1) restBehind++
+      }
     }
 
     test('in settled possession, the rest defence is behind the ball', () => {
-      // Measured at 90%: the rest are moments the ball has been played back past them.
-      expect(restBehind / settled).toBeGreaterThan(0.85)
+      // Measured at 77–83% over eight seeds: the rest are moments the ball has been played back past them.
+      expect(restBehind / settled).toBeGreaterThan(0.75)
     })
 
     test('one runs in behind at a time', () => {
