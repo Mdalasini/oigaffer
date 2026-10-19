@@ -150,4 +150,34 @@ describe('defender', () => {
     for (let i = 0; i < 10 && world.phase === 'shot'; i++) stepMatch(world)
     expect(world.event?.kind).toBe('blocked')
   })
+
+  /**
+   * How a shot struck `height` m up ends, passing `wide` m to the side of
+   * the defender 4 m ahead; or of Red's own teammate standing there instead.
+   */
+  function shotPast(wide: number, height: number, teammate = false) {
+    const world = faceOff(4)
+    const { presser: defender } = world
+    if (teammate) {
+      const mate = world.teams[0].outfielders[1]
+      setVec(Position, mate, Position.x[defender], Position.y[defender], 0)
+      setVec(Position, defender, GOAL_X - 30, 15, 0)
+    }
+    shotUnderway(world)
+    setVec(Position, world.ball, GOAL_X - 19, -wide, height)
+    setVec(Velocity, world.ball, 25, 0, 0)
+    for (let i = 0; i < 20 && world.phase === 'shot'; i++) stepMatch(world)
+    return world.event?.kind
+  }
+
+  test('a defender stretches a leg out to block a low shot going wide of their legs', () => {
+    expect(shotPast(1, 0.3)).toBe('blocked')
+    // The shooter's own teammate gets out of the way.
+    expect(shotPast(1, 0.3, true)).not.toBe('blocked')
+  })
+
+  test('a shot above the stretched leg, or wide of it, goes on past', () => {
+    expect(shotPast(1, 1.4)).not.toBe('blocked')
+    expect(shotPast(1.4, 0.3)).not.toBe('blocked')
+  })
 })

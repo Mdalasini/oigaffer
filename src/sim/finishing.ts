@@ -1,10 +1,11 @@
 import { angleDelta } from './angles'
-import { Facing, Outfielder, Position, Team } from './components'
+import { Body, Facing, Outfielder, Position, Team } from './components'
 import { shotAngleError } from './grades'
 import type { Match } from './match'
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GOAL_HEIGHT } from './constants'
 import { chooseAim, VERTICAL_ERROR, type GoalPoint } from './shooting'
 import { diveReach } from './systems/keeper'
+import { LEG_WIDTH } from './systems/collision'
 import { seenX, seenY } from './perception'
 import { attackedGoalX } from './teams'
 import { atan2, exp, hypot, tan } from './fmath'
@@ -17,6 +18,7 @@ const SPEED_PER_METRE = 0.9
 const POWER_REFERENCE = 24
 /** The keeper's reaction a shooter reckons on (s): they can't know the keeper's grade. */
 const TYPICAL_REACTION = 0.2
+const QUARTER_TURN = Math.PI / 2
 
 /** An opponent within this distance (m) of the shooter hurries the shot, more the closer they are. */
 const PRESSURE_RANGE = 3
@@ -28,13 +30,19 @@ const CLEAN_TURN = 0.5
 const ACROSS_BODY = 1.2
 /** However hurried and twisted, a shot goes no further off line than this (rad), about 40°. */
 const WILDEST = 0.7
+/** A shot struck first time, without a touch to set it, goes this many times further off line. */
+const FIRST_TIME_ERROR = 1.4
+/** However slanted the shot, it's reckoned as struck from at least this far (m) out from the goal line. */
+const MIN_SQUARE_ON = 0.5
 
 /** The shot `carrier` would take from where the ball is now: where they'd aim, and how far off they'd expect to be. */
 export interface ShotPlan {
   goalX: number
   aim: GoalPoint
-  /** Standard deviation (m) of where it lands around the aim, on the goal plane. */
+  /** Standard deviation (m) of where it lands across the goal plane, around the aim. */
   miss: number
+  /** Standard deviation (m) of where it lands up and down the goal plane. */
+  rise: number
   /** Standard deviation (rad) of the strike's direction. */
   error: number
   /** How hard (m/s) it's struck. */
@@ -62,9 +70,9 @@ export function shotError(world: Match, carrier: number, by = -1): number {
 /**
  * The shot `carrier` would take now, at the corner away from the keeper,
  * aimed as safe as their expected miss needs; as `judge` reckons it, or as
- * it really is.
+ * it really is. Struck `firstTime`, it goes less true.
  */
-export function planShot(world: Match, carrier: number, judge = -1): ShotPlan {
+export function planShot(world: Match, carrier: number, judge = -1, firstTime = false): ShotPlan {
   const goalX = attackedGoalX(world.pitch, Team.id[carrier])
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
@@ -72,57 +80,104 @@ export function planShot(world: Match, carrier: number, judge = -1): ShotPlan {
   const rough = chooseAim(by, keeperY, world.aimHigh)
   const distance = hypot(goalX - bx, rough.y - by)
   const speed = Math.min(DRIVEN_SPEED, PLACED_SPEED + SPEED_PER_METRE * Math.max(0, distance - 6))
-  const error = Math.min(WILDEST, (shotError(world, carrier, judge) * speed) / POWER_REFERENCE)
-  // The miss on the goal plane grows with the distance to the corner being aimed at.
-  const miss = distance * tan(error)
-  return { goalX, error, miss, speed, aim: chooseAim(by, keeperY, world.aimHigh, miss) }
+  const error = Math.min(WILDEST, (shotError(world, carrier, judge) * speed * (firstTime ? FIRST_TIME_ERROR : 1)) / POWER_REFERENCE)
+  // The miss on the goal plane grows with the distance to the corner being aimed at, and across
+  // it with how slanted the shot meets the plane: from near the byline, a sliver off line is
+  // metres along the goal line.
+  const rise = distance * tan(error)
+  const miss = (rise * distance) / Math.max(MIN_SQUARE_ON, Math.abs(goalX - bx))
+  return { goalX, error, miss, rise: rise * VERTICAL_ERROR, speed, aim: chooseAim(by, keeperY, world.aimHigh, miss) }
+}
+
+/** A stretch of the goal plane, across goal from `lo` to `hi` (m), that shots can't get through. */
+export interface Stretch {
+  lo: number
+  hi: number
 }
 
 /**
  * What `carrier` reckons a shot from here is worth: the chance it goes in
- * between the post and as far as the keeper can reach in the time it takes
- * to get there, and under the bar. They judge it from where they last saw
- * the keeper and anyone closing them down, and know how true they strike it.
+ * between the posts and under the bar, clear of the legs of anyone in the way
+ * and of as far as the keeper can reach in the time it takes to get there.
+ * They judge it from where they last saw the keeper and everyone else, and
+ * know how true they strike it, first time or not.
  */
-export function shotValue(world: Match, carrier: number): number {
-  const { goalX, aim, miss, speed } = planShot(world, carrier, carrier)
+export function shotValue(world: Match, carrier: number, firstTime = false): number {
+  const { goalX, aim, miss, rise, speed } = planShot(world, carrier, carrier, firstTime)
   const keeper = world.keeper
   const kx = seenX(world, carrier, keeper)
   const ky = seenY(world, carrier, keeper)
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  const toGoal = goalX - bx
-  const toKeeper = kx - bx
-  if (Math.abs(toGoal) < 0.1) return 0
+  const toGoal = Math.abs(goalX - bx)
+  if (toGoal < 0.1) return 0
+  const dir = Math.sign(goalX - bx)
+  // Where on the goal plane a line from the ball through (x, y), x ahead of it towards goal, comes out.
+  const through = (x: number, y: number) => (x > 0 ? by + ((y - by) * toGoal) / x : y >= by ? Infinity : -Infinity)
+  const blocked = legsInTheWay(world, carrier, dir, toGoal)
+  const ahead = (kx - bx) * dir
   // A keeper the ball is already past can't stop it.
-  if (toKeeper / toGoal <= 0) return landingChance(aim, miss, null)
-  // The keeper's reach, seen from the ball, projected back onto the goal line.
-  const scale = Math.abs(toKeeper) > 0.5 ? toGoal / toKeeper : 1
-  const flight = hypot(toKeeper, (aim.y - by) * (toKeeper / toGoal)) / speed
-  const centre = by + (ky - by) * scale
-  const reach = diveReach(keeper, flight - TYPICAL_REACTION, hypot(toKeeper, ky - by)) * scale
-  return landingChance(aim, miss, { centre, reach })
+  if (ahead + BALL_RADIUS > 0) {
+    const flight = hypot(Math.max(0, ahead), ((aim.y - by) * Math.max(0, ahead)) / toGoal) / speed
+    const reach = diveReach(keeper, flight - TYPICAL_REACTION, hypot(ahead, ky - by))
+    // The stretch of their line the keeper can reach: an end level with or behind the ball shuts off that whole side.
+    const ends = [ahead - BALL_RADIUS, ahead + BALL_RADIUS].flatMap((x) => [through(x, ky - reach), through(x, ky + reach)])
+    blocked.push({ lo: Math.min(...ends), hi: Math.max(...ends) })
+  }
+  return landingChance(aim, miss, blocked, rise)
+}
+
+/**
+ * The stretches of the goal plane that the legs of everyone `carrier` has
+ * seen between the ball and goal would stop a shot getting to. They can't
+ * know who'll stretch a leg out to block it, so they reckon on the legs alone.
+ */
+function legsInTheWay(world: Match, carrier: number, dir: number, toGoal: number): Stretch[] {
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const blocked: Stretch[] = []
+  for (const side of world.teams) {
+    for (const eid of side.outfielders) {
+      if (eid === carrier) continue
+      const px = (seenX(world, carrier, eid) - bx) * dir
+      const py = seenY(world, carrier, eid) - by
+      if (px <= 0 || px >= toGoal) continue
+      const legs = Body.radius[eid] * LEG_WIDTH + BALL_RADIUS
+      const distance = hypot(px, py)
+      if (distance <= legs) return [{ lo: -Infinity, hi: Infinity }]
+      // The lines from the ball that just graze their legs, either side.
+      const middle = atan2(py, px)
+      const half = atan2(legs, Math.sqrt(distance * distance - legs * legs))
+      const onPlane = (angle: number) => (angle >= QUARTER_TURN ? Infinity : angle <= -QUARTER_TURN ? -Infinity : by + toGoal * tan(angle))
+      blocked.push({ lo: onPlane(middle - half), hi: onPlane(middle + half) })
+    }
+  }
+  return blocked
 }
 
 /**
  * The chance a shot aimed at `aim`, landing off it by a normal error of
- * `miss` (m), goes in: inside the posts and under the bar, and clear of a
- * keeper who can reach `reach` metres either side of `centre` on the goal
- * line, if there is one in the way.
+ * `miss` (m) across and `rise` (m) up and down, goes in: inside the posts
+ * and under the bar, and through none of the `blocked` stretches, where the
+ * keeper can reach or someone is in the way.
  */
-export function landingChance(aim: GoalPoint, miss: number, keeper: { centre: number; reach: number } | null): number {
-  // The open parts of the goal either side of the keeper: a wild shot can beat them on the other side.
+export function landingChance(aim: GoalPoint, miss: number, blocked: readonly Stretch[] | null, rise = miss * VERTICAL_ERROR): number {
+  // The open parts of the goal around whatever's in the way: a wild shot can beat the keeper on the other side.
   const post = GOAL_HALF_WIDTH - BALL_RADIUS
-  const centre = keeper?.centre ?? 0
-  const reach = keeper?.reach ?? -Infinity
-  if (miss <= 0) return Math.abs(aim.y) < post && Math.abs(aim.y - centre) > reach ? 1 : 0
-  const within = (lo: number, hi: number) => (hi > lo ? normalCdf((hi - aim.y) / miss) - normalCdf((lo - aim.y) / miss) : 0)
-  const across = keeper
-    ? within(Math.max(-post, centre + reach), post) + within(-post, Math.min(post, centre - reach))
-    : within(-post, post)
-  const height = miss * VERTICAL_ERROR
+  const shut = (blocked ?? [])
+    .map(({ lo, hi }) => ({ lo: Math.max(-post, lo), hi: Math.min(post, hi) }))
+    .filter(({ lo, hi }) => hi > lo)
+    .sort((a, b) => a.lo - b.lo)
+  const within = (a: number, b: number) => (miss > 0 ? normalCdf((b - aim.y) / miss) - normalCdf((a - aim.y) / miss) : aim.y > a && aim.y < b ? 1 : 0)
+  let across = 0
+  let from = -post
+  for (const { lo, hi } of shut) {
+    if (lo > from) across += within(from, lo)
+    from = Math.max(from, hi)
+  }
+  if (post > from) across += within(from, post)
   // A shot struck into the ground still goes in low, so only the bar counts.
-  const under = normalCdf((GOAL_HEIGHT - BALL_RADIUS - aim.z) / height)
+  const under = rise > 0 ? normalCdf((GOAL_HEIGHT - BALL_RADIUS - aim.z) / rise) : aim.z < GOAL_HEIGHT - BALL_RADIUS ? 1 : 0
   return across * under
 }
 

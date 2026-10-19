@@ -44,11 +44,11 @@ export function outcomeSystem(world: Match, _dt: number) {
   if (!shot) return
   const { keeper } = world
   const dir = Math.sign(shot.goalX)
-  const crossing = crossPlane(world, Position.x[keeper], dir)
-  if (crossing) {
-    const reach = keeperReach(keeper, hypot(shot.origin.x - Position.x[keeper], shot.origin.y - Position.y[keeper]))
-    const offset = crossing.y - Position.y[keeper]
-    if (Math.abs(offset) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
+  const reach = keeperReach(keeper, hypot(shot.origin.x - Position.x[keeper], shot.origin.y - Position.y[keeper]))
+  const passing = reachedBy(world, keeper, reach)
+  if (passing) {
+    const { offset, ...crossing } = passing
+    if (crossing.z <= KEEPER_MAX_HEIGHT) {
       // Shots at the body stick; ones at full stretch or over the head get pushed away.
       const stretch = Math.abs(offset) / reach
       const chance = crossing.z > PUNCH_HEIGHT ? 0 : catchChance(Goalkeeper.handling[keeper]) * (1 - (1 - STRETCHED_CATCH) * stretch)
@@ -110,6 +110,37 @@ function keeperWithinReach(world: Match): number | null {
     if (hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
   }
   return null
+}
+
+/**
+ * Where the ball first came within `keeper`'s reach during the last step, if
+ * it did: how high it was, and how far to their side across goal. They dive
+ * across, reaching `reach` metres either way along their line, so a ball has
+ * to touch that line to be reached; even one running along the goal line.
+ */
+function reachedBy(world: Match, keeper: number, reach: number): { y: number; z: number; offset: number } | null {
+  const { ball, prevBall } = world
+  const kx = Position.x[keeper]
+  const ky = Position.y[keeper]
+  let enter = 0
+  let leave = 1
+  for (const [from, to, lo, hi] of [
+    [prevBall.x, Position.x[ball], kx - BALL_RADIUS, kx + BALL_RADIUS],
+    [prevBall.y, Position.y[ball], ky - reach, ky + reach],
+  ]) {
+    const d = to - from
+    if (d === 0) {
+      if (from < lo || from > hi) return null
+      continue
+    }
+    const a = (lo - from) / d
+    const b = (hi - from) / d
+    enter = Math.max(enter, Math.min(a, b))
+    leave = Math.min(leave, Math.max(a, b))
+  }
+  if (enter > leave) return null
+  const y = prevBall.y + (Position.y[ball] - prevBall.y) * enter
+  return { y, z: prevBall.z + (Position.z[ball] - prevBall.z) * enter, offset: y - ky }
 }
 
 /** Where the ball passed through the plane x = planeX, moving in direction `dir` (±1 along x), during the last step. */

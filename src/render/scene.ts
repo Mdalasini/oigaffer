@@ -351,6 +351,8 @@ function drawShotGuide(b: Batch, world: Match) {
     goalX = attackedGoalX(world.pitch, Team.id[world.carrier])
   }
   const end = Math.sign(goalX)
+  // From out by the byline a shot can go metres either way along the goal line; the guide stays on the pitch.
+  radius = Math.min(radius, world.pitch.halfWidth)
 
   const centre = { x: goalX - end * 0.05, y: aim.y, z: aim.z }
   b.disc(centre, Y, Z, radius, AIM_FILL, 40)

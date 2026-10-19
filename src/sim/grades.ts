@@ -13,12 +13,12 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 /**
  * Standard deviation (rad) of how far off line a clean, unhurried shot goes:
- * about 10° for the worst finisher and 4° for the best, so the miss grows
+ * about 12.5° for the worst finisher and 5° for the best, so the miss grows
  * with distance, as it does for a real shot. Unblocked shots in real matches
  * are on target a little under half the time.
  */
 export function shotAngleError(shooting: number): number {
-  return lerp(0.18, 0.07, gradeT(shooting))
+  return lerp(0.22, 0.088, gradeT(shooting))
 }
 
 /** Seconds a keeper stands still after the ball is struck. */

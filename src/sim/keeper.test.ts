@@ -62,6 +62,19 @@ describe('keeper handling', () => {
     expect(Goalkeeper.recover[world.keeper]).toBeGreaterThan(0)
     expect(world.stats[RED].saved).toBe(1)
   })
+
+  test('a ball struck along the goal line, level with the keeper, still meets their hands', () => {
+    const world = createMatch({ outfielders: 2, seed: 1 })
+    setVec(Position, world.carrier, 0, 10, 0)
+    setVec(Position, world.presser, 0, -10, 0)
+    setVec(Position, world.keeper, GOAL_X - 0.5, 0, 0)
+    shotUnderway(world)
+    // From out by the corner flag, barely drifting towards goal.
+    setVec(Position, world.ball, GOAL_X - 0.5, 6, 0.5)
+    setVec(Velocity, world.ball, 0.05, -20, 0)
+    for (let i = 0; i < 120 && world.phase === 'shot'; i++) stepMatch(world)
+    expect(['caught', 'parried']).toContain(world.event?.kind ?? 'none')
+  })
 })
 
 describe('keeper distribution', () => {

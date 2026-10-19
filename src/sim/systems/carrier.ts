@@ -60,8 +60,8 @@ const MIN_CHANCE = 0.02
 const FIRST_TIME_WHEN = 1
 /** Only shoot when facing within this angle (rad) of goal. */
 const MAX_SHOT_TURN = 1.3
-/** Don't shoot if the defender is within this distance (m) of the line to the aim point. */
-const LANE_CLEARANCE = 1
+/** Don't shoot if anyone is within this distance (m) of the line to the aim point: it would hit their legs. */
+const LANE_CLEARANCE = 0.4
 
 /** Start working the defender once they are this close and in the way. */
 const TAKE_ON_RANGE = 7
@@ -196,11 +196,11 @@ export function carrierSystem(world: Match, dt: number) {
 export function playFirstTime(world: Match, eid: number): boolean {
   if (timeOnBall(world, eid, eid) > FIRST_TIME_WHEN) return false
   const goalX = attackedGoalX(world.pitch, Team.id[eid])
-  const chance = shotOn(world, eid, goalX) ? shotValue(world, eid) : 0
+  const chance = shotOn(world, eid, goalX) ? shotValue(world, eid, true) : 0
   Passer.nextLook[eid] = 0
   const choice = chooseAction(world, eid, chance >= MIN_CHANCE ? chance : null)
   if (choice === 'shoot') {
-    shoot(world, eid, goalX)
+    shoot(world, eid, goalX, true)
     return true
   }
   if (!choice) return false
@@ -404,14 +404,14 @@ const rotate = (x: number, y: number, a: number): [number, number] => [
   x * sin(a) + y * cos(a),
 ]
 
-function shoot(world: Match, carrier: number, goalX: number) {
+function shoot(world: Match, carrier: number, goalX: number, firstTime = false) {
   if (!playBall(world, carrier)) return
   const { ball, keeper } = world
   const from = { x: Position.x[ball], y: Position.y[ball], z: Position.z[ball] }
-  const { aim, miss, speed } = planShot(world, carrier)
+  const { aim, miss, rise, speed } = planShot(world, carrier, -1, firstTime)
   // Drawn as a circle that takes in most of where the shot could go.
   const radius = 2 * miss
-  const target = sampleShotTarget(world.rng, aim, miss)
+  const target = sampleShotTarget(world.rng, aim, miss, rise)
   const v = launchVelocity(from, target, speed, goalX)
   setVec(Velocity, ball, v.x, v.y, v.z)
 

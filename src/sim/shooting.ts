@@ -42,11 +42,11 @@ export function chooseAim(ballY: number, keeperY: number, high: boolean, miss = 
   return { y: side * (GOAL_HALF_WIDTH - margin), z: high ? AIM_HIGH_Z : AIM_LOW_Z }
 }
 
-/** Samples where a shot aimed at `aim` lands, off by a normal error of standard deviation `miss` (m). */
-export function sampleShotTarget(rng: Rng, aim: GoalPoint, miss: number): GoalPoint {
+/** Samples where a shot aimed at `aim` lands, off by a normal error of standard deviation `miss` (m) across and `rise` (m) up and down. */
+export function sampleShotTarget(rng: Rng, aim: GoalPoint, miss: number, rise = miss * VERTICAL_ERROR): GoalPoint {
   return {
     y: aim.y + gaussian(rng) * miss,
-    z: Math.max(BALL_RADIUS, aim.z + gaussian(rng) * miss * VERTICAL_ERROR),
+    z: Math.max(BALL_RADIUS, aim.z + gaussian(rng) * rise),
   }
 }
 
