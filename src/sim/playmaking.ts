@@ -87,9 +87,18 @@ const DECIDE_SPREAD = 0.15
  * of what having the ball where it is is worth less, whichever pass back it
  * is: so it's played only when nothing else is nearly as good.
  */
-const RETURN_WINDOW = 5
+export const RETURN_WINDOW = 5
 const RETURN_PROGRESS = 5
 const RETURN_SHARE = 2
+/**
+ * Deep in their own half that's next to nothing, so two players being pressed
+ * could knock it between themselves for ever. Past FREE_EXCHANGES passes in a
+ * row between the two of them, each more costs EXCHANGE_SHARE of what the other
+ * team would have from here: the pressers have had time to shuffle across, and
+ * it's time to try something else.
+ */
+const FREE_EXCHANGES = 3
+const EXCHANGE_SHARE = 0.05
 /** Seconds after passing before the passer can play the ball again. */
 const PASSER_RECOVER = 0.4
 /** A pass played on first time goes this many times further astray than one from a ball they've set. */
@@ -160,14 +169,18 @@ const worth = (judged: number, truth: number) => `${judged.toFixed(3)} (${truth.
 /**
  * What it costs to give the ball straight back to whoever just passed it:
  * nothing if it moves the ball on, as a one-two does, but otherwise the two
- * of them are only knocking it between themselves. It's the same for every
- * pass back to them, so it never makes a worse one look better.
+ * of them are only knocking it between themselves, and the longer they keep
+ * that up the more it costs. It's the same for every pass back to them, so it
+ * never makes a worse one look better.
  */
 export function returnCost(world: Match, carrier: number, option: PassOption): number {
   if (option.receiver !== Passer.receivedFrom[carrier] || world.time - Passer.receivedAt[carrier] > RETURN_WINDOW) return 0
   const team = Team.id[carrier]
   if (along(team, option.x) - along(team, Position.x[world.ball]) >= RETURN_PROGRESS) return 0
-  return RETURN_SHARE * threat(world.pitch, team, Position.x[world.ball], Position.y[world.ball])
+  const bx = Position.x[world.ball]
+  const by = Position.y[world.ball]
+  const beyond = Math.max(0, Passer.exchanges[carrier] + 1 - FREE_EXCHANGES)
+  return RETURN_SHARE * threat(world.pitch, team, bx, by) + beyond * EXCHANGE_SHARE * threat(world.pitch, opponent(team), bx, by)
 }
 
 /**
