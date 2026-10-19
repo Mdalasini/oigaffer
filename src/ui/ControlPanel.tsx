@@ -123,6 +123,8 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
                 shortLabel={label}
                 value={grades[key]}
                 detail={detail(grades[key])}
+                // Nothing changes the match while a moment is being flagged.
+                disabled={snapshot.flag !== null}
                 // RoleControls pairs each role with its own keys; TS cannot follow that through the union.
                 onChange={(g) => game.setGrade(team, controls.role, key as never, g)}
               />
@@ -152,12 +154,16 @@ export function ControlPanel({ game, snapshot, open, onOpenChange: setOpen }: Pr
       <div className="flex gap-2">
         <button
           className="flex-1 rounded-md bg-amber-400 px-3 py-2 font-semibold text-neutral-900 hover:bg-amber-300 disabled:opacity-40"
-          disabled={snapshot.phase !== 'play'}
+          disabled={snapshot.phase !== 'play' || snapshot.flag !== null}
           onClick={() => game.shoot()}
         >
           Shoot <kbd className="ml-1 text-xs opacity-70">Space</kbd>
         </button>
-        <button className="rounded-md bg-white/10 px-3 py-2 font-medium hover:bg-white/20" onClick={() => game.reset()}>
+        <button
+          className="rounded-md bg-white/10 px-3 py-2 font-medium hover:bg-white/20 disabled:opacity-40"
+          disabled={snapshot.flag !== null}
+          onClick={() => game.reset()}
+        >
           New match <kbd className="ml-1 text-xs opacity-60">R</kbd>
         </button>
       </div>
@@ -182,10 +188,11 @@ interface GradeSliderProps {
   shortLabel: string
   value: number
   detail: string
+  disabled: boolean
   onChange: (grade: number) => void
 }
 
-function GradeSlider({ label, shortLabel, value, detail, onChange }: GradeSliderProps) {
+function GradeSlider({ label, shortLabel, value, detail, disabled, onChange }: GradeSliderProps) {
   return (
     <label className="block">
       <div className="flex items-baseline justify-between">
@@ -198,8 +205,9 @@ function GradeSlider({ label, shortLabel, value, detail, onChange }: GradeSlider
         max={MAX_GRADE}
         value={value}
         aria-label={label}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-amber-400"
+        className="w-full accent-amber-400 disabled:opacity-40"
       />
       <div className="-mt-1 text-[11px] text-neutral-400">{detail}</div>
     </label>

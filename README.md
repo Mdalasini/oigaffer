@@ -191,7 +191,11 @@ bun install
 bun run dev
 ```
 
-Space makes whoever has the ball shoot early, R starts a new match. Each team's
+Space makes whoever has the ball shoot early, R starts a new match. F (or "Flag a
+moment") pauses the match to look back over its last two minutes: scrub and play
+it back with the players labelled, mark where a problem starts and ends, add a
+note, and copy the flag. Pasted into `bun run inspect`, it replays that stretch
+exactly and checks it matches what was watched. Each team's
 grades are set from its tab in the control panel. `bun test` runs the simulation tests;
 `bun run build` typechecks and builds. `bun run measure [minutes] [outfielders] [seeds]`
 plays headless matches and reports how they played (tallies, effort, spacing,

@@ -26,6 +26,8 @@ export interface Flag extends Replay {
   from: number
   to: number
   note?: string
+  /** The live match's state hash after `tick` steps, so a replay can show it really is the match that was watched. */
+  check?: { tick: number; hash: string }
 }
 
 export const ticksAt = (seconds: number) => Math.round(seconds / FIXED_DT)
@@ -39,16 +41,17 @@ export function applyInput(world: Match, input: Input) {
 }
 
 /**
- * Plays a match back, stepping it while `until(world, tick)` holds, with the
- * replay's inputs applied as they come up; `tick` is the number of steps
- * taken so far. Returns the match where it stopped.
+ * Plays a match back, stepping it while `until(world, tick)` holds; `tick` is
+ * the number of steps taken so far. `until` sees the match before that
+ * tick's inputs are applied, as the live game would have been seen then.
+ * Returns the match where it stopped.
  */
 export function playBack(replay: Replay, until: (world: Match, tick: number) => boolean): Match {
   const world = createMatch({ seed: replay.seed, outfielders: replay.outfielders })
   let next = 0
   for (let tick = 0; ; tick++) {
-    while (next < replay.inputs.length && replay.inputs[next].tick === tick) applyInput(world, replay.inputs[next++])
     if (!until(world, tick)) return world
+    while (next < replay.inputs.length && replay.inputs[next].tick === tick) applyInput(world, replay.inputs[next++])
     stepMatch(world, FIXED_DT)
   }
 }
