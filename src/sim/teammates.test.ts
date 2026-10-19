@@ -205,34 +205,37 @@ describe('moving like footballers', () => {
 })
 
 describe('moving like footballers, five a side', () => {
-  const world = createMatch({ outfielders: 4, seed: 9 })
+  // Five minutes of each of three matches: one alone swings by several points either way.
   let samples = 0
   let easy = 0
   let pairs = 0
   let bunched = 0
   let coverSamples = 0
   let goalSide = 0
-  for (let tick = 0; world.time < 300; tick++) {
-    stepMatch(world)
-    if (tick % 12 || world.phase !== 'play') continue
-    for (const team of [RED, BLUE]) {
-      const squad = world.teams[team].outfielders
-      for (let i = 0; i < squad.length; i++) {
-        for (let j = i + 1; j < squad.length; j++) {
-          pairs++
-          if (Math.hypot(Position.x[squad[i]] - Position.x[squad[j]], Position.y[squad[i]] - Position.y[squad[j]]) < 3) bunched++
+  for (const seed of [9, 10, 11]) {
+    const world = createMatch({ outfielders: 4, seed })
+    for (let tick = 0; world.time < 300; tick++) {
+      stepMatch(world)
+      if (tick % 12 || world.phase !== 'play') continue
+      for (const team of [RED, BLUE]) {
+        const squad = world.teams[team].outfielders
+        for (let i = 0; i < squad.length; i++) {
+          for (let j = i + 1; j < squad.length; j++) {
+            pairs++
+            if (Math.hypot(Position.x[squad[i]] - Position.x[squad[j]], Position.y[squad[i]] - Position.y[squad[j]]) < 3) bunched++
+          }
         }
       }
-    }
-    for (const eid of allOutfielders(world)) {
-      if (eid === world.carrier || eid === world.presser) continue
-      samples++
-      if (Math.hypot(Velocity.x[eid], Velocity.y[eid]) < 4.5) easy++
-      const team = world.teams[RED].outfielders.includes(eid) ? RED : BLUE
-      if (team === world.possession) continue
-      coverSamples++
-      const goalX = ownGoalX(world.pitch, team)
-      if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
+      for (const eid of allOutfielders(world)) {
+        if (eid === world.carrier || eid === world.presser) continue
+        samples++
+        if (Math.hypot(Velocity.x[eid], Velocity.y[eid]) < 4.5) easy++
+        const team = world.teams[RED].outfielders.includes(eid) ? RED : BLUE
+        if (team === world.possession) continue
+        coverSamples++
+        const goalX = ownGoalX(world.pitch, team)
+        if (Math.hypot(goalX - Position.x[eid], Position.y[eid]) <= Math.hypot(goalX - Position.x[world.ball], Position.y[world.ball]) + 1) goalSide++
+      }
     }
   }
 
@@ -247,6 +250,7 @@ describe('moving like footballers, five a side', () => {
   })
 
   test('defenders without the ball stay goal-side of it', () => {
+    // Measured at 75% over twelve matches (69–81% each).
     expect(goalSide / coverSamples).toBeGreaterThan(0.7)
   })
 })

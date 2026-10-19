@@ -271,19 +271,21 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   const y = my + seenVy(world, carrier, mate) * rough
   const distance = hypot(x - bx, y - by)
   if (!playable(world, carrier, bx, by, x, y, distance)) return null
-  const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier)
+  const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier, bx, by, true)
   return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
 }
 
 /**
  * How good a pass to `receiver`'s feet at (x, y) would be from where the
  * ball is now, or from (bx, by), as `judge` reckons it. Off-ball players use
- * it too, to pick a spot to show for it or to open a lane.
+ * it too, to pick a spot to show for it or to open a lane: only for a
+ * receiver who is `there` already does it count their coming to meet it.
  */
-export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball]) {
+export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball], there = false) {
   const distance = hypot(x - bx, y - by)
   const speed = rollSpeedFor(distance, FEET_ARRIVAL)
-  const safety = passSafety(world, team, bx, by, x, y, speed, judge, receiver)
+  // Only a receiver already about there steps in to meet it; one judging a spot to move to isn't there yet.
+  const safety = passSafety(world, team, bx, by, x, y, speed, judge, there ? receiver : -1)
   const value = passValue(world, team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance), judge), bx, by, x, y)
   return { speed, safety, value }
 }
