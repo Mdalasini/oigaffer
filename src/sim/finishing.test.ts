@@ -32,7 +32,7 @@ function place(eid: number, x: number, y: number, facing = 0) {
  * (`covered`), and Blue's keeper given a second to set themselves.
  */
 function chance(seed: number, distance: number, wide: number, grades: GradeOverrides = {}, pressure = Infinity, covered = false): Match {
-  const world = createMatch({ seed, grades })
+  const world = createMatch({ outfielders: 4, seed, grades })
   const [shooter, ...mates] = world.teams[RED].outfielders
   const [defender, ...others] = world.teams[BLUE].outfielders
   const x = GOAL_X - distance

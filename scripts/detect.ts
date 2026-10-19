@@ -2,10 +2,11 @@
 // watcher (see `src/sim/detectors.ts`): how often each kind happens, per 90
 // minutes, and the cases themselves, each with the command to read it back.
 //
-//   bun scripts/detect.ts [minutes=30] [outfielders=4] [seeds=1,2,3] [options]
+//   bun scripts/detect.ts [minutes=30] [outfielders=10] [seeds=1,2,3] [options]
 //
 //   --only lostMan,dithering   only these detectors
 //   --examples <n>             cases listed per detector per seed (default 3; 0 for rates only)
+import { OUTFIELDERS_PER_SIDE } from '../src/sim/constants'
 import { createMatch, stepMatch } from '../src/sim/match'
 import { ticksAt } from '../src/sim/replay'
 import { createDetectors, LOOK_EVERY, watchFor, type Finding } from '../src/sim/detectors'
@@ -18,7 +19,7 @@ const option = (name: string) => {
 }
 const positional = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'))
 const minutes = Number(positional[0] ?? 30)
-const outfielders = Number(positional[1] ?? 4)
+const outfielders = Number(positional[1] ?? OUTFIELDERS_PER_SIDE)
 const seeds = (positional[2] ?? '1,2,3').split(',').map(Number)
 const only = option('only')?.split(',')
 const examples = Number(option('examples') ?? 3)

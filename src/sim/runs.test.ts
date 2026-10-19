@@ -82,7 +82,7 @@ describe('running in behind', () => {
     const runs = (offTheBall: number) => {
       let count = 0
       for (const seed of [1, 2, 3]) {
-        const world = createMatch({ seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
+        const world = createMatch({ outfielders: 4, seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
         const before = new Map<number, number>()
         for (let i = 0; i < 5 * 60 * 120; i++) {
           stepMatch(world)
@@ -193,7 +193,7 @@ describe('run bookkeeping', () => {
 describe('five a side: complementary support', () => {
   /** Red's four with the first on the ball at (x, y), closed down by Blue's presser, and the rest where given. */
   function closedDown(x: number, y: number, mates: [number, number][], blue: [number, number][]): Match {
-    const world = createMatch({ seed: 3 })
+    const world = createMatch({ outfielders: 4, seed: 3 })
     const reds = world.teams[RED].outfielders
     handOver(world, reds[0])
     place(reds[0], x, y)
@@ -285,7 +285,7 @@ describe('five a side: complementary support', () => {
   })
 
   test('the rest defence is whoever plays deepest, and changes when they have the ball', () => {
-    const world = createMatch({ seed: 3 })
+    const world = createMatch({ outfielders: 4, seed: 3 })
     const reds = world.teams[RED].outfielders
     handOver(world, reds[1])
     world.possession = RED
@@ -339,7 +339,7 @@ describe('five a side: complementary support', () => {
     let restBehind = 0
     let tooManyRunning = 0
     for (const seed of [11, 1, 2, 3, 4, 5]) {
-      const world = createMatch({ seed })
+      const world = createMatch({ outfielders: 4, seed })
       let possession = world.possession
       let carrier = world.carrier
       let changed = 0
@@ -373,7 +373,7 @@ describe('opening a lane', () => {
   test('a teammate ahead of the ball whose lane is cut out moves across off their place to where a pass would reach them', () => {
     // Red's base player has the ball in midfield with time, facing forward. A Blue defender stands in the lane to the
     // pivot's place up front; the others are well away.
-    const world = createMatch({ seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
+    const world = createMatch({ outfielders: 4, seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
     const [carrier, wideA, wideB, pivot] = world.teams[RED].outfielders
     handOver(world, carrier)
     world.phase = 'play'
@@ -447,7 +447,7 @@ describe('opening a lane', () => {
   })
 
   test('the rest defence and players behind the ball keep their places', () => {
-    const world = createMatch({ seed: 5 })
+    const world = createMatch({ outfielders: 4, seed: 5 })
     const [carrier, wideA, wideB, pivot] = world.teams[RED].outfielders
     handOver(world, wideA)
     world.phase = 'play'

@@ -1,5 +1,5 @@
 import { Position, Slot, Team } from './components'
-import { formationFor } from './formation'
+import { FORMATIONS } from './formation'
 import type { Match } from './match'
 import { seenX } from './perception'
 import { perPitch, type Pitch } from './pitch'
@@ -118,7 +118,7 @@ export function block(world: Match, team: number) {
  */
 export function homePosition(world: Match, eid: number) {
   const team = Team.id[eid]
-  const formation = formationFor(world.teams[team].outfielders.length)
+  const formation = FORMATIONS[world.teams[team].formation]
   const slots = team === world.possession ? formation.inPossession : formation.outOfPossession
   const slot = slots[Slot.index[eid]]
   const b = block(world, team)

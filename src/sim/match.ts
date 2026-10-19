@@ -60,6 +60,7 @@ import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { attackDir, attackedGoalX, opponent, ownGoalX, TEAM_NAMES, type TeamName } from './teams'
 import { pitchFor, type Pitch } from './pitch'
+import { defaultFormations, FORMATIONS, type FormationName } from './formation'
 import { atan2, hypot } from './fmath'
 
 /** Open play, a shot on its way, a keeper with the ball in their hands, or the ball dead before a restart. */
@@ -147,6 +148,8 @@ export interface LastTouch {
 export interface TeamPlayers {
   outfielders: number[]
   keeper: number
+  /** The shape the outfielders take up, one slot each (see `formation`). */
+  formation: FormationName
 }
 
 /** Every adjustable 1–20 grade, by role, and the store that holds it. */
@@ -277,6 +280,8 @@ export interface MatchOptions {
   outfielders?: number
   /** The pitch to play on; by default, the one that suits the number of outfielders (see `pitchFor`). */
   pitch?: Pitch
+  /** Red's and Blue's formations, each with a slot per outfielder; by default, `defaultFormations`. */
+  formations?: [FormationName, FormationName]
 }
 
 /** Seconds a player who has just lost the ball waits before challenging for it. */
@@ -286,7 +291,17 @@ const CONTROL_REACH = 0.9
 
 const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, passes: 0, completed: 0, saved: 0, missed: 0, won: 0, offsides: 0, attacks: 0 })
 
-export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTFIELDERS_PER_SIDE, pitch = pitchFor(outfielders) }: MatchOptions = {}): Match {
+export function createMatch({
+  seed = Date.now(),
+  grades = {},
+  outfielders = OUTFIELDERS_PER_SIDE,
+  pitch = pitchFor(outfielders),
+  formations = defaultFormations(outfielders),
+}: MatchOptions = {}): Match {
+  for (const name of formations) {
+    const slots = FORMATIONS[name].inPossession.length
+    if (slots !== outfielders) throw new Error(`a ${name} has ${slots} outfielders, not ${outfielders}`)
+  }
   const world = createWorld<MatchContext>({
     rng: createRng(seed),
     pitch,
@@ -295,8 +310,8 @@ export function createMatch({ seed = Date.now(), grades = {}, outfielders = OUTF
     phaseTime: 0,
     ball: 0,
     teams: [
-      { outfielders: [], keeper: 0 },
-      { outfielders: [], keeper: 0 },
+      { outfielders: [], keeper: 0, formation: formations[0] },
+      { outfielders: [], keeper: 0, formation: formations[1] },
     ],
     memory: createMemory([], 0),
     manOnShouts: 0,

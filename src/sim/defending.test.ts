@@ -289,7 +289,7 @@ describe('review fixes', () => {
 describe('five-a-side: defending as a unit', () => {
   /** Red's four attacking from (x, y) with the ball, the rest where given; Blue's four where given. */
   function five(red: [number, number][], blue: [number, number][]): Match {
-    const world = createMatch({ seed: 1 })
+    const world = createMatch({ outfielders: 4, seed: 1 })
     const reds = world.teams[RED].outfielders
     handOver(world, reds[0])
     reds.forEach((eid, i) => place(eid, red[i][0], red[i][1], 0))
