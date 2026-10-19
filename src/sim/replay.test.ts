@@ -21,8 +21,8 @@ describe('replay', () => {
     for (const seed of [1, 7]) {
       const replay: Replay = { seed, outfielders: 4, inputs: [] }
       const first = fingerprints(replay, 90)
-      // Another match in between, sharing the component stores.
-      const other = createMatch({ seed: seed + 100 })
+      // Another match in between, sharing the component stores, with more players than this one.
+      const other = createMatch({ seed: seed + 100, outfielders: 10 })
       for (let i = 0; i < ticksAt(30); i++) stepMatch(other)
       expect(fingerprints(replay, 90)).toEqual(first)
     }

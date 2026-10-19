@@ -7,6 +7,7 @@ import { view, type View } from '../perception'
 import { setTarget, steer } from '../movement'
 import { along, homePosition, onsideLimit } from '../shape'
 import { attackDir, ownGoalX } from '../teams'
+import { hypot } from '../fmath'
 
 /**
  * Players reconsider every DECIDE_EVERY seconds, plus up to DECIDE_SPREAD, so
@@ -99,11 +100,11 @@ function nextLook(world: Match, eid: number): number {
   const ball = world.ball
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  let distance = Math.hypot(Position.x[eid] - bx, Position.y[eid] - by)
+  let distance = hypot(Position.x[eid] - bx, Position.y[eid] - by)
   const man = Mark.target[eid]
   if (man !== -1) {
     view(world, eid, man, seen)
-    distance = Math.min(distance, Math.hypot(seen.x - bx, seen.y - by))
+    distance = Math.min(distance, hypot(seen.x - bx, seen.y - by))
   }
   if (Run.phase[eid] !== RunPhase.None || OffBall.showing[eid]) distance = 0
   const far = clamp((distance - NEAR_BALL) / (FAR_FROM_BALL - NEAR_BALL), 0, 1)
@@ -146,11 +147,11 @@ function defend(world: Match, eid: number) {
     const manToGoal = unit(goalX - mx, -my)
     const manToBall = unit(bx - mx, by - my)
     // On a pressing cue they get tight, to deny the pass.
-    const tightness = pressCue(world) ? 0 : clamp(Math.hypot(bx - mx, by - my) / MARK_LOOSE_AT, 0, 1)
+    const tightness = pressCue(world) ? 0 : clamp(hypot(bx - mx, by - my) / MARK_LOOSE_AT, 0, 1)
     const depth = MARK_TIGHT + (MARK_LOOSE - MARK_TIGHT) * tightness
     const markX = mx + manToGoal.x * depth + manToBall.x * MARK_BALL_SHADE
     const markY = my + manToGoal.y * depth + manToBall.y * MARK_BALL_SHADE
-    const ahead = Math.hypot(goalX - bx, by) - Math.hypot(goalX - mx, my)
+    const ahead = hypot(goalX - bx, by) - hypot(goalX - mx, my)
     const w = clamp((ahead + MARK_FROM_BEHIND) / (MARK_WHEN_AHEAD + MARK_FROM_BEHIND), 0, 1)
     x += (markX - x) * w
     y += (markY - y) * w
@@ -168,11 +169,11 @@ function defend(world: Match, eid: number) {
  * the wrong side of the ball, otherwise as hard as the distance calls for.
  */
 function effortFor(world: Match, eid: number, x: number, y: number, defending: boolean): Effort {
-  const distance = Math.hypot(x - Position.x[eid], y - Position.y[eid])
+  const distance = hypot(x - Position.x[eid], y - Position.y[eid])
   if (defending) {
     const goalX = ownGoalX(world.pitch, Team.id[eid])
     const ball = world.ball
-    const beaten = Math.hypot(goalX - Position.x[eid], Position.y[eid]) > Math.hypot(goalX - Position.x[ball], Position.y[ball]) + 1
+    const beaten = hypot(goalX - Position.x[eid], Position.y[eid]) > hypot(goalX - Position.x[ball], Position.y[ball]) + 1
     if (beaten && distance > 3) return Effort.Sprint
   }
   if (distance > 10) return Effort.Run
@@ -210,7 +211,7 @@ function go(world: Match, eid: number, x: number, y: number, effort: Effort) {
   // A runner wants to be right on the line, a check away is a short, deliberate step, and a trap is a step up
   // together: all need a tight aim, so they move even from standing.
   const precise = (attacking && Run.phase[eid] !== RunPhase.None) || trap
-  const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * Math.hypot(x - Position.x[ball], y - Position.y[ball])
+  const radius = precise ? RUNNER_RADIUS : BASE_RADIUS + RADIUS_PER_METRE * hypot(x - Position.x[ball], y - Position.y[ball])
   // The trap is sprung sharply.
   setTarget(eid, x, y, radius, trap ? Math.max(effort, Effort.Run) as Effort : effort)
   // Whatever the target ends up being, an attacker's stays onside: a runner on the last
@@ -233,7 +234,7 @@ function apart(world: Match, eid: number, x: number, y: number) {
     const onBall = world.phase !== 'held' && (mate === world.carrier || mate === world.presser)
     const mx = onBall ? Position.x[mate] : OffBall.targetX[mate]
     const my = onBall ? Position.y[mate] : OffBall.targetY[mate]
-    const gap = Math.hypot(x - mx, y - my)
+    const gap = hypot(x - mx, y - my)
     if (gap >= TEAMMATE_GAP) continue
     // Straight away from them, or sideways if right on top of them.
     const ux = gap > 0.1 ? (x - mx) / gap : 0
@@ -254,7 +255,7 @@ function halfTurn(world: Match, eid: number) {
 }
 
 function unit(x: number, y: number) {
-  const length = Math.hypot(x, y)
+  const length = hypot(x, y)
   return length > 1e-6 ? { x: x / length, y: y / length } : { x: 0, y: 0 }
 }
 

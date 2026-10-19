@@ -1,10 +1,11 @@
+import { cos, log } from './fmath'
 /** A seeded random number source; `state` is all it remembers, so copying it rewinds the sequence. */
 export type Rng = (() => number) & { state: number }
 
 /** Standard normal sample (Box–Muller). */
 export function gaussian(rng: Rng): number {
   const u = 1 - rng()
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng())
+  return Math.sqrt(-2 * log(u)) * cos(2 * Math.PI * rng())
 }
 
 /** Small seeded PRNG (mulberry32) so matches can be replayed and tested. */

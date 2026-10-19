@@ -5,6 +5,7 @@ import { bargeWinChance, tackleSkill } from './grades'
 import { winBall, type Match } from './match'
 import { gaussian } from './rng'
 import { footDistance } from './touch'
+import { atan2, cos, hypot, sin } from './fmath'
 
 export type ChallengeKind = 'stand' | 'slide' | 'barge'
 /** won: defender has the ball. poked: knocked loose. missed: didn't get it. held: carrier rode it out. */
@@ -42,7 +43,7 @@ export function bodyBetween(carrier: number, defender: number, ball: number): bo
   if (t <= 0 || t >= 1) return false
   const px = ax + dx * t - Position.x[carrier]
   const py = ay + dy * t - Position.y[carrier]
-  return Math.hypot(px, py) < Body.radius[carrier] + 0.1
+  return hypot(px, py) < Body.radius[carrier] + 0.1
 }
 
 /** A standing tackle meets the ball: it may win it, poke it loose, or miss. */
@@ -50,8 +51,8 @@ export function resolveStandingTackle(world: Match, defender: number) {
   const { ball, carrier } = world
   const dx = Position.x[ball] - Position.x[defender]
   const dy = Position.y[ball] - Position.y[defender]
-  const facingGap = Math.abs(angleDelta(Facing.angle[defender], Math.atan2(dy, dx)))
-  if (Math.hypot(dx, dy) > STAND_REACH || facingGap > STAND_CONE) {
+  const facingGap = Math.abs(angleDelta(Facing.angle[defender], atan2(dy, dx)))
+  if (hypot(dx, dy) > STAND_REACH || facingGap > STAND_CONE) {
     stumble(defender, 0.35)
     return record(world, 'stand', 'missed')
   }
@@ -75,7 +76,7 @@ export function resolveBarge(world: Match, defender: number) {
   const { carrier, rng } = world
   const nx = Position.x[carrier] - Position.x[defender]
   const ny = Position.y[carrier] - Position.y[defender]
-  const len = Math.hypot(nx, ny) || 1
+  const len = hypot(nx, ny) || 1
   // A carrier braced to shield is a little harder to move.
   const chance = bargeWinChance(Physical.strength[defender], Physical.strength[carrier]) - (Shield.active[carrier] ? 0.1 : 0)
   if (rng() < chance) {
@@ -100,7 +101,7 @@ export function slideFoot(defender: number) {
 export function slideReachesBall(world: Match, defender: number) {
   const foot = slideFoot(defender)
   const ball = world.ball
-  return Position.z[ball] < 0.5 && Math.hypot(Position.x[ball] - foot.x, Position.y[ball] - foot.y) <= SLIDE_CONTACT
+  return Position.z[ball] < 0.5 && hypot(Position.x[ball] - foot.x, Position.y[ball] - foot.y) <= SLIDE_CONTACT
 }
 
 /** Back on their feet after a slide. */
@@ -129,10 +130,10 @@ function settle(world: Match, defender: number, kind: ChallengeKind, chance: num
 /** The ball is knocked on, away from the tackler's boot, roughly where it was already headed. */
 function pokeAway(world: Match, defender: number) {
   const { ball, rng } = world
-  const angle = Math.atan2(Position.y[ball] - Position.y[defender], Position.x[ball] - Position.x[defender]) + gaussian(rng) * 0.6
+  const angle = atan2(Position.y[ball] - Position.y[defender], Position.x[ball] - Position.x[defender]) + gaussian(rng) * 0.6
   const speed = 4 + rng() * 4
-  Velocity.x[ball] = Math.cos(angle) * speed
-  Velocity.y[ball] = Math.sin(angle) * speed
+  Velocity.x[ball] = cos(angle) * speed
+  Velocity.y[ball] = sin(angle) * speed
   Velocity.z[ball] = 1
   world.lastTouchedBy = defender
   world.lastTouchDeliberate = false

@@ -1,6 +1,7 @@
 import { GOAL_HALF_WIDTH } from '../constants'
 import { perPitch, type Pitch } from '../pitch'
 import { attackDir } from '../teams'
+import { atan2, exp, hypot, pow } from '../fmath'
 
 /**
  * The chance (0–1) that a shot from (x, y) at the goal on +x of `pitch` goes in, from
@@ -11,10 +12,10 @@ import { attackDir } from '../teams'
 export function shotChance(pitch: Pitch, x: number, y: number): number {
   const dx = pitch.halfLength - x
   if (dx <= 0) return 0
-  const distance = Math.hypot(dx, y)
+  const distance = hypot(dx, y)
   // The angle between the lines to the two posts.
-  const angle = Math.abs(Math.atan2(GOAL_HALF_WIDTH - y, dx) - Math.atan2(-GOAL_HALF_WIDTH - y, dx))
-  return 1 / (1 + Math.exp(-(-1.2 + 1.9 * angle - 0.09 * distance)))
+  const angle = Math.abs(atan2(GOAL_HALF_WIDTH - y, dx) - atan2(-GOAL_HALF_WIDTH - y, dx))
+  return 1 / (1 + exp(-(-1.2 + 1.9 * angle - 0.09 * distance)))
 }
 
 /** Grid spacing (m) of the threat map. */
@@ -68,8 +69,8 @@ function buildMap(pitch: Pitch): ThreatMap {
   }
   // Spread each value to its neighbours, discounted by distance, until nothing changes:
   // a forward sweep and a backward sweep each pass, like a distance transform.
-  const straight = KEEP_PER_METRE ** CELL
-  const diagonal = KEEP_PER_METRE ** (CELL * Math.SQRT2)
+  const straight = pow(KEEP_PER_METRE, CELL)
+  const diagonal = pow(KEEP_PER_METRE, CELL * Math.SQRT2)
   const forward: [number, number, number][] = [
     [-1, -1, diagonal],
     [-1, 0, straight],

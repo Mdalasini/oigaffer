@@ -3,6 +3,7 @@ import { Facing, Physical, Position, Velocity } from '../components'
 import { accelerationRate, topSpeed, turnRate } from '../grades'
 import type { Match } from '../match'
 import { view, type View } from '../perception'
+import { atan2 } from '../fmath'
 
 /** Seconds before a player responds to something new: until then they carry on as they were. */
 export const REACTION_TIME = 0.2
@@ -54,7 +55,7 @@ export function arrivalTime(world: Match, eid: number, x: number, y: number, rea
   const accel = keeper ? KEEPER_ACCEL : accelerationRate(Physical.acceleration[eid])
   // Keepers stay square to the ball and move sideways, so only outfielders pay to turn.
   const facing = truth ? Facing.angle[eid] : seen.facing
-  const turn = keeper ? 0 : Math.abs(angleDelta(facing, Math.atan2(uy, ux))) / (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED))
+  const turn = keeper ? 0 : Math.abs(angleDelta(facing, atan2(uy, ux))) / (turnRate(Physical.agility[eid]) / (1 + speed / TURN_FALLOFF_SPEED))
   return reaction + turn + runTime(gap - reach, Math.min(along, top), top, accel)
 }
 

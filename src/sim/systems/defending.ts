@@ -10,6 +10,7 @@ import { arrivalTime } from '../space/arrival'
 import { timeOnBall } from '../space/control'
 import { threat } from '../space/threat'
 import { attackDir, opponent, ownGoalX } from '../teams'
+import { hypot } from '../fmath'
 
 /** Scratch for where the defence reckons an attacker is. */
 const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
@@ -160,7 +161,7 @@ export function coverSpot(world: Match, team: number) {
   const goalX = ownGoalX(world.pitch, team)
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  const length = Math.hypot(goalX - bx, by) || 1
+  const length = hypot(goalX - bx, by) || 1
   return { x: bx + ((goalX - bx) / length) * COVER_DEPTH, y: by + (-by / length) * COVER_DEPTH }
 }
 
@@ -199,11 +200,11 @@ function shareMarking(world: Match, team: number) {
       teamView(world, team, a, seen)
       const ax = seen.x
       const ay = seen.y
-      const length = Math.hypot(goalX - ax, ay) || 1
+      const length = hypot(goalX - ax, ay) || 1
       const x = ax + ((goalX - ax) / length) * MARK_GAP
       const y = ay + (-ay / length) * MARK_GAP
       const danger = threat(world.pitch, opponent(team), ax, ay)
-      const zone = ZONE_COST * Math.hypot(ax - home.x, ay - home.y)
+      const zone = ZONE_COST * hypot(ax - home.x, ay - home.y)
       return arrivalTime(world, d, x, y) + zone - DANGER * danger - (Mark.target[d] === a ? HANDOVER : 0)
     })
     if (!coverJob) return men

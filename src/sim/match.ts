@@ -59,6 +59,7 @@ import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
 import { attackDir, attackedGoalX, opponent, ownGoalX, TEAM_NAMES, type TeamName } from './teams'
 import { pitchFor, type Pitch } from './pitch'
+import { atan2, hypot } from './fmath'
 
 /** Open play, a shot on its way, a keeper with the ball in their hands, or the ball dead before a restart. */
 export type Phase = 'play' | 'shot' | 'held' | 'stopped'
@@ -641,7 +642,7 @@ export function takeRestart(world: Match) {
     by = clamp(restart.y, -W + 1, W - 1)
     standOff = pitch.freeKickDistance
   }
-  const faceLen = Math.hypot(faceX, faceY)
+  const faceLen = hypot(faceX, faceY)
   faceX /= faceLen
   faceY /= faceLen
 
@@ -672,7 +673,7 @@ export function takeRestart(world: Match) {
   // Whoever's place in the shape is nearest the ball takes it: the pivot kicks off, a wide player takes the throw.
   const taker = nearestHome(world, team, bx, by)
   setVec(Position, taker, bx - faceX * 0.5, by - faceY * 0.5, 0)
-  Facing.angle[taker] = Math.atan2(faceY, faceX)
+  Facing.angle[taker] = atan2(faceY, faceX)
   Dribbler.cooldown[taker] = 0
 
   // Everyone else takes up their place in the shape around the ball: the side
@@ -682,7 +683,7 @@ export function takeRestart(world: Match) {
       if (eid === taker) continue
       const home = restartSpot(world, eid, kind, bx, by, t === team ? 0 : standOff)
       setVec(Position, eid, home.x, home.y, 0)
-      Facing.angle[eid] = Math.atan2(by - home.y, bx - home.x)
+      Facing.angle[eid] = atan2(by - home.y, bx - home.x)
     }
   }
   // Everyone holds where they've been put until they've had a look around, with no run or call carried over.
@@ -699,12 +700,12 @@ export function takeRestart(world: Match) {
   const other = quickestTo(world, opponent(team), bx, by)
   const gx = goalX - bx
   const gy = -by
-  const gLen = Math.hypot(gx, gy) || 1
+  const gLen = hypot(gx, gy) || 1
   const lateral = (rng() * 2 - 1) * 1.5
   const ox = kind === 'kick-off' ? dir * standOff : bx + (gx / gLen) * standOff - (gy / gLen) * lateral
   const oy = kind === 'kick-off' ? lateral : by + (gy / gLen) * standOff + (gx / gLen) * lateral
   setVec(Position, other, clamp(ox, -L + 1, L - 1), clamp(oy, -W + 1, W - 1), 0)
-  Facing.angle[other] = Math.atan2(by - Position.y[other], bx - Position.x[other])
+  Facing.angle[other] = atan2(by - Position.y[other], bx - Position.x[other])
 
   world.shot = null
   world.pass = null
@@ -733,7 +734,7 @@ function nearestHome(world: Match, team: number, x: number, y: number): number {
   let bestDistance = Infinity
   for (const eid of world.teams[team].outfielders) {
     const home = homePosition(world, eid)
-    const distance = Math.hypot(home.x - x, home.y - y)
+    const distance = hypot(home.x - x, home.y - y)
     if (distance < bestDistance) {
       best = eid
       bestDistance = distance
@@ -753,7 +754,7 @@ function restartSpot(world: Match, eid: number, kind: RestartKind, bx: number, b
   if (kind === 'kick-off' && x * attackDir(team) > -1) x = -attackDir(team)
   const dx = x - bx
   const dy = y - by
-  const distance = Math.hypot(dx, dy)
+  const distance = hypot(dx, dy)
   if (distance < standOff) {
     // Step back towards their own goal, which also keeps a kick-off opponent out of the circle.
     const awayX = distance > 0.5 ? dx / distance : -attackDir(team)

@@ -6,6 +6,7 @@ import type { Match } from '../match'
 import { playBall } from '../offside'
 import { gaussian } from '../rng'
 import { ballAtFeet, canPlayBall, touchAngle, TOUCH_SPECS } from '../touch'
+import { cos, sin } from '../fmath'
 
 /**
  * Runs down touch cooldowns. It comes first in the step so that decisions
@@ -32,8 +33,8 @@ function playTouch(world: Match, eid: number, style: Exclude<TouchStyle, 0>) {
   const dribbling = Outfielder.dribbling[eid]
   const intended = touchAngle(eid, style, Dribbler.dirX[eid], Dribbler.dirY[eid])
   const angle = intended + gaussian(world.rng) * touchAngleError(dribbling) * spec.errorScale
-  const dx = Math.cos(angle)
-  const dy = Math.sin(angle)
+  const dx = cos(angle)
+  const dy = sin(angle)
 
   const carried = Math.max(0, Velocity.x[eid] * dx + Velocity.y[eid] * dy)
   const weight = 1 + gaussian(world.rng) * touchWeightError(dribbling) * spec.errorScale

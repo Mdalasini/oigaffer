@@ -12,6 +12,7 @@ import { arrivalTime } from './space/arrival'
 import { teamArrival, timeOnBall } from './space/control'
 import { threat } from './space/threat'
 import { attackDir, opponent } from './teams'
+import { atan2, cos, exp, hypot, sin } from './fmath'
 
 /** Where an attacker without the ball is heading, and how hard. */
 export interface Intent {
@@ -201,7 +202,7 @@ export function moveOn(world: Match, passer: number) {
       const u = Math.min(along(team, Position.x[passer]) + ahead, limit, L - 3)
       const x = u * dir
       const y = clamp(Position.y[passer] + across, -(W - 3), W - 3)
-      const open = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, passer) - arrivalTime(world, passer, x, y, 0.5)) / RACE_SCALE))
+      const open = 1 / (1 + exp(-(teamArrival(world, opponent(team), x, y, 0.5, passer) - arrivalTime(world, passer, x, y, 0.5)) / RACE_SCALE))
       const score = threat(world.pitch, team, x, y) * open
       if (score > bestScore) {
         best = { x, y }
@@ -259,7 +260,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     if (world.phase === 'play') ({ x, y } = openLane(world, eid, x, y))
     const dx = x - Position.x[carrier]
     const dy = y - Position.y[carrier]
-    const gap = Math.hypot(dx, dy)
+    const gap = hypot(dx, dy)
     if (gap < SPACING) {
       // Slide away from the carrier, keeping on the side they're already on.
       const ux = gap > 0.5 ? dx / gap : 0
@@ -274,7 +275,7 @@ function hold(world: Match, eid: number, mayCall: boolean): Intent {
     Call.x[eid] = Position.x[eid]
     Call.y[eid] = Position.y[eid]
   }
-  const distance = Math.hypot(x - Position.x[eid], y - Position.y[eid])
+  const distance = hypot(x - Position.x[eid], y - Position.y[eid])
   return { x, y, effort: distance > 10 ? Effort.Run : distance > 3 ? Effort.Jog : Effort.Walk }
 }
 
@@ -352,11 +353,11 @@ function showForIt(world: Match, eid: number): Intent {
   for (const mate of world.teams[team].outfielders) {
     if (mate === eid || mate === world.carrier) continue
     const showing = OffBall.showing[mate]
-    others.push(Math.atan2((showing ? Call.y[mate] : Position.y[mate]) - by, (showing ? Call.x[mate] : Position.x[mate]) - bx))
+    others.push(atan2((showing ? Call.y[mate] : Position.y[mate]) - by, (showing ? Call.x[mate] : Position.x[mate]) - bx))
   }
   const score = (x: number, y: number) => {
     const { value } = rateFeetPass(world, team, eid, x, y, eid)
-    const angle = Math.atan2(y - by, x - bx)
+    const angle = atan2(y - by, x - bx)
     const overlap = others.reduce((sum, other) => sum + Math.max(0, 1 - Math.abs(angleDelta(angle, other)) / SAME_ANGLE), 0)
     return value + gaussian(world.rng) * error * Math.max(Math.abs(value), 0.02) - TRAVEL_COST * arrivalTime(world, eid, x, y) - SAME_ANGLE_COST * overlap
   }
@@ -371,8 +372,8 @@ function showForIt(world: Match, eid: number): Intent {
   for (const distance of SHOW_DISTANCES) {
     for (let i = 0; i < SHOW_DIRECTIONS; i++) {
       const angle = (i / SHOW_DIRECTIONS) * Math.PI * 2
-      const x = bx + Math.cos(angle) * distance
-      const y = by + Math.sin(angle) * distance
+      const x = bx + cos(angle) * distance
+      const y = by + sin(angle) * distance
       if (Math.abs(x) > world.pitch.halfLength - 1.5 || Math.abs(y) > world.pitch.halfWidth - 1.5 || along(team, x) > limit) continue
       const s = score(x, y)
       if (s > bestScore) {
@@ -396,14 +397,14 @@ function showForIt(world: Match, eid: number): Intent {
 function amongNextOptions(world: Match, eid: number, ox: number, oy: number): boolean {
   const team = world.possession
   const rest = restDefender(world)
-  const own = Math.hypot(Position.x[eid] - ox, Position.y[eid] - oy)
+  const own = hypot(Position.x[eid] - ox, Position.y[eid] - oy)
   let nearer = 0
   for (const mate of world.teams[team].outfielders) {
     if (mate === eid || mate === world.carrier || mate === rest || OffBall.showing[mate] || Run.phase[mate] !== RunPhase.None) continue
     const mx = seenX(world, eid, mate)
     const my = seenY(world, eid, mate)
     if (along(team, mx) < along(team, ox) + LANE_AHEAD) continue
-    if (Math.hypot(mx - ox, my - oy) < own && ++nearer >= LANE_SEEKERS) return false
+    if (hypot(mx - ox, my - oy) < own && ++nearer >= LANE_SEEKERS) return false
   }
   return true
 }
@@ -429,7 +430,7 @@ function openLane(world: Match, eid: number, hx: number, hy: number) {
   const error = 0.4 * (1 - gradeT(Outfielder.offTheBall[eid]))
   const score = (dx: number, dy: number) => {
     const { value } = rateFeetPass(world, team, eid, hx + dx, hy + dy, eid, ox, oy)
-    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), LANE_MIN_JUDGED) - DRIFT_COST * Math.hypot(dx, dy)
+    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), LANE_MIN_JUDGED) - DRIFT_COST * hypot(dx, dy)
   }
   const fits = (dx: number, dy: number) => Math.abs(hx + dx) <= L - 1.5 && Math.abs(hy + dy) <= W - 1.5 && along(team, hx + dx) <= limit
   // The lane they're already in, one of the spots below, keeps them unless another is clearly better.
@@ -441,8 +442,8 @@ function openLane(world: Match, eid: number, hx: number, hy: number) {
     for (let i = 0; i < LANE_DIRECTIONS; i++) {
       // Across or forward, never back towards the ball: dropping in only brings their marker with them.
       const angle = (i / (LANE_DIRECTIONS - 1) - 0.5) * Math.PI
-      const dx = Math.cos(angle) * shift * attackDir(team)
-      const dy = Math.sin(angle) * shift
+      const dx = cos(angle) * shift * attackDir(team)
+      const dy = sin(angle) * shift
       if (!fits(dx, dy)) continue
       const s = kept(dx, dy, score(dx, dy))
       if (s > bestScore) {
@@ -489,7 +490,7 @@ function runTarget(world: Match, eid: number) {
     for (const across of RUN_ACROSS) {
       const x = u * attackDir(team)
       const y = clamp(Position.y[eid] + across, -(W - 3), W - 3)
-      const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, eid) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
+      const race = 1 / (1 + exp(-(teamArrival(world, opponent(team), x, y, 0.5, eid) - arrivalTime(world, eid, x, y, 0.5)) / RACE_SCALE))
       if (race < MIN_RACE) continue
       const score = threat(world.pitch, team, x, y) * race
       if (score > bestScore) {
@@ -505,7 +506,7 @@ function runTarget(world: Match, eid: number) {
 function checkAway(world: Match, eid: number): Intent {
   const dx = Position.x[world.ball] - Position.x[eid]
   const dy = Position.y[world.ball] - Position.y[eid]
-  const length = Math.hypot(dx, dy) || 1
+  const length = hypot(dx, dy) || 1
   return { x: Position.x[eid] + (dx / length) * CHECK_AWAY, y: Position.y[eid] + (dy / length) * CHECK_AWAY, effort: Effort.Jog }
 }
 

@@ -15,6 +15,7 @@ import { shotValue } from './finishing'
 import { planCarry } from './carrying'
 import { shotChance, threat } from './space/threat'
 import { attackDir, attackedGoalX, opponent } from './teams'
+import { atan2, cos, exp, hypot, sin } from './fmath'
 
 /** A pass the carrier could play, and what it's worth. */
 export interface PassOption {
@@ -169,7 +170,7 @@ export function keepValue(world: Match, carrier: number): number {
   // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to
   // is worth over a clean one from here, but only if they have a moment on the ball to carry it on at all.
   const gain = Math.max(0, threat(world.pitch, team, bx, by) * CARRY_GAIN - shotChance(world.pitch, bx * attackDir(team), by))
-  const moment = 1 / (1 + Math.exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
+  const moment = 1 / (1 + exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
   const kept = shotValue(world, carrier) * NOW_SHARE + gain * moment
   return keep * kept - (1 - keep) * threat(world.pitch, opponent(team), bx, by)
 }
@@ -227,10 +228,10 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
   // Lead them by where they're running, about as long as the pass will take.
   const mx = seenX(world, carrier, mate)
   const my = seenY(world, carrier, mate)
-  const rough = Math.hypot(mx - bx, my - by) / 12
+  const rough = hypot(mx - bx, my - by) / 12
   const x = mx + seenVx(world, carrier, mate) * rough
   const y = my + seenVy(world, carrier, mate) * rough
-  const distance = Math.hypot(x - bx, y - by)
+  const distance = hypot(x - bx, y - by)
   if (!playable(world, carrier, bx, by, x, y, distance)) return null
   const { speed, safety, value } = rateFeetPass(world, Team.id[carrier], mate, x, y, carrier)
   return { receiver: mate, kind: 'feet', x, y, speed, safety, value }
@@ -242,7 +243,7 @@ function toFeet(world: Match, carrier: number, mate: number): PassOption | null 
  * it too, to pick a spot to show for it or to open a lane.
  */
 export function rateFeetPass(world: Match, team: number, receiver: number, x: number, y: number, judge = -1, bx = Position.x[world.ball], by = Position.y[world.ball]) {
-  const distance = Math.hypot(x - bx, y - by)
+  const distance = hypot(x - bx, y - by)
   const speed = rollSpeedFor(distance, FEET_ARRIVAL)
   const safety = passSafety(world, team, bx, by, x, y, speed, judge)
   const value = passValue(world, team, safety, receiveValue(world, receiver, x, y, rollTime(speed, distance), judge), bx, by, x, y)
@@ -263,12 +264,12 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
   const my = seenY(world, carrier, mate)
   const gx = towardX - mx
   const gy = towardY - my
-  const glen = Math.hypot(gx, gy)
+  const glen = hypot(gx, gy)
   if (glen < 1) return null
   const { halfLength: L, halfWidth: W } = world.pitch
   const x = clamp(mx + (gx / glen) * lead, -L + 1, L - 1)
   const y = clamp(my + (gy / glen) * lead, -W + 1, W - 1)
-  const distance = Math.hypot(x - bx, y - by)
+  const distance = hypot(x - bx, y - by)
   if (!playable(world, carrier, bx, by, x, y, distance)) return null
 
   const runner = arrivalTime(world, mate, x, y, 0.5, REACTION_TIME, carrier)
@@ -279,7 +280,7 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
   const ballTime = rollTime(speed, distance)
   const meet = Math.max(runner, ballTime)
   // They have to win the race to the ball, the keeper included.
-  const race = 1 / (1 + Math.exp(-(teamArrival(world, opponent(team), x, y, 0.5, carrier) - meet) / RACE_SCALE))
+  const race = 1 / (1 + exp(-(teamArrival(world, opponent(team), x, y, 0.5, carrier) - meet) / RACE_SCALE))
   const safety = passSafety(world, team, bx, by, x, y, speed, carrier) * race
   const value = passValue(world, team, safety, receiveValue(world, mate, x, y, meet, carrier), bx, by, x, y)
   return { receiver: mate, kind: 'through', x, y, speed, safety, value }
@@ -289,7 +290,7 @@ function intoSpace(world: Match, carrier: number, mate: number, lead: number, to
 function playable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
   if (distance < MIN_PASS || distance > Math.max(MAX_PASS, MAX_PASS_SHARE * 2 * world.pitch.halfLength)) return false
   if (Math.abs(x) > world.pitch.halfLength - 0.5 || Math.abs(y) > world.pitch.halfWidth - 0.5) return false
-  return Math.abs(angleDelta(Facing.angle[carrier], Math.atan2(y - by, x - bx))) <= MAX_PASS_TURN
+  return Math.abs(angleDelta(Facing.angle[carrier], atan2(y - by, x - bx))) <= MAX_PASS_TURN
 }
 
 /**
@@ -302,7 +303,7 @@ function receiveValue(world: Match, receiver: number, x: number, y: number, arri
   const team = Team.id[receiver]
   const time = teamArrival(world, opponent(team), x, y, 0.95, judge) - arrive
   const open = clamp(time / OPEN_TIME, 0, 1)
-  const forward = Math.max(0, Math.cos(angleDelta(seenFacing(world, judge, receiver), attackDir(team) > 0 ? 0 : Math.PI)))
+  const forward = Math.max(0, cos(angleDelta(seenFacing(world, judge, receiver), attackDir(team) > 0 ? 0 : Math.PI)))
   return threat(world.pitch, team, x, y) * (0.5 + 0.5 * open) * (0.85 + 0.15 * forward)
 }
 
@@ -317,16 +318,16 @@ export function strikePass(world: Match, carrier: number, option: PassOption, fi
   const { ball, rng } = world
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  const distance = Math.hypot(option.x - bx, option.y - by)
+  const distance = hypot(option.x - bx, option.y - by)
   const presser = world.presser
-  const gap = Math.hypot(Position.x[presser] - Position.x[carrier], Position.y[presser] - Position.y[carrier])
+  const gap = hypot(Position.x[presser] - Position.x[carrier], Position.y[presser] - Position.y[carrier])
   const hurried = (1 + Math.max(0, 1 - gap / PRESSURE_RANGE)) * (firstTime ? FIRST_TIME_ERROR : 1)
   const passing = Outfielder.passing[carrier]
-  const aim = Math.atan2(option.y - by, option.x - bx)
+  const aim = atan2(option.y - by, option.x - bx)
   const across = 1 + Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], aim)) - CLEAN_PASS_TURN)
   const angle = aim + gaussian(rng) * passAngleError(passing) * hurried * across * (1 + distance / 30)
   const speed = option.speed * Math.max(0.3, 1 + gaussian(rng) * passWeightError(passing) * hurried)
-  setVec(Velocity, ball, Math.cos(angle) * speed, Math.sin(angle) * speed, 0)
+  setVec(Velocity, ball, cos(angle) * speed, sin(angle) * speed, 0)
   Position.z[ball] = BALL_RADIUS
 
   Dribbler.style[carrier] = TouchStyle.None

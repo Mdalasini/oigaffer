@@ -17,6 +17,7 @@ import { chooseCarry } from '../carrying'
 import { meetTheBall } from './receive'
 import { seenX, seenY } from '../perception'
 import { ballAtFeet, canPlayBall, dribble, footDistance, roomAhead, touchAngle, TOUCH_SPECS } from '../touch'
+import { atan2, cos, hypot, sin } from '../fmath'
 
 /** Seconds after shooting before the shooter can play the ball again. */
 const SHOT_RECOVER = 0.4
@@ -28,7 +29,7 @@ const SHOT_RECOVER = 0.4
  */
 export function largeTouchTravel(eid: number): number {
   const spec = TOUCH_SPECS[TouchStyle.Large]
-  const ball = Math.hypot(Velocity.x[eid], Velocity.y[eid]) + spec.push
+  const ball = hypot(Velocity.x[eid], Velocity.y[eid]) + spec.push
   const run = topSpeed(Physical.pace[eid])
   for (let t = spec.cooldown; t < CATCH_WITHIN; t += CATCH_STEP) {
     const rolled = rollDistanceIn(ball, t)
@@ -123,7 +124,7 @@ export function carrierSystem(world: Match, dt: number) {
     const goalX = attackedGoalX(world.pitch, Team.id[eid])
     const toGoalX = goalX - Position.x[ball]
     const toGoalY = -Position.y[ball]
-    const distance = Math.hypot(toGoalX, toGoalY)
+    const distance = hypot(toGoalX, toGoalY)
     const dirX = toGoalX / distance
     const dirY = toGoalY / distance
 
@@ -208,14 +209,14 @@ export function playFirstTime(world: Match, eid: number): boolean {
 /** Whether a shot is on at all: facing near enough to goal, with a clear sight of it, and not straight from an indirect free kick. */
 function shotOn(world: Match, eid: number, goalX: number) {
   if (world.indirectTaker === eid) return false
-  const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
+  const facingGoal = atan2(-Position.y[eid], goalX - Position.x[eid])
   return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX, eid)
 }
 
 /** Whoever has the ball shoots on request, if they're facing near enough to goal. */
 function wantsToShoot(world: Match, eid: number, goalX: number) {
   if (!world.shootRequested) return false
-  const facingGoal = Math.atan2(-Position.y[eid], goalX - Position.x[eid])
+  const facingGoal = atan2(-Position.y[eid], goalX - Position.x[eid])
   return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN
 }
 
@@ -238,7 +239,7 @@ function setUpPass(eid: number, ball: number, x: number, y: number) {
 function isChased(world: Match, gx: number, gy: number) {
   const rx = Position.x[world.presser] - Position.x[world.ball]
   const ry = Position.y[world.presser] - Position.y[world.ball]
-  return rx * gx + ry * gy < -0.5 && Math.hypot(rx, ry) < CHASED_WITHIN
+  return rx * gx + ry * gy < -0.5 && hypot(rx, ry) < CHASED_WITHIN
 }
 
 /**
@@ -264,7 +265,7 @@ function shield(world: Match, eid: number, gx: number, gy: number, dt: number): 
   Shield.timer[eid] -= dt
   const awayX = Position.x[eid] - Position.x[defender]
   const awayY = Position.y[eid] - Position.y[defender]
-  const gap = Math.hypot(awayX, awayY)
+  const gap = hypot(awayX, awayY)
   // How far the ball sits towards the defender's side of the carrier's body:
   // shielding only works with the ball on the far side.
   const ballTowardDefender = -((Position.x[ball] - Position.x[eid]) * awayX + (Position.y[ball] - Position.y[eid]) * awayY) / (gap || 1)
@@ -311,7 +312,7 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
   // Defender's position along the line to goal, and to its left (+) or right (-).
   const along = rx * gx + ry * gy
   const lateral = -rx * gy + ry * gx
-  const distance = Math.hypot(rx, ry)
+  const distance = hypot(rx, ry)
   if (along < -0.5 || distance > TAKE_ON_RANGE || Math.abs(lateral) > 4) return false
 
   if (TakeOn.side[eid] === 0) {
@@ -349,7 +350,7 @@ function takeOn(world: Match, eid: number, gx: number, gy: number, dt: number): 
   } else {
     const tx = rx - gy * side * SHOULDER_OFFSET
     const ty = ry + gx * side * SHOULDER_OFFSET
-    const len = Math.hypot(tx, ty)
+    const len = hypot(tx, ty)
     dribble(eid, ball, TouchStyle.Small, tx / len, ty / len, pace)
   }
   return true
@@ -364,8 +365,8 @@ function carry(world: Match, eid: number, ball: number, style: TouchStyle, dirX:
   // Only worth weighing up when the touch is about to be played.
   if (style === TouchStyle.Large && Dribbler.cooldown[eid] === 0 && ballAtFeet(eid, ball)) {
     const angle = touchAngle(eid, style, dirX, dirY)
-    const dx = Math.cos(angle)
-    const dy = Math.sin(angle)
+    const dx = cos(angle)
+    const dy = sin(angle)
     const travel = largeTouchTravel(eid)
     const x = Position.x[ball] + dx * travel
     const y = Position.y[ball] + dy * travel
@@ -386,8 +387,8 @@ function beginTakeOn(world: Match, eid: number, side: number, dummy: boolean) {
 }
 
 const rotate = (x: number, y: number, a: number): [number, number] => [
-  x * Math.cos(a) - y * Math.sin(a),
-  x * Math.sin(a) + y * Math.cos(a),
+  x * cos(a) - y * sin(a),
+  x * sin(a) + y * cos(a),
 ]
 
 function shoot(world: Match, carrier: number, goalX: number) {

@@ -7,6 +7,7 @@ import { chooseAim, VERTICAL_ERROR, type GoalPoint } from './shooting'
 import { diveReach } from './systems/keeper'
 import { seenX, seenY } from './perception'
 import { attackedGoalX } from './teams'
+import { atan2, exp, hypot, tan } from './fmath'
 
 // How hard (m/s) a shot is struck: placed from close in, driven from further
 // out. Power costs accuracy: the error scales with the pace over POWER_REFERENCE.
@@ -51,9 +52,9 @@ export function shotError(world: Match, carrier: number, by = -1): number {
   const x = Position.x[carrier]
   const y = Position.y[carrier]
   let nearest = Infinity
-  for (const eid of world.teams[1 - team].outfielders) nearest = Math.min(nearest, Math.hypot(seenX(world, by, eid) - x, seenY(world, by, eid) - y))
+  for (const eid of world.teams[1 - team].outfielders) nearest = Math.min(nearest, hypot(seenX(world, by, eid) - x, seenY(world, by, eid) - y))
   const hurried = 1 + (FULL_PRESSURE - 1) * Math.max(0, 1 - nearest / PRESSURE_RANGE)
-  const toGoal = Math.atan2(-Position.y[world.ball], attackedGoalX(world.pitch, team) - Position.x[world.ball])
+  const toGoal = atan2(-Position.y[world.ball], attackedGoalX(world.pitch, team) - Position.x[world.ball])
   const across = 1 + ACROSS_BODY * Math.max(0, Math.abs(angleDelta(Facing.angle[carrier], toGoal)) - CLEAN_TURN)
   return shotAngleError(Outfielder.shooting[carrier]) * hurried * across
 }
@@ -69,11 +70,11 @@ export function planShot(world: Match, carrier: number, judge = -1): ShotPlan {
   const by = Position.y[world.ball]
   const keeperY = seenY(world, judge, world.keeper)
   const rough = chooseAim(by, keeperY, world.aimHigh)
-  const distance = Math.hypot(goalX - bx, rough.y - by)
+  const distance = hypot(goalX - bx, rough.y - by)
   const speed = Math.min(DRIVEN_SPEED, PLACED_SPEED + SPEED_PER_METRE * Math.max(0, distance - 6))
   const error = Math.min(WILDEST, (shotError(world, carrier, judge) * speed) / POWER_REFERENCE)
   // The miss on the goal plane grows with the distance to the corner being aimed at.
-  const miss = distance * Math.tan(error)
+  const miss = distance * tan(error)
   return { goalX, error, miss, speed, aim: chooseAim(by, keeperY, world.aimHigh, miss) }
 }
 
@@ -97,9 +98,9 @@ export function shotValue(world: Match, carrier: number): number {
   if (toKeeper / toGoal <= 0) return landingChance(aim, miss, null)
   // The keeper's reach, seen from the ball, projected back onto the goal line.
   const scale = Math.abs(toKeeper) > 0.5 ? toGoal / toKeeper : 1
-  const flight = Math.hypot(toKeeper, (aim.y - by) * (toKeeper / toGoal)) / speed
+  const flight = hypot(toKeeper, (aim.y - by) * (toKeeper / toGoal)) / speed
   const centre = by + (ky - by) * scale
-  const reach = diveReach(keeper, flight - TYPICAL_REACTION, Math.hypot(toKeeper, ky - by)) * scale
+  const reach = diveReach(keeper, flight - TYPICAL_REACTION, hypot(toKeeper, ky - by)) * scale
   return landingChance(aim, miss, { centre, reach })
 }
 
@@ -128,7 +129,7 @@ export function landingChance(aim: GoalPoint, miss: number, keeper: { centre: nu
 /** The standard normal cumulative distribution, by the Abramowitz–Stegun approximation. */
 function normalCdf(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z))
-  const d = 0.3989423 * Math.exp((-z * z) / 2)
+  const d = 0.3989423 * exp((-z * z) / 2)
   const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))))
   return z > 0 ? 1 - p : p
 }

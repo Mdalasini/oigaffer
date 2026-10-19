@@ -2,6 +2,7 @@ import { Not, query, type World } from 'bitecs'
 import { angleDelta, wrapAngle } from '../angles'
 import { Facing, MoveIntent, OffBalance, Physical, Position, Sliding, Velocity } from '../components'
 import { accelerationRate, sideStepSpeed, topSpeed, turnRate } from '../grades'
+import { atan2, cos, hypot, sin } from '../fmath'
 
 /** Speed at which the turn rate has halved. */
 const TURN_FALLOFF_SPEED = 2.5
@@ -22,25 +23,25 @@ export function locomotionSystem(world: World, dt: number) {
     const control = OffBalance.timer[eid] > 0 ? OFF_BALANCE_CONTROL : 1
     const vx = Velocity.x[eid]
     const vy = Velocity.y[eid]
-    const speed = Math.hypot(vx, vy)
+    const speed = hypot(vx, vy)
     const dvx = MoveIntent.vx[eid]
     const dvy = MoveIntent.vy[eid]
 
     let faceX = MoveIntent.faceX[eid]
     let faceY = MoveIntent.faceY[eid]
-    if (faceX === 0 && faceY === 0 && Math.hypot(dvx, dvy) > MIN_STEER_SPEED) {
+    if (faceX === 0 && faceY === 0 && hypot(dvx, dvy) > MIN_STEER_SPEED) {
       faceX = dvx
       faceY = dvy
     }
     if (faceX !== 0 || faceY !== 0) {
       const maxTurn = ((turnRate(Physical.agility[eid]) * control) / (1 + speed / TURN_FALLOFF_SPEED)) * dt
-      const delta = angleDelta(Facing.angle[eid], Math.atan2(faceY, faceX))
+      const delta = angleDelta(Facing.angle[eid], atan2(faceY, faceX))
       Facing.angle[eid] = wrapAngle(Facing.angle[eid] + clamp(delta, -maxTurn, maxTurn))
     }
 
     // Work in the body frame: forward along the facing, lateral to its left.
-    const fx = Math.cos(Facing.angle[eid])
-    const fy = Math.sin(Facing.angle[eid])
+    const fx = cos(Facing.angle[eid])
+    const fy = sin(Facing.angle[eid])
     const forward = vx * fx + vy * fy
     const lateral = -vx * fy + vy * fx
     const side = sideStepSpeed(Physical.agility[eid])
@@ -48,7 +49,7 @@ export function locomotionSystem(world: World, dt: number) {
     let wantForward = clamp(dvx * fx + dvy * fy, -side, top)
     let wantLateral = clamp(-dvx * fy + dvy * fx, -side, side)
     // Running on a diagonal is still bounded by top speed overall.
-    const wantSpeed = Math.hypot(wantForward, wantLateral)
+    const wantSpeed = hypot(wantForward, wantLateral)
     if (wantSpeed > top) {
       wantForward *= top / wantSpeed
       wantLateral *= top / wantSpeed

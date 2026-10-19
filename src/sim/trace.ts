@@ -2,6 +2,7 @@ import { hasComponent } from 'bitecs'
 import { Call, CallKind, Defender, DefenderMode, Effort, Facing, Goalkeeper, Mark, OffBalance, OffBall, Offside, OnBall, Position, Pressing, Run, RunPhase, Shield, Sliding, Slot, Team, Velocity } from './components'
 import type { Cue } from './cues'
 import type { Match, MatchEvent } from './match'
+import { hypot } from './fmath'
 
 /**
  * A match written out as text, for reading what happened without watching
@@ -52,7 +53,7 @@ export const TRACE_LEGEND = [
 /** The state of play: phase, who has it, and where the ball is. */
 export function describeSituation(world: Match): string {
   const ball = world.ball
-  const speed = Math.hypot(Velocity.x[ball], Velocity.y[ball])
+  const speed = hypot(Velocity.x[ball], Velocity.y[ball])
   const parts = [`${clock(world.time)}  ${world.phase}`, `${TEAM_LETTER[world.possession]} in possession`]
   if (world.phase === 'play' || world.phase === 'shot') {
     parts.push(`carrier ${playerLabel(world, world.carrier)}`)
@@ -66,7 +67,7 @@ export function describeSituation(world: Match): string {
 
 /** One line per player: where they are, how they're moving, and every job and state they have on. */
 export function describePlayer(world: Match, eid: number): string {
-  const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
+  const speed = hypot(Velocity.x[eid], Velocity.y[eid])
   const line = [`  ${playerLabel(world, eid).padEnd(3)} ${at(Position.x[eid], Position.y[eid])} ${num(speed, 4)} facing ${degrees(Facing.angle[eid])}`]
   if (hasComponent(world, eid, Goalkeeper)) return line.join('')
   const jobs: string[] = []

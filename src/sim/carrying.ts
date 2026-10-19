@@ -7,6 +7,7 @@ import { teamArrival } from './space/control'
 import { threat } from './space/threat'
 import { attackedGoalX, opponent } from './teams'
 import { roomAhead } from './touch'
+import { atan2, cos, exp, hypot, sin } from './fmath'
 
 /** Directions a carrier weighs up, spread evenly round them, starting towards goal. */
 const DIRECTIONS = 16
@@ -67,24 +68,24 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
   const py = seenY(world, carrier, presser)
   const tackled = TACKLE_SHARE * tackleSkill(Outfielder.tackling[presser], Outfielder.dribbling[carrier])
   const lost = threat(world.pitch, them, bx, by)
-  const toGoal = Math.atan2(-by, attackedGoalX(world.pitch, team) - bx)
+  const toGoal = atan2(-by, attackedGoalX(world.pitch, team) - bx)
 
   let best = -Infinity
-  plan.dirX = Math.cos(toGoal)
-  plan.dirY = Math.sin(toGoal)
+  plan.dirX = cos(toGoal)
+  plan.dirY = sin(toGoal)
   plan.takeOn = false
   plan.kept = 1 - tackled
   for (let i = 0; i < DIRECTIONS; i++) {
     const angle = toGoal + (i / DIRECTIONS) * Math.PI * 2
-    const dx = Math.cos(angle)
-    const dy = Math.sin(angle)
+    const dx = cos(angle)
+    const dy = sin(angle)
     if (roomAhead(world.pitch, bx, by, dx, dy) < CARRY_REACH) continue
     const x = bx + dx * CARRY_REACH
     const y = by + dy * CARRY_REACH
     const lead = teamArrival(world, them, x, y, CHALLENGE_REACH, carrier) - arrivalTime(world, carrier, x, y, 0, 0, carrier)
-    const caught = 1 / (1 + Math.exp(lead / CAUGHT_SCALE))
+    const caught = 1 / (1 + exp(lead / CAUGHT_SCALE))
     // Carried away from the presser, the body is between him and the ball, and he has to tackle from the side or behind.
-    const towards = Math.max(0, ((px - bx) * dx + (py - by) * dy) / (Math.hypot(px - bx, py - by) || 1))
+    const towards = Math.max(0, ((px - bx) * dx + (py - by) * dy) / (hypot(px - bx, py - by) || 1))
     const kept = 1 - caught * tackled * (SHIELDED_SHARE + (1 - SHIELDED_SHARE) * towards)
     const value = kept * threat(world.pitch, team, x, y) - (1 - kept) * lost
     if (value <= best) continue

@@ -4,6 +4,7 @@ import { engage, handOver, quickestTo, type Match } from '../match'
 import { arrivalTime } from '../space/arrival'
 import { opponent } from '../teams'
 import { CONTROL_RADIUS, footDistance } from '../touch'
+import { hypot } from '../fmath'
 
 /** Seconds quicker to the ball another defender must be before taking over the press: "mine!". */
 const PRESS_HANDOVER = 0.35
@@ -22,7 +23,7 @@ function comingTo(world: Match, eid: number) {
   const ball = world.ball
   const dx = Position.x[eid] - Position.x[ball]
   const dy = Position.y[eid] - Position.y[ball]
-  const distance = Math.hypot(dx, dy) || 1
+  const distance = hypot(dx, dy) || 1
   return (Velocity.x[ball] * dx + Velocity.y[ball] * dy) / distance > COMING_SPEED
 }
 

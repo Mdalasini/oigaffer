@@ -4,6 +4,7 @@ import { angleDelta } from './angles'
 import { GOAL_HALF_WIDTH } from './constants'
 import type { Pitch } from './pitch'
 import { closeControlSpeed } from './grades'
+import { atan2, cos, hypot, sin } from './fmath'
 
 export interface TouchSpec {
   /** Speed (m/s) the ball gains over the player's own speed in that direction. */
@@ -32,15 +33,15 @@ export const TOUCH_REACH = 0.6
 const MAX_TOUCH_HEIGHT = 0.5
 
 export function footX(eid: number) {
-  return Position.x[eid] + Math.cos(Facing.angle[eid]) * FOOT_OFFSET
+  return Position.x[eid] + cos(Facing.angle[eid]) * FOOT_OFFSET
 }
 
 export function footY(eid: number) {
-  return Position.y[eid] + Math.sin(Facing.angle[eid]) * FOOT_OFFSET
+  return Position.y[eid] + sin(Facing.angle[eid]) * FOOT_OFFSET
 }
 
 export function footDistance(eid: number, ball: number) {
-  return Math.hypot(Position.x[ball] - footX(eid), Position.y[ball] - footY(eid))
+  return hypot(Position.x[ball] - footX(eid), Position.y[ball] - footY(eid))
 }
 
 /**
@@ -55,7 +56,7 @@ export function canPlayBall(world: World, eid: number): boolean {
 export function touchAngle(eid: number, style: Exclude<TouchStyle, 0>, dirX: number, dirY: number): number {
   const facing = Facing.angle[eid]
   const maxAngle = TOUCH_SPECS[style].maxAngle
-  return facing + Math.max(-maxAngle, Math.min(maxAngle, angleDelta(facing, Math.atan2(dirY, dirX))))
+  return facing + Math.max(-maxAngle, Math.min(maxAngle, angleDelta(facing, atan2(dirY, dirX))))
 }
 
 /**
@@ -77,7 +78,7 @@ export function roomAhead(pitch: Pitch, x: number, y: number, dx: number, dy: nu
 /** Whether `player` can play `ball` right now. */
 export function ballAtFeet(player: number, ball: number): boolean {
   if (Position.z[ball] > MAX_TOUCH_HEIGHT) return false
-  return Math.hypot(Position.x[ball] - footX(player), Position.y[ball] - footY(player)) <= TOUCH_REACH
+  return hypot(Position.x[ball] - footX(player), Position.y[ball] - footY(player)) <= TOUCH_REACH
 }
 
 /**
@@ -112,7 +113,7 @@ export function dribble(eid: number, ball: number, style: TouchStyle, dirX: numb
   const away = footDistance(eid, ball) > CONTROL_RADIUS
   const closeControl = style === TouchStyle.Small ? closeControlSpeed(Physical.pace[eid], Outfielder.dribbling[eid]) : Infinity
   const cap = away ? Infinity : Math.min(maxSpeed, closeControl)
-  const speed = Math.hypot(vx, vy)
+  const speed = hypot(vx, vy)
   if (speed > cap) {
     vx *= cap / speed
     vy *= cap / speed
@@ -120,7 +121,7 @@ export function dribble(eid: number, ball: number, style: TouchStyle, dirX: numb
   MoveIntent.vx[eid] = vx
   MoveIntent.vy[eid] = vy
   // Barely moving, they turn to face the way they mean to take it, so they can get the ball onto their foot.
-  if (Math.hypot(Velocity.x[eid], Velocity.y[eid]) < TURN_ON_BALL_BELOW) {
+  if (hypot(Velocity.x[eid], Velocity.y[eid]) < TURN_ON_BALL_BELOW) {
     MoveIntent.faceX[eid] = dirX
     MoveIntent.faceY[eid] = dirY
   }
