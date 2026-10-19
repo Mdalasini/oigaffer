@@ -5,6 +5,7 @@ import type { Match, PassKind, RestartKind } from './match'
 import type { Pitch } from './pitch'
 import { along } from './shape'
 import { attackedGoalX } from './teams'
+import { hypot } from './fmath'
 
 /** A pass struck by an outfielder. Positions are in `team`'s along-terms (u) and y. */
 export interface PassAction {
@@ -182,7 +183,7 @@ export function recordActions(world: Match) {
             time: world.time,
             u: along(t, x),
             y,
-            distance: Math.hypot(x - attackedGoalX(pitch, t), y),
+            distance: hypot(x - attackedGoalX(pitch, t), y),
             outcome: unclaimed.get(t) ?? 'pending',
           }
         } else {
@@ -194,7 +195,7 @@ export function recordActions(world: Match) {
             time: world.time,
             u: along(t, x),
             y,
-            distance: Math.hypot(x - attackedGoalX(pitch, t), y),
+            distance: hypot(x - attackedGoalX(pitch, t), y),
             outcome: 'goal',
           }
         }
@@ -259,7 +260,7 @@ export function summarise(log: ActionLog): [Record<MetricKey, number>, Record<Me
     const spells = log.spells.filter((s) => s.team === team)
     const restarts = (kind: RestartKind) => log.restarts[kind][team]
     const n = passes.length
-    const lengths = passes.map((p) => Math.hypot(p.toU - p.fromU, p.toY - p.fromY))
+    const lengths = passes.map((p) => hypot(p.toU - p.fromU, p.toY - p.fromY))
     const ownSpellTime = spells.reduce((a, s) => a + spellTime(s), 0)
 
     return {
