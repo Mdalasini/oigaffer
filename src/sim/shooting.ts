@@ -1,5 +1,6 @@
 import { BALL_RADIUS, GOAL_HALF_WIDTH, GRAVITY } from './constants'
 import { gaussian, type Rng } from './rng'
+import { hypot } from './fmath'
 
 export interface Vec3 {
   x: number
@@ -57,7 +58,7 @@ export function sampleShotTarget(rng: Rng, aim: GoalPoint, miss: number): GoalPo
 export function launchVelocity(from: Vec3, target: GoalPoint, speed: number, goalX: number): Vec3 {
   const dx = goalX - from.x
   const dy = target.y - from.y
-  const ground = Math.hypot(dx, dy)
+  const ground = hypot(dx, dy)
   const t = ground / speed
   return {
     x: (dx / ground) * speed,

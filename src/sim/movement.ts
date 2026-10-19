@@ -1,5 +1,6 @@
 import { Effort, MoveIntent, OffBall, Physical, Position } from './components'
 import { topSpeed } from './grades'
+import { hypot } from './fmath'
 
 /** Ground speed (m/s) for each effort level; a sprint is the player's top speed. */
 const EFFORT_SPEED: Record<Effort, number> = {
@@ -25,7 +26,7 @@ const FACE_RANGE = 6
 export function steer(eid: number, faceX: number, faceY: number) {
   const dx = OffBall.targetX[eid] - Position.x[eid]
   const dy = OffBall.targetY[eid] - Position.y[eid]
-  const distance = Math.hypot(dx, dy)
+  const distance = hypot(dx, dy)
   const radius = OffBall.radius[eid]
   if (OffBall.settled[eid]) {
     if (distance > radius * UNSETTLE_RADII) OffBall.settled[eid] = 0
@@ -49,7 +50,7 @@ export function steer(eid: number, faceX: number, faceY: number) {
 
 /** Sets where an off-ball player is heading, unless it's within the area they're already making for. */
 export function setTarget(eid: number, x: number, y: number, radius: number, effort: Effort) {
-  const moved = Math.hypot(x - OffBall.targetX[eid], y - OffBall.targetY[eid])
+  const moved = hypot(x - OffBall.targetX[eid], y - OffBall.targetY[eid])
   // Small shifts of the ideal spot don't change where they're going, judged by the
   // tighter of the old and new areas, so a precise new aim is never swallowed.
   if (moved > Math.min(OffBall.radius[eid], radius)) {

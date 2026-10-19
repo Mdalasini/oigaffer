@@ -11,6 +11,7 @@ import {
   GRAVITY,
 } from '../constants'
 import type { Match } from '../match'
+import { hypot } from '../fmath'
 
 export function ballSystem(world: Match, dt: number) {
   for (const eid of query(world, [Ball, Position, Velocity])) {
@@ -27,7 +28,7 @@ export function ballSystem(world: Match, dt: number) {
     if (Position.z[eid] <= BALL_RADIUS) {
       Position.z[eid] = BALL_RADIUS
       Velocity.z[eid] = Velocity.z[eid] < -1 ? -Velocity.z[eid] * BALL_RESTITUTION : 0
-      const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid])
+      const speed = hypot(Velocity.x[eid], Velocity.y[eid])
       if (speed > 0) {
         const slowed = Math.max(0, speed - (BALL_ROLL_DECEL + BALL_ROLL_DRAG * speed) * dt)
         Velocity.x[eid] *= slowed / speed

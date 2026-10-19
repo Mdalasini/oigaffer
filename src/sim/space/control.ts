@@ -6,6 +6,7 @@ import { ownGoalX } from '../teams'
 import { FOOT_OFFSET, TOUCH_REACH } from '../touch'
 import { view, type View } from '../perception'
 import { arrivalTime, fastest, isKeeper, REACTION_TIME } from './arrival'
+import { exp, hypot } from '../fmath'
 
 /**
  * How sharply arrival-time gaps turn into certainty (s). A team that is this
@@ -22,7 +23,7 @@ const KEEPER_REACH = 1.4
 const PASS_STEP = 1
 const PASS_START = 1.5
 
-const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
+const sigmoid = (x: number) => 1 / (1 + exp(-x))
 
 /** Whether (x, y) is inside the penalty area `team` defends. */
 export function inOwnArea(pitch: Pitch, team: number, x: number, y: number): boolean {
@@ -79,7 +80,7 @@ export function timeOnBall(world: Match, eid: number, by = -1): number {
  * Judged by `by`, it's against where they reckon each opponent is.
  */
 export function passSafety(world: Match, team: number, fromX: number, fromY: number, toX: number, toY: number, speed: number, by = -1): number {
-  const length = Math.hypot(toX - fromX, toY - fromY)
+  const length = hypot(toX - fromX, toY - fromY)
   if (length === 0) return 1
   // A pass that stops short never gets there.
   if (rollTime(speed, length) === Infinity) return 0

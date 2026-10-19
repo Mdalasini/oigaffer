@@ -8,6 +8,7 @@ import { attackedGoalX } from '../teams'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from '../touch'
 import { seenFacing, seenVx, seenVy, seenX, seenY } from '../perception'
 import { STAND_WINDUP } from './challenge'
+import { atan2, cos, exp, hypot, sin } from '../fmath'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
 const STANDOFF = 1.7
@@ -92,9 +93,9 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   const { ball, carrier, rng } = world
   const toBallX = Defender.readX[eid] - Position.x[eid]
   const toBallY = Defender.readY[eid] - Position.y[eid]
-  const ballDistance = Math.hypot(toBallX, toBallY)
-  const ballAhead = Math.abs(angleDelta(Facing.angle[eid], Math.atan2(toBallY, toBallX)))
-  const carrierDistance = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
+  const ballDistance = hypot(toBallX, toBallY)
+  const ballAhead = Math.abs(angleDelta(Facing.angle[eid], atan2(toBallY, toBallX)))
+  const carrierDistance = hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
   // A standing tackle is timed for where the ball will be when the foot gets there: off the carrier's feet, ideally.
   const exposedAtContact = exposedIn(world, eid, STAND_WINDUP)
   const shielded = Shield.active[carrier] === 1 || bodyBetween(carrier, eid, ball)
@@ -112,7 +113,7 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
   }
   // A slide is the last resort of a beaten defender at full tilt, for a ball the carrier has let out of their feet.
   const beaten = Defender.mode[eid] === DefenderMode.Run
-  const running = Math.hypot(Velocity.x[eid], Velocity.y[eid]) >= SLIDE_FROM_SPEED
+  const running = hypot(Velocity.x[eid], Velocity.y[eid]) >= SLIDE_FROM_SPEED
   if (beaten && running && exposedIn(world, eid, 0) && ballDistance >= SLIDE_MIN && ballDistance <= SLIDE_MAX && ballAhead <= 0.6) {
     if (chance(SLIDE_RATE_BASE + SLIDE_RATE_SKILL * skill)) startSlide(world, eid)
   }
@@ -126,11 +127,11 @@ function maybeChallenge(world: Match, eid: number, dt: number) {
 function exposedIn(world: Match, eid: number, seconds: number): boolean {
   const carrier = world.carrier
   const facing = seenFacing(world, eid, carrier)
-  const fx = seenX(world, eid, carrier) + Math.cos(facing) * FOOT_OFFSET + seenVx(world, eid, carrier) * seconds
-  const fy = seenY(world, eid, carrier) + Math.sin(facing) * FOOT_OFFSET + seenVy(world, eid, carrier) * seconds
+  const fx = seenX(world, eid, carrier) + cos(facing) * FOOT_OFFSET + seenVx(world, eid, carrier) * seconds
+  const fy = seenY(world, eid, carrier) + sin(facing) * FOOT_OFFSET + seenVy(world, eid, carrier) * seconds
   const bx = Defender.readX[eid] + Defender.readVx[eid] * seconds
   const by = Defender.readY[eid] + Defender.readVy[eid] * seconds
-  return Math.hypot(bx - fx, by - fy) > EXPOSED_DISTANCE
+  return hypot(bx - fx, by - fy) > EXPOSED_DISTANCE
 }
 
 function startAction(eid: number, mode: DefenderMode) {
@@ -144,7 +145,7 @@ function startStandingTackle(eid: number) {
   startAction(eid, DefenderMode.StandTackle)
   const dx = Defender.readX[eid] - Position.x[eid]
   const dy = Defender.readY[eid] - Position.y[eid]
-  const len = Math.hypot(dx, dy) || 1
+  const len = hypot(dx, dy) || 1
   MoveIntent.vx[eid] = (dx / len) * LUNGE_SPEED
   MoveIntent.vy[eid] = (dy / len) * LUNGE_SPEED
   MoveIntent.faceX[eid] = dx
@@ -156,7 +157,7 @@ function startBarge(eid: number, carrier: number) {
   startAction(eid, DefenderMode.Barge)
   const dx = Position.x[carrier] - Position.x[eid]
   const dy = Position.y[carrier] - Position.y[eid]
-  const len = Math.hypot(dx, dy) || 1
+  const len = hypot(dx, dy) || 1
   MoveIntent.vx[eid] = Velocity.x[carrier] + (dx / len) * BARGE_DRIVE
   MoveIntent.vy[eid] = Velocity.y[carrier] + (dy / len) * BARGE_DRIVE
   MoveIntent.faceX[eid] = 0
@@ -168,11 +169,11 @@ export function startSlide(world: Match, eid: number) {
   startAction(eid, DefenderMode.SlideTackle)
   const tx = Defender.readX[eid] + Defender.readVx[eid] * 0.25 - Position.x[eid]
   const ty = Defender.readY[eid] + Defender.readVy[eid] * 0.25 - Position.y[eid]
-  const len = Math.hypot(tx, ty) || 1
+  const len = hypot(tx, ty) || 1
   Defender.actionDirX[eid] = tx / len
   Defender.actionDirY[eid] = ty / len
-  Facing.angle[eid] = Math.atan2(ty, tx)
-  const speed = Math.hypot(Velocity.x[eid], Velocity.y[eid]) + SLIDE_LUNGE
+  Facing.angle[eid] = atan2(ty, tx)
+  const speed = hypot(Velocity.x[eid], Velocity.y[eid]) + SLIDE_LUNGE
   Velocity.x[eid] = Defender.actionDirX[eid] * speed
   Velocity.y[eid] = Defender.actionDirY[eid] * speed
   addComponent(world, eid, Sliding)
@@ -185,7 +186,7 @@ export function startSlide(world: Match, eid: number) {
 function updateRead(world: Match, eid: number, dt: number) {
   const ball = world.ball
   const lag = readLag(Outfielder.marking[eid], Defender.mode[eid] === DefenderMode.Run)
-  const k = 1 - Math.exp(-dt / lag)
+  const k = 1 - exp(-dt / lag)
   Defender.readX[eid] += Defender.readVx[eid] * dt
   Defender.readY[eid] += Defender.readVy[eid] * dt
   Defender.readX[eid] += (Position.x[ball] - Defender.readX[eid]) * k
@@ -197,7 +198,7 @@ function updateRead(world: Match, eid: number, dt: number) {
 function chooseMode(eid: number, goalX: number): DefenderMode {
   const bx = Defender.readX[eid]
   const by = Defender.readY[eid]
-  const distance = Math.hypot(bx - Position.x[eid], by - Position.y[eid])
+  const distance = hypot(bx - Position.x[eid], by - Position.y[eid])
   const goalSide = distanceToGoal(Position.x[eid], Position.y[eid], goalX) + 0.5 < distanceToGoal(bx, by, goalX)
   if (!goalSide || distance > RUN_DISTANCE) return DefenderMode.Run
   if (distance < JOCKEY_DISTANCE) return DefenderMode.Jockey
@@ -218,7 +219,7 @@ function run(eid: number, goalX: number) {
   const { x, y } = goalSideOfRead(eid, goalX, RUN_LOOKAHEAD, RECOVERY_DEPTH)
   const dx = x - Position.x[eid]
   const dy = y - Position.y[eid]
-  const distance = Math.hypot(dx, dy) || 1
+  const distance = hypot(dx, dy) || 1
   const speed = Math.min(topSpeed(Physical.pace[eid]), distance * POSITION_GAIN)
   MoveIntent.vx[eid] = (dx / distance) * speed
   MoveIntent.vy[eid] = (dy / distance) * speed
@@ -236,7 +237,7 @@ function looseAndNearer(world: Match, eid: number) {
 function goForBall(eid: number) {
   const dx = Defender.readX[eid] + Defender.readVx[eid] * 0.2 - Position.x[eid]
   const dy = Defender.readY[eid] + Defender.readVy[eid] * 0.2 - Position.y[eid]
-  const distance = Math.hypot(dx, dy) || 1
+  const distance = hypot(dx, dy) || 1
   const speed = topSpeed(Physical.pace[eid])
   MoveIntent.vx[eid] = (dx / distance) * speed
   MoveIntent.vy[eid] = (dy / distance) * speed
@@ -257,8 +258,8 @@ function goalSideOfRead(eid: number, goalX: number, lookahead: number, depth: nu
   const by = Defender.readY[eid] + Defender.readVy[eid] * lookahead
   const gx = goalX - bx
   const gy = -by
-  const len = Math.hypot(gx, gy) || 1
+  const len = hypot(gx, gy) || 1
   return { x: bx + (gx / len) * depth, y: by + (gy / len) * depth }
 }
 
-const distanceToGoal = (x: number, y: number, goalX: number) => Math.hypot(goalX - x, y)
+const distanceToGoal = (x: number, y: number, goalX: number) => hypot(goalX - x, y)

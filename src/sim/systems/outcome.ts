@@ -8,6 +8,7 @@ import { gaussian } from '../rng'
 import type { GoalPoint } from '../shooting'
 import { attackDir, opponent } from '../teams'
 import { ballAtFeet } from '../touch'
+import { hypot } from '../fmath'
 
 const KEEPER_MAX_HEIGHT = 2.5
 /** Above this height (m) a shot can only be punched away, not held. */
@@ -45,7 +46,7 @@ export function outcomeSystem(world: Match, _dt: number) {
   const dir = Math.sign(shot.goalX)
   const crossing = crossPlane(world, Position.x[keeper], dir)
   if (crossing) {
-    const reach = keeperReach(keeper, Math.hypot(shot.origin.x - Position.x[keeper], shot.origin.y - Position.y[keeper]))
+    const reach = keeperReach(keeper, hypot(shot.origin.x - Position.x[keeper], shot.origin.y - Position.y[keeper]))
     const offset = crossing.y - Position.y[keeper]
     if (Math.abs(offset) <= reach && crossing.z <= KEEPER_MAX_HEIGHT) {
       // Shots at the body stick; ones at full stretch or over the head get pushed away.
@@ -106,7 +107,7 @@ function keeperWithinReach(world: Match): number | null {
   for (const keeper of query(world, [Goalkeeper, Position, Body])) {
     if (Goalkeeper.recover[keeper] > 0) continue
     const reach = Body.radius[keeper] + ARM_REACH
-    if (Math.hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
+    if (hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= reach) return keeper
   }
   return null
 }

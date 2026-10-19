@@ -2,6 +2,7 @@ import { Call, CallKind, Facing, Mark, Outfielder, Position, Team, Velocity } fr
 import { FIXED_DT } from './constants'
 import { manCheckRate, preReceiveScanChance, scanRate } from './grades'
 import type { Match } from './match'
+import { cos, hypot, log, sin } from './fmath'
 
 /**
  * What each player knows of the others. Decisions read this, not the truth:
@@ -70,7 +71,7 @@ const MAN_ON_RATE = 1.5
 const SCAN_BEFORE_RECEIVING = 0.15
 
 const GLANCE_TICKS = Math.round(1 / (GLANCES_PER_SECOND * FIXED_DT))
-const COS_FIELD_OF_VIEW = Math.cos(FIELD_OF_VIEW)
+const COS_FIELD_OF_VIEW = cos(FIELD_OF_VIEW)
 
 /** Empty memories for `players`: nobody has seen anybody yet. */
 export function createMemory(players: number[], maxEntities: number): Memory {
@@ -124,7 +125,7 @@ function manOn(world: Match, player: number) {
   for (const opponent of world.teams[1 - team].outfielders) {
     const k = i * n + memory.index[opponent]
     if (world.time - memory.at[k] < MAN_ON_UNSEEN) continue
-    if (Math.hypot(Position.x[opponent] - Position.x[player], Position.y[opponent] - Position.y[player]) > MAN_ON_RANGE) continue
+    if (hypot(Position.x[opponent] - Position.x[player], Position.y[opponent] - Position.y[player]) > MAN_ON_RANGE) continue
     // A teammate who has just seen him, and so has him in view, may shout.
     let spotted = false
     for (const mate of world.teams[team].outfielders) {
@@ -140,8 +141,8 @@ function manOn(world: Match, player: number) {
 /** Takes in everyone in front of `observer`, and any teammate calling for it. */
 function glance(world: Match, observer: number) {
   const memory = world.memory
-  const fx = Math.cos(Facing.angle[observer])
-  const fy = Math.sin(Facing.angle[observer])
+  const fx = cos(Facing.angle[observer])
+  const fy = sin(Facing.angle[observer])
   const ox = Position.x[observer]
   const oy = Position.y[observer]
   for (const subject of memory.players) {
@@ -162,7 +163,7 @@ export function scan(world: Match, observer: number) {
   const i = memory.index[observer]
   memory.lastScan[i] = world.time
   // Scans come at random moments, at a rate set by their vision.
-  memory.nextScan[i] = world.time - Math.log(1 - world.rng()) / scanRate(Outfielder.vision[observer])
+  memory.nextScan[i] = world.time - log(1 - world.rng()) / scanRate(Outfielder.vision[observer])
 }
 
 /** A glance at their man, wherever he is: `observer` sees him, and decides when to check again. */
@@ -171,7 +172,7 @@ function checkMan(world: Match, observer: number) {
   if (man !== -1) see(world, observer, man)
   const i = world.memory.index[observer]
   // Like scans, checks come at random moments, at a rate set by their positioning.
-  world.memory.nextCheck[i] = world.time - Math.log(1 - world.rng()) / manCheckRate(Outfielder.positioning[observer])
+  world.memory.nextCheck[i] = world.time - log(1 - world.rng()) / manCheckRate(Outfielder.positioning[observer])
 }
 
 /** Everyone takes in everyone: at a restart, before play resumes, players have had a look around. */

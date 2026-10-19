@@ -3,6 +3,7 @@ import { Body, Outfielder, Position, Sliding, Velocity } from '../components'
 import { BALL_RADIUS } from '../constants'
 import { endShot, type Match } from '../match'
 import { offsideOffence } from '../offside'
+import { hypot } from '../fmath'
 
 /** Share of the ball's speed into a body that it keeps when it bounces off. */
 const BODY_RESTITUTION = 0.3
@@ -47,7 +48,7 @@ export function ballBodySystem(world: Match, _dt: number) {
 function separate(a: number, b: number): boolean {
   const dx = Position.x[b] - Position.x[a]
   const dy = Position.y[b] - Position.y[a]
-  const distance = Math.hypot(dx, dy)
+  const distance = hypot(dx, dy)
   const minimum = Body.radius[a] + Body.radius[b]
   if (distance >= minimum - TOLERANCE || distance === 0) return false
   const nx = dx / distance
@@ -118,7 +119,7 @@ function firstContact(world: Match, eid: number) {
   }
   const px = fx + dx * t
   const py = fy + dy * t
-  const len = Math.hypot(px, py)
+  const len = hypot(px, py)
   if (len === 0) return null
   return { t, nx: px / len, ny: py / len }
 }

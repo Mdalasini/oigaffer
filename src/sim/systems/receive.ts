@@ -10,6 +10,7 @@ import { arrivalTime } from '../space/arrival'
 import { attackedGoalX, opponent } from '../teams'
 import { ballAtFeet, canPlayBall, touchAngle } from '../touch'
 import { playFirstTime } from './carrier'
+import { cos, hypot, sin } from '../fmath'
 
 /** How close (m) to the ball's path the receiver needs to be to take it. */
 const RECEIVE_REACH = 0.5
@@ -35,7 +36,7 @@ const PRESSURE_RANGE = 5
  */
 export function meetTheBall(world: Match, eid: number) {
   const ball = world.ball
-  const speed = Math.hypot(Velocity.x[ball], Velocity.y[ball])
+  const speed = hypot(Velocity.x[ball], Velocity.y[ball])
   let tx = Position.x[ball]
   let ty = Position.y[ball]
   let meet = 0
@@ -63,7 +64,7 @@ export function meetTheBall(world: Match, eid: number) {
   }
   const dx = tx - Position.x[eid]
   const dy = ty - Position.y[eid]
-  const distance = Math.hypot(dx, dy)
+  const distance = hypot(dx, dy)
   let pace = distance < 0.2 ? 0 : Math.min(topSpeed(Physical.pace[eid]), distance / Math.max(meet, 0.15))
   // Stepping towards a ball coming at them, they only step in, so they're set when it arrives.
   if (speed > 0.3 && distance > 0 && (dx * Velocity.x[ball] + dy * Velocity.y[ball]) / (distance * speed) < -0.5) pace = Math.min(pace, STEP_IN)
@@ -104,8 +105,8 @@ export function receiveSystem(world: Match, _dt: number) {
   const firstTouch = Outfielder.firstTouch[eid]
   const want = touchDirection(world, eid)
   const angle = touchAngle(eid, TouchStyle.Small, want.x, want.y) + gaussian(world.rng) * firstTouchError(firstTouch)
-  Velocity.x[ball] = Velocity.x[eid] + Math.cos(angle) * SET_PUSH
-  Velocity.y[ball] = Velocity.y[eid] + Math.sin(angle) * SET_PUSH
+  Velocity.x[ball] = Velocity.x[eid] + cos(angle) * SET_PUSH
+  Velocity.y[ball] = Velocity.y[eid] + sin(angle) * SET_PUSH
   Velocity.z[ball] = 0
   Position.z[ball] = BALL_RADIUS
 
@@ -127,7 +128,7 @@ function touchDirection(world: Match, eid: number) {
   const L = world.pitch.halfLength
   let x = goalX - Position.x[eid]
   let y = (-Position.y[eid] * L) / Math.max(Math.abs(goalX - Position.x[eid]), L)
-  const length = Math.hypot(x, y) || 1
+  const length = hypot(x, y) || 1
   x /= length
   y /= length
   let nearest = -1
@@ -137,7 +138,7 @@ function touchDirection(world: Match, eid: number) {
   for (const other of world.teams[opponent(world.possession)].outfielders) {
     const ox = seenX(world, eid, other)
     const oy = seenY(world, eid, other)
-    const d = Math.hypot(ox - Position.x[eid], oy - Position.y[eid])
+    const d = hypot(ox - Position.x[eid], oy - Position.y[eid])
     if (d < gap) {
       nearest = other
       gap = d
@@ -154,5 +155,5 @@ function touchDirection(world: Match, eid: number) {
   // Keep it on the pitch.
   if (Math.abs(Position.y[eid]) > world.pitch.halfWidth - 2 && Math.sign(y) === Math.sign(Position.y[eid])) y = 0
   const facing = Facing.angle[eid]
-  return Math.hypot(x, y) > 1e-6 ? { x, y } : { x: Math.cos(facing), y: Math.sin(facing) }
+  return hypot(x, y) > 1e-6 ? { x, y } : { x: cos(facing), y: sin(facing) }
 }

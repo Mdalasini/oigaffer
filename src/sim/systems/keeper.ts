@@ -8,6 +8,7 @@ import { playBall } from '../offside'
 import { gaussian } from '../rng'
 import { passSafety } from '../space/control'
 import { ownGoalX } from '../teams'
+import { atan2, cos, exp, hypot, sin } from '../fmath'
 
 // How far off the line (m) the keeper stands, along the bisector of the
 // angle the ball makes with the posts: a share of the ball's distance,
@@ -70,10 +71,10 @@ export function keeperSystem(world: Match, dt: number) {
     }
     // Keepers stay square to the ball; their dives are lateral, so they move
     // outside the locomotion model.
-    Facing.angle[eid] = Math.atan2(Position.y[world.ball] - Position.y[eid], Position.x[world.ball] - Position.x[eid])
+    Facing.angle[eid] = atan2(Position.y[world.ball] - Position.y[eid], Position.x[world.ball] - Position.x[eid])
     if (world.phase === 'shot' && eid === world.keeper) dive(world, eid, dt)
     else if (world.phase === 'stopped') {
-      const decay = Math.exp(-6 * dt)
+      const decay = exp(-6 * dt)
       Velocity.x[eid] *= decay
       Velocity.y[eid] *= decay
     } else setPosition(world, eid, dt)
@@ -98,22 +99,22 @@ function setPosition(world: Match, eid: number, dt: number) {
   const lineX = ownGoalX(world.pitch, team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  const distance = Math.hypot(bx - lineX, by)
+  const distance = hypot(bx - lineX, by)
   // Where the bisector meets the goal line: it splits the goal mouth in the ratio of the distances to the posts.
-  const near = Math.hypot(bx - lineX, by - GOAL_HALF_WIDTH)
-  const far = Math.hypot(bx - lineX, by + GOAL_HALF_WIDTH)
+  const near = hypot(bx - lineX, by - GOAL_HALF_WIDTH)
+  const far = hypot(bx - lineX, by + GOAL_HALF_WIDTH)
   const footY = GOAL_HALF_WIDTH - (2 * GOAL_HALF_WIDTH * near) / (near + far)
   const through = distance < ONE_ON_ONE_RANGE && team !== world.possession && !defenderGoalSide(world, team, distance)
   const advance = through
     ? clamp(ONE_ON_ONE_SHARE * distance, ADVANCE_MIN, ONE_ON_ONE_MAX)
     : clamp(ADVANCE_SHARE * distance, ADVANCE_MIN, ADVANCE_MAX)
-  const toBall = Math.hypot(bx - lineX, by - footY) || 1
+  const toBall = hypot(bx - lineX, by - footY) || 1
   const step = Math.min(advance, toBall * 0.8)
   const tx = lineX + ((bx - lineX) / toBall) * step
   const ty = clamp(footY + ((by - footY) / toBall) * step, -(GOAL_HALF_WIDTH - 0.3), GOAL_HALF_WIDTH - 0.3)
   const dx = tx - Position.x[eid]
   const dy = ty - Position.y[eid]
-  const dist = Math.hypot(dx, dy)
+  const dist = hypot(dx, dy)
   const speed = Math.min(through ? RUSH_SPEED : SET_SPEED, dist / dt)
   Velocity.x[eid] = dist > 1e-4 ? (dx / dist) * speed : 0
   Velocity.y[eid] = dist > 1e-4 ? (dy / dist) * speed : 0
@@ -122,7 +123,7 @@ function setPosition(world: Match, eid: number, dt: number) {
 /** Whether any of `team`'s outfielders is nearer their own goal than the ball, `distance` from it, is. */
 function defenderGoalSide(world: Match, team: number, distance: number) {
   const lineX = ownGoalX(world.pitch, team)
-  return world.teams[team].outfielders.some((eid) => Math.hypot(Position.x[eid] - lineX, Position.y[eid]) < distance - 1)
+  return world.teams[team].outfielders.some((eid) => hypot(Position.x[eid] - lineX, Position.y[eid]) < distance - 1)
 }
 
 /** How far from their centre (m) `keeper` can stop a shot struck from `shotDistance` metres away from them. */
@@ -177,9 +178,9 @@ function holdAndRollOut(world: Match, eid: number) {
   const receiver = Goalkeeper.receiver[eid]
   const safety = Goalkeeper.safety[eid]
   setVec(Velocity, eid, 0, 0, 0)
-  Facing.angle[eid] = Math.atan2(Position.y[receiver] - Position.y[eid], Position.x[receiver] - Position.x[eid])
-  const fx = Math.cos(Facing.angle[eid])
-  const fy = Math.sin(Facing.angle[eid])
+  Facing.angle[eid] = atan2(Position.y[receiver] - Position.y[eid], Position.x[receiver] - Position.x[eid])
+  const fx = cos(Facing.angle[eid])
+  const fy = sin(Facing.angle[eid])
   setVec(Position, ball, Position.x[eid] + fx * HANDS_AHEAD, Position.y[eid] + fy * HANDS_AHEAD, HANDS_HEIGHT)
   setVec(Velocity, ball, 0, 0, 0)
   if (world.phaseTime < HOLD_MIN) return
@@ -198,7 +199,7 @@ export function bestReceiver(world: Match, keeper: number, fromX: number, fromY:
   let safety = -1
   for (const eid of world.teams[team].outfielders) {
     const { x, y } = passTarget(eid)
-    const distance = Math.hypot(x - fromX, y - fromY)
+    const distance = hypot(x - fromX, y - fromY)
     const s = distance < RECEIVE_MIN ? 0 : passSafety(world, team, fromX, fromY, x, y, rollSpeedFor(distance, PASS_ARRIVAL))
     if (s > safety) {
       receiver = eid
@@ -223,11 +224,11 @@ export function passToOutfielder(world: Match, keeper: number, receiver: number,
   playBall(world, keeper)
   const { ball, rng } = world
   const { x, y } = passTarget(receiver)
-  const angle = Math.atan2(y - fromY, x - fromX) + gaussian(rng) * PASS_ERROR
-  const dx = Math.cos(angle)
-  const dy = Math.sin(angle)
+  const angle = atan2(y - fromY, x - fromX) + gaussian(rng) * PASS_ERROR
+  const dx = cos(angle)
+  const dy = sin(angle)
   const start = 0.5
-  const speed = rollSpeedFor(Math.max(0, Math.hypot(x - fromX, y - fromY) - start), PASS_ARRIVAL)
+  const speed = rollSpeedFor(Math.max(0, hypot(x - fromX, y - fromY) - start), PASS_ARRIVAL)
   setVec(Position, ball, fromX + dx * start, fromY + dy * start, BALL_RADIUS)
   setVec(Velocity, ball, dx * speed, dy * speed, 0)
   Goalkeeper.recover[keeper] = RELEASE_RECOVER

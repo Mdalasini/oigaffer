@@ -3,6 +3,7 @@ import { Dribbler, Outfielder, Team, Velocity } from '../components'
 import { handOver, winBall, type Match } from '../match'
 import { offsideOffence } from '../offside'
 import { ballAtFeet, canPlayBall, CONTROL_RADIUS, footDistance } from '../touch'
+import { hypot } from '../fmath'
 
 /** Beyond the carrier's control, another player must be at least this much nearer to call it theirs. */
 const LOOSE_MARGIN = 0.4
@@ -26,7 +27,7 @@ export function contestSystem(world: Match, _dt: number) {
     // Someone who has just passed or shot can't take it straight back.
     if (eid === carrier || Dribbler.cooldown[eid] > 0 || !canPlayBall(world, eid) || !ballAtFeet(eid, ball)) continue
     const distance = footDistance(eid, ball)
-    const relativeSpeed = Math.hypot(Velocity.x[ball] - Velocity.x[eid], Velocity.y[ball] - Velocity.y[eid])
+    const relativeSpeed = hypot(Velocity.x[ball] - Velocity.x[eid], Velocity.y[ball] - Velocity.y[eid])
     if (carrierDistance - distance < LOOSE_MARGIN || relativeSpeed > MAX_GATHER_SPEED || distance >= nearest) continue
     winner = eid
     nearest = distance

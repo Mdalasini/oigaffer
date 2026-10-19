@@ -2,6 +2,7 @@ import { hasComponent, query } from 'bitecs'
 import { Body, Defender, DefenderMode, Pressing, Position, Velocity } from '../components'
 import { getUp, resolveBarge, resolveSlideTackle, resolveStandingTackle, slideReachesBall } from '../challenge'
 import type { Match } from '../match'
+import { hypot } from '../fmath'
 
 /** A standing tackle meets the ball this long (s) after it starts, and is over by STAND_DURATION. */
 export const STAND_WINDUP = 0.18
@@ -41,7 +42,7 @@ export function challengeSystem(world: Match, dt: number) {
       if (t >= STAND_DURATION) Defender.mode[eid] = DefenderMode.Jockey
     } else if (mode === DefenderMode.Barge) {
       const carrier = world.carrier
-      const gap = Math.hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
+      const gap = hypot(Position.x[carrier] - Position.x[eid], Position.y[carrier] - Position.y[eid])
       if (!Defender.contacted[eid] && gap <= Body.radius[carrier] + Body.radius[eid] + 0.08) {
         Defender.contacted[eid] = 1
         resolveBarge(world, eid)
@@ -53,7 +54,7 @@ export function challengeSystem(world: Match, dt: number) {
 
 /** Slides along the committed line, under momentum alone, then goes to ground. */
 function slide(world: Match, eid: number, dt: number, live: boolean) {
-  const speed = Math.max(0, Math.hypot(Velocity.x[eid], Velocity.y[eid]) - SLIDE_DECEL * dt)
+  const speed = Math.max(0, hypot(Velocity.x[eid], Velocity.y[eid]) - SLIDE_DECEL * dt)
   Velocity.x[eid] = Defender.actionDirX[eid] * speed
   Velocity.y[eid] = Defender.actionDirY[eid] * speed
   Position.x[eid] += Velocity.x[eid] * dt
