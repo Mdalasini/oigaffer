@@ -267,6 +267,8 @@ export const OffBall = {
   decideIn: new Float32Array(MAX_ENTITIES),
   /** An attacker's current intention: holding the shape (0) or showing for the ball (1). */
   showing: new Uint8Array(MAX_ENTITIES),
+  /** Match time they picked the spot they're showing in. */
+  showSince: new Float32Array(MAX_ENTITIES),
   /** Where, from their place in the shape (m), an attacker holding it has moved to open a lane for a pass. */
   laneX: new Float32Array(MAX_ENTITIES),
   laneY: new Float32Array(MAX_ENTITIES),

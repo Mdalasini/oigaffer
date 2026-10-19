@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Call, CallKind, Facing, OffBall, Position, Run, RunPhase, Velocity } from './components'
+import { Call, CallKind, Facing, OffBall, Outfielder, Position, Run, RunPhase, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { lookAround } from './perception'
@@ -226,6 +226,41 @@ describe('five a side: complementary support', () => {
     const apart = Math.abs(Math.atan2(Math.sin(angle(first) - angle(second)), Math.cos(angle(first) - angle(second))))
     // Without allowing for each other, both pick the same spot.
     expect(apart).toBeGreaterThan(0.4)
+  })
+
+  test('having picked a spot to show in, they make for it for a second before weighing the spots up again', () => {
+    const world = closedDown(-5, 0, [[-16, 0], [-6, 9], [-3, 11]], [[-3.8, 0], [0, -5], [-2, -9], [6, 2]])
+    const a = world.teams[RED].outfielders[2]
+    // The poorest reader of the game, whose judgement of each spot is the noisiest.
+    Outfielder.offTheBall[a] = 1
+    const first = attackingIntent(world, a)
+    expect(OffBall.showing[a]).toBe(1)
+    // Fresh judgement every look would pick somewhere else from time to time; committed, they don't.
+    for (let i = 1; i <= 9; i++) {
+      world.time += 0.1
+      const again = attackingIntent(world, a)
+      expect(again.x).toBeCloseTo(first.x, 4)
+      expect(again.y).toBeCloseTo(first.y, 4)
+    }
+  })
+
+  test('showing for it when a pass goes elsewhere, they keep going where they were, unless that crowds the passer', () => {
+    const world = closedDown(-5, 0, [[-16, 0], [-6, 9], [-3, 11]], [[-3.8, 0], [0, -5], [-2, -9], [6, 2]])
+    const [passer, deep, a] = world.teams[RED].outfielders
+    const spot = attackingIntent(world, a)
+    // The passer has gone off the other way since playing it.
+    place(passer, -12, -6)
+    world.pass = { from: passer, to: deep, kind: 'feet', x: -16, y: 0, time: world.time }
+    world.time += 2
+    const during = attackingIntent(world, a)
+    expect(OffBall.showing[a]).toBe(1)
+    expect(during.x).toBeCloseTo(spot.x, 4)
+    expect(during.y).toBeCloseTo(spot.y, 4)
+    // With the spot right by the passer, they'd only crowd him: they take up the shape instead.
+    place(passer, spot.x + 2, spot.y)
+    world.time += 2
+    attackingIntent(world, a)
+    expect(OffBall.showing[a]).toBe(0)
   })
 
   test('the rest defence is whoever plays deepest, and changes when they have the ball', () => {
