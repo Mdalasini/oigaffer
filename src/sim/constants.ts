@@ -16,7 +16,7 @@ export const BALL_ROLL_DRAG = 0.3
 export const FIXED_DT = 1 / 120
 
 /** Outfielders a side, besides the keeper, unless a match asks for another number. */
-export const OUTFIELDERS_PER_SIDE = 4
+export const OUTFIELDERS_PER_SIDE = 10
 
 export const MIN_GRADE = 1
 export const MAX_GRADE = 20

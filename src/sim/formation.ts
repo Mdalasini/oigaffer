@@ -102,11 +102,59 @@ const FOUR_THREE_THREE: Formation = {
   ],
 }
 
-/** The formation for a side of `outfielders`. */
-export function formationFor(outfielders: number): Formation {
-  if (outfielders === 1) return ONE
-  if (outfielders === 2) return ONE_ONE
-  if (outfielders === 4) return DIAMOND
-  if (outfielders === 10) return FOUR_THREE_THREE
+/**
+ * Ten outfielders, a 3-4-3. With the ball, three centre-backs spread across
+ * the back, two central midfielders sit in front of them, the wing-backs push
+ * on to hold the width on their own, so the two wide forwards can come
+ * inside to the half-spaces either side of the centre-forward. Without it, a
+ * 5-4-1: the wing-backs drop in beside the centre-backs to make a back five,
+ * the wide forwards drop in beside the two midfielders, and the
+ * centre-forward leads the press. Slots are numbered back to front, as in the
+ * 4-3-3.
+ */
+const THREE_FOUR_THREE: Formation = {
+  name: '3-4-3',
+  inPossession: [
+    { depth: 0, width: -0.55 },
+    { depth: 0, width: 0 },
+    { depth: 0, width: 0.55 },
+    { depth: 0.55, width: -0.95 },
+    { depth: 0.55, width: 0.95 },
+    { depth: 0.3, width: -0.25 },
+    { depth: 0.3, width: 0.25 },
+    { depth: 0.95, width: -0.45 },
+    { depth: 0.95, width: 0.45 },
+    { depth: 1, width: 0 },
+  ],
+  outOfPossession: [
+    { depth: 0, width: -0.4 },
+    { depth: 0, width: 0 },
+    { depth: 0, width: 0.4 },
+    { depth: 0, width: -0.85 },
+    { depth: 0, width: 0.85 },
+    { depth: 0.5, width: -0.25 },
+    { depth: 0.5, width: 0.25 },
+    { depth: 0.55, width: -0.75 },
+    { depth: 0.55, width: 0.75 },
+    { depth: 1, width: 0 },
+  ],
+}
+
+/** Every formation, by name, for sides of any size. */
+export const FORMATIONS = {
+  '1': ONE,
+  '1-1': ONE_ONE,
+  '1-2-1': DIAMOND,
+  '4-3-3': FOUR_THREE_THREE,
+  '3-4-3': THREE_FOUR_THREE,
+} as const
+export type FormationName = keyof typeof FORMATIONS
+
+/** The formations Red and Blue line up in, in that order, with `outfielders` a side unless a match asks otherwise. */
+export function defaultFormations(outfielders: number): [FormationName, FormationName] {
+  if (outfielders === 1) return ['1', '1']
+  if (outfielders === 2) return ['1-1', '1-1']
+  if (outfielders === 4) return ['1-2-1', '1-2-1']
+  if (outfielders === 10) return ['4-3-3', '3-4-3']
   throw new Error(`no formation for ${outfielders} outfielders`)
 }

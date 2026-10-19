@@ -1,6 +1,6 @@
 // Plays headless matches and reports how they played and what they cost.
 //
-//   bun scripts/measure.ts [minutes=30] [outfielders=4] [seeds=1,2,3]
+//   bun scripts/measure.ts [minutes=30] [outfielders=10] [seeds=1,2,3]
 //
 // Per seed: the scoreline and tallies; how hard players off the ball work,
 // how often teammates bunch, how often defenders are goal-side and attackers
@@ -12,8 +12,9 @@
 import { Position, TakeOn, TouchStyle, Velocity } from '../src/sim/components'
 import type { ChallengeKind } from '../src/sim/challenge'
 import { createMatch, MATCH_SYSTEMS, type Match } from '../src/sim/match'
-import { FIXED_DT } from '../src/sim/constants'
+import { FIXED_DT, OUTFIELDERS_PER_SIDE } from '../src/sim/constants'
 import { pitchFor } from '../src/sim/pitch'
+import { defaultFormations } from '../src/sim/formation'
 import { along, onsideLimit } from '../src/sim/shape'
 import { ownGoalX } from '../src/sim/teams'
 import { LOOK_EVERY, watchFor } from '../src/sim/detectors'
@@ -23,14 +24,14 @@ import { ticksAt } from '../src/sim/replay'
 const TAKE_ON_COUNTED = 3
 
 const minutes = Number(process.argv[2] ?? 30)
-const outfielders = Number(process.argv[3] ?? 4)
+const outfielders = Number(process.argv[3] ?? OUTFIELDERS_PER_SIDE)
 const seeds = (process.argv[4] ?? '1,2,3').split(',').map(Number)
 
 const pct = (n: number, d: number) => `${((100 * n) / Math.max(1, d)).toFixed(0)}%`
 const totals = new Map<string, number>()
 
 const pitch = pitchFor(outfielders)
-console.log(`${outfielders} outfielders a side on ${2 * pitch.halfLength} m x ${2 * pitch.halfWidth} m`)
+console.log(`${outfielders} outfielders a side (${defaultFormations(outfielders).join(' v ')}) on ${2 * pitch.halfLength} m x ${2 * pitch.halfWidth} m`)
 
 for (const seed of seeds) {
   const world = createMatch({ seed, outfielders })

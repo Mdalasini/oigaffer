@@ -205,7 +205,7 @@ describe('moving like footballers', () => {
 })
 
 describe('moving like footballers, five a side', () => {
-  const world = createMatch({ seed: 9 })
+  const world = createMatch({ outfielders: 4, seed: 9 })
   let samples = 0
   let easy = 0
   let pairs = 0

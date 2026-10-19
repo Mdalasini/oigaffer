@@ -14,7 +14,7 @@ describe('saved states', () => {
   // the game would drift from the seed and inputs it records.
   test('a restored match plays on exactly as it did the first time', () => {
     for (const seed of [1, 2, 3]) {
-      const world = createMatch({ seed })
+      const world = createMatch({ outfielders: 4, seed })
       // Every few seconds over a long spell, so slides, restarts, passes and shots in flight all get saved somewhere.
       for (let n = 0; n < 40; n++) {
         run(world, 7)
@@ -34,7 +34,7 @@ describe('saved states', () => {
   })
 
   test('restoring undoes everything since, even across a restart', () => {
-    const world = createMatch({ seed: 5 })
+    const world = createMatch({ outfielders: 4, seed: 5 })
     run(world, 20)
     const saved = saveState(world)
     const before = stateHash(world)

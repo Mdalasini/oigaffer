@@ -95,8 +95,16 @@ describe('match outcomes', () => {
     expect(spread / samples).toBeGreaterThan(halfWidth)
   })
 
+  test('a match is eleven a side by default, Red in a 4-3-3 and Blue in a 3-4-3', () => {
+    const world = createMatch({ seed: 1 })
+    expect(world.teams.map((t) => t.outfielders.length)).toEqual([10, 10])
+    expect(world.teams.map((t) => t.formation)).toEqual(['4-3-3', '3-4-3'])
+    expect(world.pitch).toBe(FULL_PITCH)
+    expect(() => createMatch({ seed: 1, outfielders: 4, formations: ['4-3-3', '1-2-1'] })).toThrow()
+  })
+
   test('five a side keeps its small pitch unless a match asks for another', () => {
-    expect(createMatch({ seed: 1 }).pitch).toBe(SMALL_SIDED_PITCH)
+    expect(createMatch({ outfielders: 4, seed: 1 }).pitch).toBe(SMALL_SIDED_PITCH)
     expect(createMatch({ seed: 1, outfielders: 4, pitch: FULL_PITCH }).pitch).toBe(FULL_PITCH)
   })
 
