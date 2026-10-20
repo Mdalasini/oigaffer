@@ -87,9 +87,15 @@ const LANE_SEEKERS = 3
 const LANE_DIRECTIONS = 5
 /** Value lost for every metre a spot is from their place, so they keep the shape unless a lane is worth it. */
 const DRIFT_COST = 0.0002
-/** The lane they're in keeps them unless another is better by this share of its value, and at least KEEP_LANE_MIN. */
+/**
+ * The lane they're in keeps them unless another is better by this share of
+ * its value, and at least KEEP_LANE_MIN; more, by DOUBT times their
+ * misjudgement, for a player who reads lanes less surely, so a fresh misread
+ * doesn't change their mind.
+ */
 const KEEP_LANE = 0.15
 const KEEP_LANE_MIN = 0.001
+const DOUBT = 2
 /** Their misjudgement of a lane is at least this big a share, so lanes worth next to nothing still vary. */
 const LANE_MIN_JUDGED = 0.005
 
@@ -154,8 +160,9 @@ export function attackingIntent(world: Match, eid: number): Intent {
     }
   }
   // While the keeper has it, or a pass is on its way to someone else, they keep the shape; a run already going goes on.
+  // The lane they hold they keep through a pass, or each look would pick one afresh and they'd go back and forth.
   if (world.phase !== 'play' || carrier === eid || (world.pass && Run.phase[eid] !== RunPhase.Go)) {
-    endRun(world, eid)
+    endRun(world, eid, true)
     return because(world, hold(world, eid, false), world.phase !== 'play' ? 'holds the shape: the keeper has it' : 'holds the shape: a pass is on to someone else')
   }
 
@@ -249,10 +256,16 @@ export function tickRun(eid: number, dt: number) {
   Run.rest[eid] = Math.max(0, Run.rest[eid] - dt)
 }
 
-/** Gives up the run, if there was one, and stops calling. */
-export function endRun(world: Match, eid: number) {
+/** Gives up the run, if there was one, and stops calling; with `keepLane`, the lane they hold stays theirs. */
+export function endRun(world: Match, eid: number, keepLane = false) {
   if (Run.phase[eid] !== RunPhase.None) Run.rest[eid] = RUN_REST * (1 + world.rng())
+  const laneX = OffBall.laneX[eid]
+  const laneY = OffBall.laneY[eid]
   clearIntentions(eid)
+  if (keepLane) {
+    OffBall.laneX[eid] = laneX
+    OffBall.laneY[eid] = laneY
+  }
 }
 
 /** Forgets any run, call or showing: on the ball, leaving a role, or at a restart. */
@@ -473,7 +486,7 @@ function openLane(world: Match, eid: number, hx: number, hy: number) {
   const fits = (dx: number, dy: number) => Math.abs(hx + dx) <= L - 1.5 && Math.abs(hy + dy) <= W - 1.5 && along(team, hx + dx) <= limit
   // The lane they're already in, one of the spots below, keeps them unless another is clearly better.
   const kept = (dx: number, dy: number, s: number) =>
-    Math.abs(dx - OffBall.laneX[eid]) < 0.01 && Math.abs(dy - OffBall.laneY[eid]) < 0.01 ? s + Math.abs(s) * KEEP_LANE + KEEP_LANE_MIN : s
+    Math.abs(dx - OffBall.laneX[eid]) < 0.01 && Math.abs(dy - OffBall.laneY[eid]) < 0.01 ? s + Math.abs(s) * (KEEP_LANE + DOUBT * error) + KEEP_LANE_MIN : s
   let best = { dx: 0, dy: 0 }
   let bestScore = fits(0, 0) ? kept(0, 0, score(0, 0)) : -Infinity
   for (const shift of LANE_SHIFTS) {

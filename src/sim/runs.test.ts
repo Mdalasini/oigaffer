@@ -419,6 +419,74 @@ describe('opening a lane', () => {
     expect(along(RED, spot.x)).toBeGreaterThan(along(RED, home.x) - 0.5)
   })
 
+  /**
+   * Red's carrier in midfield with everything mirrored about the middle, so the lanes either side of the pivot's
+   * place are worth the same, and a Blue defender in the lane to that place. The carrier has just played it wide,
+   * to be received where the ball is, so the next pass is from there too.
+   */
+  function mirrored(offTheBall: number) {
+    const world = createMatch({ outfielders: 4, seed: 5, grades: { red: { outfielder: { offTheBall } } } })
+    const [carrier, wideA, wideB, pivot] = world.teams[RED].outfielders
+    handOver(world, carrier)
+    world.phase = 'play'
+    world.possession = RED
+    place(carrier, -14, 0)
+    setVec(Position, world.ball, -14 + FOOT_OFFSET, 0, BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    place(wideA, -10, -16)
+    place(wideB, -10, 16)
+    const [blocker, ...others] = world.teams[BLUE].outfielders
+    place(others[0], -2, -16, Math.PI)
+    place(others[1], -2, 16, Math.PI)
+    place(others[2], 6, 0, Math.PI)
+    place(world.teams[BLUE].keeper, GOAL_X - 0.5, 0, Math.PI)
+    // Where the blocker goes depends on the pivot's place, which depends on Blue's line: they stand in front of it.
+    place(blocker, -5, 0, Math.PI)
+    place(pivot, 6, 0)
+    const home = homePosition(world, pivot)
+    place(pivot, home.x, home.y)
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    // A Blue defender in the lane to the pivot's place, so they look across for one.
+    place(blocker, bx + (home.x - bx) * 0.5, by + (home.y - by) * 0.5, Math.PI)
+    Run.rest[pivot] = 5
+    lookAround(world)
+    world.pass = { from: carrier, to: wideA, kind: 'feet', lofted: false, x: bx, y: by, time: world.time }
+    return { world, pivot, home }
+  }
+
+  test('a lane they have found keeps them while a pass is played to someone else, as it does while the ball is held', () => {
+    const { world, pivot, home } = mirrored(20)
+    attackingIntent(world, pivot)
+    const chosen = [OffBall.laneX[pivot], OffBall.laneY[pivot]]
+    expect(Math.abs(chosen[1])).toBeGreaterThan(1)
+    // Holding the mirror image of that lane instead, they stay in it: it's worth as much.
+    OffBall.laneX[pivot] = chosen[0]
+    OffBall.laneY[pivot] = -chosen[1]
+    const spot = attackingIntent(world, pivot)
+    expect(OffBall.laneY[pivot]).toBeCloseTo(-chosen[1], 6)
+    expect(spot.y - home.y).toBeCloseTo(-chosen[1], 6)
+    // Just as they would once the pass has arrived.
+    world.pass = null
+    attackingIntent(world, pivot)
+    expect(OffBall.laneY[pivot]).toBeCloseTo(-chosen[1], 6)
+  })
+
+  test('a player who reads lanes less surely doesn’t swap between two as good on a fresh misread', () => {
+    const { world, pivot } = mirrored(1)
+    // Already in the lane across to one side.
+    OffBall.laneX[pivot] = 0
+    OffBall.laneY[pivot] = 6
+    let lane = OffBall.laneY[pivot]
+    let swaps = 0
+    for (let look = 0; look < 40; look++) {
+      attackingIntent(world, pivot)
+      if (OffBall.laneY[pivot] !== lane) swaps++
+      lane = OffBall.laneY[pivot]
+    }
+    expect(swaps).toBeLessThanOrEqual(6)
+  })
+
   test('who looks for a lane goes by where they reckon their teammates are, not where those teammates have since gone unseen', () => {
     const world = createMatch({ outfielders: 10, seed: 5, grades: { red: { outfielder: { offTheBall: 20 } } } })
     const reds = world.teams[RED].outfielders
