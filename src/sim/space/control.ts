@@ -85,6 +85,41 @@ export function timeOnBall(world: Match, eid: number, by = -1): number {
 }
 
 /**
+ * Moments (s) ahead at which `timeOnTheRun` checks whether an opponent could
+ * be on them yet. Nobody on them by the last, that's as long as it counts.
+ */
+const ON_THE_RUN_CHECKS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3]
+
+/**
+ * As `timeOnBall`, for a player running on at (vx, vy) m/s, staying on the
+ * pitch: a chaser who would get to where they are now in half a second never
+ * catches one running away from him as fast, and one running at an opponent
+ * meets him sooner.
+ */
+export function timeOnTheRun(world: Match, eid: number, vx: number, vy: number, by = -1): number {
+  const them = 1 - Team.id[eid]
+  const x = Position.x[eid]
+  const y = Position.y[eid]
+  const now = teamArrival(world, them, x, y, INTERCEPT_REACH, by)
+  // Already within someone's reach, running on doesn't get them away from him.
+  if (now === 0 || (vx === 0 && vy === 0)) return now
+  const { halfLength, halfWidth } = world.pitch
+  // How long the first opponent would still need once they're at each moment's spot: the first moment that's
+  // run out, between it and the moment before.
+  let before = 0
+  let spare = now
+  for (const t of ON_THE_RUN_CHECKS) {
+    const ax = Math.max(-halfLength, Math.min(halfLength, x + vx * t))
+    const ay = Math.max(-halfWidth, Math.min(halfWidth, y + vy * t))
+    const arrival = teamArrival(world, them, ax, ay, INTERCEPT_REACH, by)
+    if (arrival <= t) return before + ((t - before) * spare) / (spare - (arrival - t))
+    before = t
+    spare = arrival - t
+  }
+  return before
+}
+
+/**
  * Probability (0–1) that a ground pass from (fromX, fromY) to (toX, toY),
  * rolled at `speed` m/s, gets there without an opponent cutting it out.
  * At each step along the ball's path it compares when the ball arrives with

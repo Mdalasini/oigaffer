@@ -4,7 +4,7 @@ import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, setVec, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollTime } from './passing'
 import { arrivalTime, REACTION_TIME } from './space/arrival'
-import { controlAt, passSafety, timeOnBall } from './space/control'
+import { controlAt, passSafety, timeOnBall, timeOnTheRun } from './space/control'
 import { shotChance, threat } from './space/threat'
 import { BANDS, bandOf, laneOf, LANES, zoneCentre } from './space/zones'
 
@@ -197,5 +197,21 @@ describe('control and passing lanes', () => {
     const time = timeOnBall(far, far.teams[RED].outfielders[0])
     const near = placed(0, 0, 2, 0)
     expect(timeOnBall(near, near.teams[RED].outfielders[0])).toBeLessThan(time - 0.5)
+  })
+
+  test('running away from an opponent buys time on the ball, and running at him loses it', () => {
+    const world = placed(0, 0, -4, 0)
+    const red = world.teams[RED].outfielders[0]
+    const blue = world.teams[BLUE].outfielders[0]
+    setVec(Velocity, blue, 7, 0, 0)
+    const standing = timeOnTheRun(world, red, 0, 0)
+    expect(standing).toBeCloseTo(timeOnBall(world, red), 6)
+    expect(timeOnTheRun(world, red, 8, 0)).toBeGreaterThan(standing + 1)
+    expect(timeOnTheRun(world, red, -6, 0)).toBeLessThan(standing)
+  })
+
+  test('with an opponent already on them, running on gets them no time on the ball', () => {
+    const world = placed(0, 0, -0.8, 0)
+    expect(timeOnTheRun(world, world.teams[RED].outfielders[0], 8.6, 0)).toBe(0)
   })
 })

@@ -1,7 +1,7 @@
 import { angleDelta } from './angles'
-import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Position, Team, TouchStyle, Velocity } from './components'
+import { Call, CallKind, Dribbler, Facing, Outfielder, Passer, Physical, Position, Team, TouchStyle, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
-import { aerialControlChance, gradeT, judgementError, loftCarryError, offsideMisjudgement, passAngleError, passWeightError } from './grades'
+import { aerialControlChance, gradeT, judgementError, loftCarryError, offsideMisjudgement, passAngleError, passWeightError, topSpeed } from './grades'
 import { cue } from './cues'
 import { handOver, setVec, type Match, type PassKind } from './match'
 import { rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollTime } from './passing'
@@ -10,12 +10,13 @@ import { along, onsideLimit } from './shape'
 import { knows, seenFacing, seenVx, seenVy, seenX, seenY } from './perception'
 import { gaussian } from './rng'
 import { arrivalTime, REACTION_TIME } from './space/arrival'
-import { loftSafety, passSafety, teamArrival, timeOnBall } from './space/control'
+import { loftSafety, passSafety, teamArrival, timeOnTheRun } from './space/control'
 import { launchUp, loftFlightTime } from './flight'
 import { shotValue } from './finishing'
 import { planCarry } from './carrying'
 import { shotChance, threat } from './space/threat'
 import { attackDir, attackedGoalX, opponent } from './teams'
+import { roomAhead } from './touch'
 import { atan2, cos, exp, hypot, sin } from './fmath'
 import { playerLabel } from './trace'
 
@@ -224,7 +225,8 @@ export function returnCost(world: Match, carrier: number, option: PassOption): n
 
 /**
  * What keeping the ball is worth: if they keep it, the threat where they are
- * plus what carrying it on gains them; if they lose it, the threat the other
+ * plus what carrying it on gains them, the further the longer nobody can
+ * get to them on the way; if they lose it, the threat the other
  * team then has from here. The chance of keeping it falls the less time
  * they have before an opponent is on them, and rises with their dribbling;
  * when the best carry they see means taking their man on, it's no better
@@ -234,17 +236,24 @@ export function keepValue(world: Match, carrier: number): number {
   const team = Team.id[carrier]
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  // How long they reckon they have: a defender closing in from behind, unseen, isn't counted where they really are.
-  const time = timeOnBall(world, carrier, carrier)
+  // How long they reckon they have, running on as they're going: a defender closing in from behind, unseen, isn't
+  // counted where they really are.
+  const time = timeOnTheRun(world, carrier, Velocity.x[carrier], Velocity.y[carrier], carrier)
   // Keeping it means taking their man on if there's no way round him: no better than their chance of beating him.
   const plan = planCarry(world, carrier)
+  // With nobody able to get to them along the carry for longer than it takes, they can take it further: as far as
+  // they'd get at full speed before anyone could be on them. Through on goal, that's most of the way there.
+  const pace = topSpeed(Physical.pace[carrier])
+  const free = timeOnTheRun(world, carrier, plan.dirX * pace, plan.dirY * pace, carrier)
+  const far = Math.min(pace * free, roomAhead(world.pitch, bx, by, plan.dirX, plan.dirY))
+  const reached = Math.max(plan.reached, threat(world.pitch, team, bx + plan.dirX * far, by + plan.dirY * far))
   const keep = Math.min(clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97), plan.takeOn ? plan.kept : 1)
   // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to,
   // from where the best carry they see ends up, is worth over a clean one from here, but only if they have a
   // moment on the ball to carry it on at all. For a take-on, the chance of getting there counts here as well as in
   // the cap on keeping it: once alone, planCarry is too hopeful of beating a man and carrying on past him, and a
   // carrier pressed in midfield would take him on rather than find a free teammate.
-  const gain = Math.max(0, plan.kept * plan.reached - shotChance(world.pitch, bx * attackDir(team), by))
+  const gain = Math.max(0, plan.kept * reached - shotChance(world.pitch, bx * attackDir(team), by))
   const moment = 1 / (1 + exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
   const kept = shotValue(world, carrier) * NOW_SHARE + gain * moment
   return keep * kept - (1 - keep) * threat(world.pitch, opponent(team), bx, by)
