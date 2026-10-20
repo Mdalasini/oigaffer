@@ -183,6 +183,7 @@ describe('run bookkeeping', () => {
 
   test('a runner’s target goes right up to the line, and never past it, whatever the target was before', () => {
     const world = scene(-8, 0, 0, 4, 6, [[6, -4], [6, 8]])
+    holdOn(world)
     const mate = world.teams[RED].outfielders[1]
     const limit = onsideLimit(world, RED)
     // Holding a yard onside, settled.

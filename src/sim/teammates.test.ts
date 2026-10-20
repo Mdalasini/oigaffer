@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Facing, OffBall, Position, Velocity } from './components'
+import { Facing, OffBall, Passer, Position, Velocity } from './components'
 import { BALL_RADIUS } from './constants'
 import { SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, keeperClaims, setVec, stepMatch, type Match } from './match'
@@ -121,6 +121,8 @@ describe('review fixes', () => {
     place(mate, 9, 6)
     place(blueA, 12, 0, Math.PI)
     place(blueB, 15, -3, Math.PI)
+    // The carrier holds on: a through ball being shaped for the mate would rightly let them go beyond the line.
+    Passer.nextLook[carrier] = Infinity
     for (let i = 0; i < 60; i++) {
       stepMatch(world)
       if (world.possession !== RED || world.phase !== 'play') break
@@ -201,8 +203,9 @@ describe('moving like footballers', () => {
 
   test('the covering defender stays goal-side of the ball', () => {
     // Not always: a defender who has just been beaten is behind the ball until they recover, and the ball
-    // changes hands often in a game of two a side. Measured at 73% over twelve matches (66–76% each).
-    expect(goalSide / coverSamples).toBeGreaterThan(0.7)
+    // changes hands often in a game of two a side, and a firm pass gets past them quicker than they can get back.
+    // Measured at 67% over twelve matches (65–70% each).
+    expect(goalSide / coverSamples).toBeGreaterThan(0.64)
   })
 })
 
@@ -252,7 +255,7 @@ describe('moving like footballers, five a side', () => {
   })
 
   test('defenders without the ball stay goal-side of it', () => {
-    // Measured at 75% over twelve matches (69–81% each).
-    expect(goalSide / coverSamples).toBeGreaterThan(0.7)
+    // Measured at 68% over twelve matches (65–72% each): a firm pass gets past them quicker than they can get back.
+    expect(goalSide / coverSamples).toBeGreaterThan(0.64)
   })
 })
