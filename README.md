@@ -178,7 +178,9 @@ without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
   a throw-in, a corner, or a goal kick. After a goal the other team kicks off.
   An offside gives a free kick, with opponents 5 m away.
   Restarts are taken by an outfielder starting with the ball at their feet,
-  with the nearest opponent standing off goal-side and everyone else in shape. A ball that rolls into a net is a
+  with the nearest opponent standing off goal-side and everyone else in shape.
+  A throw-in can only be thrown, to a teammate no more than 20 m away: the
+  thrower can't keep it, carry it or shoot. A ball that rolls into a net is a
   goal, own goals included. The carrier only knocks the ball long
   when there's room on the pitch for it, and takes defenders on the infield
   side near a touchline.

@@ -170,6 +170,14 @@ export function carrierSystem(world: Match, dt: number) {
       }
     }
 
+    // Taking a throw-in, they hold it until they throw it.
+    if (world.thrower === eid) {
+      MoveIntent.vx[eid] = 0
+      MoveIntent.vy[eid] = 0
+      Dribbler.style[eid] = TouchStyle.None
+      continue
+    }
+
     chooseCarry(world, eid)
     if (shield(world, eid, dirX, dirY, dt)) continue
     if (Carry.takeOn[eid] && takeOn(world, eid, dirX, dirY, dt)) continue
@@ -209,16 +217,16 @@ export function playFirstTime(world: Match, eid: number): boolean {
   return true
 }
 
-/** Whether a shot is on at all: facing near enough to goal, with a clear sight of it, and not straight from an indirect free kick. */
+/** Whether a shot is on at all: facing near enough to goal, with a clear sight of it, and not straight from an indirect free kick or a throw-in. */
 function shotOn(world: Match, eid: number, goalX: number) {
-  if (world.indirectTaker === eid) return false
+  if (world.indirectTaker === eid || world.thrower === eid) return false
   const facingGoal = atan2(-Position.y[eid], goalX - Position.x[eid])
   return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN && laneClear(world, goalX, eid)
 }
 
 /** Whoever has the ball shoots on request, if they're facing near enough to goal. */
 function wantsToShoot(world: Match, eid: number, goalX: number) {
-  if (!world.shootRequested) return false
+  if (!world.shootRequested || world.thrower === eid) return false
   const facingGoal = atan2(-Position.y[eid], goalX - Position.x[eid])
   return Math.abs(angleDelta(Facing.angle[eid], facingGoal)) <= MAX_SHOT_TURN
 }
