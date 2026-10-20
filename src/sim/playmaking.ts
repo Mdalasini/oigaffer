@@ -94,8 +94,6 @@ const PASS_MARGIN = 0
 const MIN_JUDGED = 0.002
 /** Where along a pass (as a share of its length) a cut-out is reckoned to happen. */
 const LOSS_ALONG = 0.35
-/** Carrying it on is worth a little more than where the ball is now. */
-const CARRY_GAIN = 1.15
 /** With this long (s) before they're closed down, a carrier has an even chance of carrying it on. */
 const CARRY_MOMENT = 0.5
 /** How sharply (s) more time than that turns into carrying it on. */
@@ -218,7 +216,7 @@ export function returnCost(world: Match, carrier: number, option: PassOption): n
 
 /**
  * What keeping the ball is worth: if they keep it, the threat where they are
- * plus a little for carrying it on; if they lose it, the threat the other
+ * plus what carrying it on gains them; if they lose it, the threat the other
  * team then has from here. The chance of keeping it falls the less time
  * they have before an opponent is on them, and rises with their dribbling;
  * when the best carry they see means taking their man on, it's no better
@@ -233,9 +231,12 @@ export function keepValue(world: Match, carrier: number): number {
   // Keeping it means taking their man on if there's no way round him: no better than their chance of beating him.
   const plan = planCarry(world, carrier)
   const keep = Math.min(clamp(0.55 + 0.2 * time + 0.15 * gradeT(Outfielder.dribbling[carrier]), 0.5, 0.97), plan.takeOn ? plan.kept : 1)
-  // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to
-  // is worth over a clean one from here, but only if they have a moment on the ball to carry it on at all.
-  const gain = Math.max(0, threat(world.pitch, team, bx, by) * CARRY_GAIN - shotChance(world.pitch, bx * attackDir(team), by))
+  // Holding on, the shot they have now only gets harder. Carrying it on adds what the better shot it leads to,
+  // from where the best carry they see ends up, is worth over a clean one from here, but only if they have a
+  // moment on the ball to carry it on at all. For a take-on, the chance of getting there counts here as well as in
+  // the cap on keeping it: once alone, planCarry is too hopeful of beating a man and carrying on past him, and a
+  // carrier pressed in midfield would take him on rather than find a free teammate.
+  const gain = Math.max(0, plan.kept * plan.reached - shotChance(world.pitch, bx * attackDir(team), by))
   const moment = 1 / (1 + exp(-(time - CARRY_MOMENT) / CARRY_MOMENT_SCALE))
   const kept = shotValue(world, carrier) * NOW_SHARE + gain * moment
   return keep * kept - (1 - keep) * threat(world.pitch, opponent(team), bx, by)

@@ -49,6 +49,8 @@ export interface CarryPlan {
   takeOn: boolean
   /** Chance they still have the ball at the end of it. */
   kept: number
+  /** The threat where it ends, if they get there with it. */
+  reached: number
 }
 
 /**
@@ -62,7 +64,7 @@ export interface CarryPlan {
  * man on only when beating him is worth the risk: near goal, against a
  * weaker tackler. With nobody in the way, they head straight for goal.
  */
-export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dirX: 0, dirY: 0, takeOn: false, kept: 1 }): CarryPlan {
+export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dirX: 0, dirY: 0, takeOn: false, kept: 1, reached: 0 }): CarryPlan {
   const team = Team.id[carrier]
   const them = opponent(team)
   const bx = Position.x[world.ball]
@@ -81,6 +83,7 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
   plan.dirY = sin(toGoal)
   plan.takeOn = false
   plan.kept = 1 - tackled
+  plan.reached = threat(world.pitch, team, bx, by)
   for (let i = 0; i < DIRECTIONS; i++) {
     const angle = toGoal + (i / DIRECTIONS) * Math.PI * 2
     const dx = cos(angle)
@@ -93,7 +96,8 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
     // Carried away from the presser, the body is between him and the ball, and he has to tackle from the side or behind.
     const towards = Math.max(0, ((px - bx) * dx + (py - by) * dy) / (hypot(px - bx, py - by) || 1))
     const kept = 1 - caught * tackled * (SHIELDED_SHARE + (1 - SHIELDED_SHARE) * towards)
-    const value = kept * threat(world.pitch, team, x, y) - (1 - kept) * lost
+    const reached = threat(world.pitch, team, x, y)
+    const value = kept * reached - (1 - kept) * lost
     if (value <= best) continue
     best = value
     // Straight at the defender, it's a take-on.
@@ -103,6 +107,7 @@ export function planCarry(world: Match, carrier: number, plan: CarryPlan = { dir
     plan.dirY = dy
     plan.takeOn = along > 0 && along < CARRY_REACH && across < Math.min(IN_THE_WAY, along * IN_THE_WAY_SLOPE)
     plan.kept = kept
+    plan.reached = reached
   }
   return plan
 }
@@ -124,7 +129,7 @@ function theirMan(world: Match, carrier: number): number {
 }
 
 /** Scratch for the carrier's plan. */
-const scratch: CarryPlan = { dirX: 0, dirY: 0, takeOn: false, kept: 1 }
+const scratch: CarryPlan = { dirX: 0, dirY: 0, takeOn: false, kept: 1, reached: 0 }
 
 /** The carrier keeping the ball rethinks where to take it, a few times a second (see `planCarry`). */
 export function chooseCarry(world: Match, carrier: number) {
