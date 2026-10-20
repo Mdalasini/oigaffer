@@ -50,6 +50,12 @@ const MARK_BALL_SHADE = 1
  */
 const MARK_WHEN_AHEAD = 2
 const MARK_FROM_BEHIND = 5
+/**
+ * A defender off the ball goes no further than this (m) from their place in
+ * the block, up the pitch or across it, to pick up a man or cover: further
+ * out, the man is the next zone's. Back towards their own goal there's no limit.
+ */
+const ZONE_REACH = 14
 
 /** Scratch for where a marker reckons their man is. */
 const seen: View = { x: 0, y: 0, vx: 0, vy: 0, facing: 0 }
@@ -132,7 +138,8 @@ function defend(world: Match, eid: number) {
   const goalX = ownGoalX(world.pitch, team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
-  let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : homePosition(world, eid)
+  const home = homePosition(world, eid)
+  let { x, y } = Mark.cover[eid] ? coverSpot(world, team) : home
   const man = Mark.target[eid]
   // How far they've come off their spot to pick up their man, for someone reading the match back.
   let pickedUp = 0
@@ -161,8 +168,17 @@ function defend(world: Match, eid: number) {
     y += (markY - y) * w
     pickedUp = w
   }
-  // Never behind their own goal line.
+  // However far the job pulls them, they stay within reach of their zone, except back towards their own goal.
   const dir = attackDir(team)
+  const upfield = Math.max(0, (x - home.x) * dir)
+  const reach = hypot(upfield, y - home.y)
+  const leashed = reach > ZONE_REACH
+  if (leashed) {
+    const keep = ZONE_REACH / reach
+    x -= upfield * (1 - keep) * dir
+    y = home.y + (y - home.y) * keep
+  }
+  // Never behind their own goal line.
   x = clamp(x, -world.pitch.halfLength + 1, world.pitch.halfLength - 1)
   if ((x - goalX) * dir < 1) x = goalX + dir
   y = clamp(y, -world.pitch.halfWidth + 1, world.pitch.halfWidth - 1)
@@ -171,7 +187,8 @@ function defend(world: Match, eid: number) {
   if (world.onDecision) {
     const from = Mark.cover[eid] ? 'covers behind the ball' : 'holds their place in the block'
     const marking = man === -1 ? ', no man to mark' : `, ${Math.round(pickedUp * 100)}% of the way to marking ${playerLabel(world, man)} where they reckon he is ${spot(seen.x, seen.y)}${pressCue(world) ? ', tight on a pressing cue' : ''}`
-    world.onDecision(eid, `${from}${marking}: to ${spot(x, y)} at a ${EFFORT_NAME[effort]}`)
+    const zone = leashed ? ', held at the edge of their zone' : ''
+    world.onDecision(eid, `${from}${marking}${zone}: to ${spot(x, y)} at a ${EFFORT_NAME[effort]}`)
   }
 }
 
