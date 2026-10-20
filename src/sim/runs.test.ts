@@ -91,7 +91,7 @@ describe('running in behind', () => {
   test('better movers make more runs', () => {
     const runs = (offTheBall: number) => {
       let count = 0
-      for (const seed of [1, 2, 3]) {
+      for (let seed = 1; seed <= 9; seed++) {
         const world = createMatch({ outfielders: 4, seed, grades: { red: { outfielder: { offTheBall } }, blue: { outfielder: { offTheBall } } } })
         const before = new Map<number, number>()
         for (let i = 0; i < 5 * 60 * 120; i++) {
@@ -106,9 +106,10 @@ describe('running in behind', () => {
       }
       return count
     }
-    // Five a side, five minutes a seed: measured at 2.5–2.8 times as many.
+    // Five a side, five minutes a seed: measured at 2.3–2.5 times as many. Poor movers make only a few runs a match,
+    // so over fewer seeds a run or two either way swings it.
     expect(runs(20)).toBeGreaterThan(runs(1) * 1.5)
-  }, 20_000)
+  }, 30_000)
 
   test('the carrier hears a run they can’t see, and can put it into the space being called for', () => {
     const grades = { red: { outfielder: { vision: 1 } } }

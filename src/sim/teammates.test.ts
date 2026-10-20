@@ -186,10 +186,12 @@ describe('moving like footballers', () => {
   }
 
   test('off the ball they mostly walk and jog, and sprint only now and then', () => {
-    // Measured at 71% over twelve matches on the five-a-side pitch, which is roomy for two a side (68–73% each). It
-    // was 77% before balls could be lofted: with one man to beat, two a side go long over him often, and chase it.
-    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.68)
-    expect(speeds.sprint / samples).toBeLessThan(0.08)
+    // Measured at 69% walking or jogging over twelve matches on the five-a-side pitch, which is roomy for two a side
+    // (64–73% each), and 8% sprinting (7–10%). Walking or jogging was 77% before balls could be lofted: with one man
+    // to beat, two a side go long over him often, and chase it. Sprinting was 7% before passes were struck firmly: a
+    // firm pass gets past a defender quicker, and they sprint to get back.
+    expect((speeds.walk + speeds.jog) / samples).toBeGreaterThan(0.67)
+    expect(speeds.sprint / samples).toBeLessThan(0.09)
   })
 
   test('teammates keep apart rather than crowd each other', () => {

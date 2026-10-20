@@ -479,16 +479,17 @@ function openLane(world: Match, eid: number, hx: number, hy: number) {
   const { halfLength: L, halfWidth: W } = world.pitch
   const limit = onsideLimit(world, team, eid) - 1
   const error = 0.4 * (1 - gradeT(Outfielder.offTheBall[eid]))
+  const fits = (dx: number, dy: number) => Math.abs(hx + dx) <= L - 1.5 && Math.abs(hy + dy) <= W - 1.5 && along(team, hx + dx) <= limit
+  // How the spot looks to them. The lane they're already in, one of the spots below, keeps them unless another is
+  // clearly better: by a share of what it's really worth, so misreading it doesn't also shrink what keeps them there.
   const score = (dx: number, dy: number) => {
     const { value } = rateFeetPass(world, team, eid, hx + dx, hy + dy, eid, ox, oy)
-    return value + gaussian(world.rng) * error * Math.max(Math.abs(value), LANE_MIN_JUDGED) - DRIFT_COST * hypot(dx, dy)
+    const judged = value + gaussian(world.rng) * error * Math.max(Math.abs(value), LANE_MIN_JUDGED) - DRIFT_COST * hypot(dx, dy)
+    const inLane = Math.abs(dx - OffBall.laneX[eid]) < 0.01 && Math.abs(dy - OffBall.laneY[eid]) < 0.01
+    return inLane ? judged + Math.abs(value) * (KEEP_LANE + DOUBT * error) + KEEP_LANE_MIN : judged
   }
-  const fits = (dx: number, dy: number) => Math.abs(hx + dx) <= L - 1.5 && Math.abs(hy + dy) <= W - 1.5 && along(team, hx + dx) <= limit
-  // The lane they're already in, one of the spots below, keeps them unless another is clearly better.
-  const kept = (dx: number, dy: number, s: number) =>
-    Math.abs(dx - OffBall.laneX[eid]) < 0.01 && Math.abs(dy - OffBall.laneY[eid]) < 0.01 ? s + Math.abs(s) * (KEEP_LANE + DOUBT * error) + KEEP_LANE_MIN : s
   let best = { dx: 0, dy: 0 }
-  let bestScore = fits(0, 0) ? kept(0, 0, score(0, 0)) : -Infinity
+  let bestScore = fits(0, 0) ? score(0, 0) : -Infinity
   for (const shift of LANE_SHIFTS) {
     for (let i = 0; i < LANE_DIRECTIONS; i++) {
       // Across or forward, never back towards the ball: dropping in only brings their marker with them.
@@ -496,7 +497,7 @@ function openLane(world: Match, eid: number, hx: number, hy: number) {
       const dx = cos(angle) * shift * attackDir(team)
       const dy = sin(angle) * shift
       if (!fits(dx, dy)) continue
-      const s = kept(dx, dy, score(dx, dy))
+      const s = score(dx, dy)
       if (s > bestScore) {
         best = { dx, dy }
         bestScore = s
