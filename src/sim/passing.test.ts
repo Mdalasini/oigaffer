@@ -407,6 +407,31 @@ describe('choosing a pass', () => {
     expect(passed / 40).toBeLessThan(0.2)
   })
 
+  test('through on goal with their chasers behind them, a carrier keeps it rather than passing back', () => {
+    // From a flagged match: just past halfway at full speed, two defenders a few metres behind and nobody ahead but
+    // the keeper, they passed 38 m back to a free full-back.
+    let passed = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      const world = createMatch({ outfielders: 2, seed, pitch: FULL_PITCH })
+      const [carrier, mate] = world.teams[RED].outfielders
+      const [chaser, other] = world.teams[BLUE].outfielders
+      handOver(world, carrier)
+      place(carrier, 7.7, -8.2, -0.7)
+      setVec(Velocity, carrier, 6.9, -5.1, 0)
+      setVec(Position, world.ball, 7.9, -9, BALL_RADIUS)
+      setVec(Velocity, world.ball, 7.7, -4.3, 0)
+      place(mate, -30, -12)
+      setVec(Velocity, mate, 5.8, 0, 0)
+      place(chaser, 2.8, -8.1)
+      setVec(Velocity, chaser, 8.6, -0.6, 0)
+      place(other, 2.9, -4.2, -0.3)
+      setVec(Velocity, other, 6.4, -2.3, 0)
+      lookAround(world)
+      if (choosePass(world, carrier)) passed++
+    }
+    expect(passed / 40).toBeLessThan(0.2)
+  })
+
   test('a teammate the carrier has lost track of behind them is no option until they look round', () => {
     const world = scene(6, 0, 0, 8, 6)
     const [carrier, mate] = world.teams[RED].outfielders
