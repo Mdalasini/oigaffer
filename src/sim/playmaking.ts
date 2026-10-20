@@ -61,6 +61,8 @@ const THROUGH_LAG = 0.1
  */
 const MAX_PASS = 35
 const MAX_PASS_SHARE = 0.45
+/** Furthest (m) a throw-in is thrown: as far as most players can throw it to a teammate's feet. */
+export const THROW_RANGE = 20
 /**
  * Passes of at least LOFT_MIN metres, up to LOFT_MAX, may be lofted: a
  * switch, a ball over the top, a long ball forward. From wide in the final
@@ -164,10 +166,12 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
 
   const error = judgementError(Outfielder.decisions[carrier])
   const judged = (value: number) => value + gaussian(world.rng) * error * Math.max(Math.abs(value), MIN_JUDGED)
-  const kept = keepValue(world, carrier)
-  const keep = judged(kept)
+  // Taking a throw-in, they can't keep it: they throw it to the best teammate in reach.
+  const throwing = world.thrower === carrier
+  const kept = throwing ? 0 : keepValue(world, carrier)
+  const keep = throwing ? -Infinity : judged(kept)
   // What they weighed, as text, only for someone reading the match back.
-  const weighed: { judged: number; text: string }[] | null = world.onDecision ? [{ judged: keep + PASS_MARGIN, text: `keep ${worth(keep, kept)}` }] : null
+  const weighed: { judged: number; text: string }[] | null = world.onDecision ? (throwing ? [] : [{ judged: keep + PASS_MARGIN, text: `keep ${worth(keep, kept)}` }]) : null
   let best: PassOption | 'shoot' | null = null
   let bestJudged = keep + PASS_MARGIN
   if (shot !== null) {
@@ -188,7 +192,7 @@ export function chooseAction(world: Match, carrier: number, shot: number | null)
     }
   }
   if (weighed) {
-    const choice = best === null ? 'keeps the ball' : best === 'shoot' ? 'shoots' : `passes ${describe(best)} to ${playerLabel(world, best.receiver)}`
+    const choice = best === null ? (throwing ? 'holds the throw: nobody in reach' : 'keeps the ball') : best === 'shoot' ? 'shoots' : `passes ${describe(best)} to ${playerLabel(world, best.receiver)}`
     weighed.sort((a, b) => b.judged - a.judged)
     const shown = weighed.slice(0, WEIGHED_SHOWN).map((w) => w.text).join(', ')
     const more = weighed.length > WEIGHED_SHOWN ? `, and ${weighed.length - WEIGHED_SHOWN} worse` : ''
@@ -487,7 +491,7 @@ function controlled(mate: number): number {
  * inside the lines, and one the carrier can play from how they stand.
  */
 function loftable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
-  if (distance > LOFT_MAX || distance < (crossing(world, Team.id[carrier], bx, by, x, y) ? CROSS_MIN : LOFT_MIN)) return false
+  if (distance > longestPass(world, carrier, LOFT_MAX) || distance < (crossing(world, Team.id[carrier], bx, by, x, y) ? CROSS_MIN : LOFT_MIN)) return false
   // Dropped near a line, it's as likely to bounce out as to be taken.
   if (Math.abs(x) > world.pitch.halfLength - LOFT_INSIDE || Math.abs(y) > world.pitch.halfWidth - LOFT_INSIDE) return false
   return Math.abs(angleDelta(Facing.angle[carrier], atan2(y - by, x - bx))) <= MAX_PASS_TURN
@@ -502,10 +506,13 @@ function crossing(world: Match, team: number, bx: number, by: number, x: number,
 
 /** Whether a pass from (bx, by) to (x, y) is one the carrier can play from how they stand. */
 function playable(world: Match, carrier: number, bx: number, by: number, x: number, y: number, distance: number): boolean {
-  if (distance < MIN_PASS || distance > Math.max(MAX_PASS, MAX_PASS_SHARE * 2 * world.pitch.halfLength)) return false
+  if (distance < MIN_PASS || distance > longestPass(world, carrier, Math.max(MAX_PASS, MAX_PASS_SHARE * 2 * world.pitch.halfLength))) return false
   if (Math.abs(x) > world.pitch.halfLength - 0.5 || Math.abs(y) > world.pitch.halfWidth - 0.5) return false
   return Math.abs(angleDelta(Facing.angle[carrier], atan2(y - by, x - bx))) <= MAX_PASS_TURN
 }
+
+/** The longest pass (m) `carrier` can play, `longest` unless they're taking a throw-in. */
+const longestPass = (world: Match, carrier: number, longest: number) => (world.thrower === carrier ? Math.min(longest, THROW_RANGE) : longest)
 
 /**
  * What it's worth for `receiver` to get the ball at (x, y) at time `arrive`:

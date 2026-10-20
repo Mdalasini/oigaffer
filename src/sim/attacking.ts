@@ -190,6 +190,10 @@ export function attackingIntent(world: Match, eid: number): Intent {
     endRun(world, eid)
   }
 
+  // A throw-in has to be thrown to someone: the nearest come to get it.
+  if (world.thrower !== -1 && amongShowing(world, eid)) {
+    return because(world, showForIt(world, eid), 'shows for the throw-in: they are among the nearest')
+  }
   if (pressured(world, eid, OffBall.showing[eid] ? RELIEVED : PRESSURED) && amongShowing(world, eid)) {
     return because(world, showForIt(world, eid), 'shows for it: the carrier is under pressure and they are among the nearest')
   }

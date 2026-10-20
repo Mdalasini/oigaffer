@@ -249,6 +249,11 @@ export interface MatchContext {
    * -1 otherwise. A goal can't be scored straight from one.
    */
   indirectTaker: number
+  /**
+   * The player taking a throw-in, until it's thrown or someone else has the
+   * ball; -1 otherwise, and in a side of one. They can only throw it, and only so far.
+   */
+  thrower: number
   /** The latest notable moment. */
   event: MatchEvent | null
   /** How play will restart, while the ball is dead. */
@@ -335,6 +340,7 @@ export function createMatch({
     nextMarking: [0, 0],
     trap: [0, 0],
     indirectTaker: -1,
+    thrower: -1,
     event: null,
     restart: null,
     stats: [emptyStats(), emptyStats()],
@@ -763,6 +769,8 @@ export function takeRestart(world: Match) {
   // Before play resumes, everyone has had a look around.
   lookAround(world)
   setPossession(world, team, taker)
+  // Alone in a side of one, there's nobody to throw it to: they play it as from a free kick.
+  world.thrower = kind === 'throw-in' && world.teams[team].outfielders.length > 1 ? taker : -1
   Defender.mode[world.presser] = DefenderMode.Jockey
   Defender.challengeDelay[world.presser] = 0
   setPhase(world, 'play')
@@ -853,6 +861,8 @@ export function stepMatch(world: Match, dt: number = FIXED_DT) {
   for (const [, system] of MATCH_SYSTEMS) system(world, dt)
   // Anyone else touching the ball makes an indirect free kick live.
   if (world.indirectTaker !== -1 && world.lastTouchedBy !== world.indirectTaker) world.indirectTaker = -1
+  // Once someone else has the ball, the throw-in has been taken.
+  if (world.thrower !== -1 && world.carrier !== world.thrower) world.thrower = -1
 }
 
 export function setVec(store: typeof Position, eid: number, x: number, y: number, z: number) {
