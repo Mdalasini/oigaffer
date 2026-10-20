@@ -75,7 +75,11 @@ without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
   rest share out the other jobs by an optimal assignment: one covers behind
   the presser, and the others pick up the attackers in and around their zones,
   the more dangerous first, so no two take the same man. A spare defender
-  holds their zone. A defender keeps their job unless another is clearly
+  holds their zone. Nobody goes more than 14 m up the pitch or across it
+  from their place in the block to cover or pick a man up: a man who
+  drifts further is left to the next zone, so the block keeps its shape
+  rather than chasing the ball about. Back towards goal they track as far
+  as they must. A defender keeps their job unless another is clearly
   better placed to take it: half a second quicker to get there. The back line moves as one. It drops off
   when the carrier has time to play forward, and steps up on a pressing cue:
   the carrier facing their own goal, pinned on a touchline, or the ball played

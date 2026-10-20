@@ -36,9 +36,10 @@ const MARK_GAP = 2
  */
 const COVER_PRIORITY = 1
 /**
- * Seconds of arrival time per metre an attacker is from a defender's place
- * in the shape: each defender looks after the men in and around their own
- * zone, so the block keeps its shape rather than being dragged about.
+ * Seconds of arrival time per metre an attacker, or the cover spot, is from
+ * a defender's place in the shape: each defender looks after the men and the
+ * space in and around their own zone, so the block keeps its shape rather
+ * than being dragged about.
  */
 const ZONE_COST = 1 / 7
 /** The cover sits this far (m) behind the ball, towards the middle of the goal. */
@@ -213,7 +214,8 @@ function shareMarking(world: Match, team: number) {
       return arrivalTime(world, d, x, y) + zone - DANGER * danger - (Mark.target[d] === a ? HANDOVER : 0)
     })
     if (!coverJob) return men
-    return [...men, arrivalTime(world, d, cover.x, cover.y) - COVER_PRIORITY - (Mark.cover[d] ? HANDOVER : 0)]
+    const zone = ZONE_COST * hypot(cover.x - home.x, cover.y - home.y)
+    return [...men, arrivalTime(world, d, cover.x, cover.y) + zone - COVER_PRIORITY - (Mark.cover[d] ? HANDOVER : 0)]
   })
   const jobs = assign(cost)
   free.forEach((d, i) => {

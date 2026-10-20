@@ -373,3 +373,35 @@ describe('eleven a side: defending near goal on a full-size pitch', () => {
     }
   })
 })
+
+describe('eleven a side: holding the shape', () => {
+  test('with the ball in the other half, nobody is dragged far out of their zone to pick a man up or cover', () => {
+    const world = createMatch({ outfielders: 10, seed: 1 })
+    const reds = world.teams[RED].outfielders
+    handOver(world, reds[0])
+    // Red playing it about in their own half: the carrier wide, two centre-backs deep, the rest spread out in front.
+    const red: [number, number][] = [[-30, -20], [-40, -5], [-40, 10], [-25, 25], [-20, 0], [-10, -15], [-10, 15], [0, -28], [0, 28], [5, 0]]
+    reds.forEach((eid, i) => place(eid, red[i][0], red[i][1], 0))
+    setVec(Position, world.ball, red[0][0] + FOOT_OFFSET, red[0][1], BALL_RADIUS)
+    setVec(Velocity, world.ball, 0, 0, 0)
+    world.lines[BLUE] = baseLine(world, BLUE)
+    // Blue in their places in the block, the nearest to the ball pressing it.
+    const blue = world.teams[BLUE].outfielders
+    for (const eid of blue) {
+      const home = homePosition(world, eid)
+      place(eid, home.x, home.y, Math.PI)
+    }
+    world.presser = blue.reduce((a, b) => (Math.hypot(Position.x[a] - red[0][0], Position.y[a] - red[0][1]) < Math.hypot(Position.x[b] - red[0][0], Position.y[b] - red[0][1]) ? a : b))
+    world.nextMarking = [0, 0]
+    for (const eid of blue) OffBall.decideIn[eid] = 0
+    lookAround(world)
+    stepMatch(world)
+    for (const d of blue) {
+      if (d === world.presser) continue
+      const home = homePosition(world, d)
+      // Back towards their own goal they may go as far as the job needs; up the pitch and across, only so far.
+      const upfield = Math.max(0, along(BLUE, OffBall.targetX[d]) - along(BLUE, home.x))
+      expect(Math.hypot(upfield, OffBall.targetY[d] - home.y)).toBeLessThan(15)
+    }
+  })
+})
