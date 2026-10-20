@@ -109,8 +109,8 @@ without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
   passing, all as expected goals. They reckon a shot by the gap the keeper
   leaves: the chance it lands between the post and as far as the keeper can
   reach in the time it takes to arrive, and under the bar. Keeping it is
-  worth the better shot it could lead to, but only if they have a moment on
-  the ball to carry it on; closed down, a shot now beats holding on. Nobody
+  worth the better shot it could lead to from where their best carry would
+  take it, but only if they have a moment on the ball to carry it on; closed down, a shot now beats holding on. Nobody
   shoots with less than a 2% chance.
 - **Shooting grade (1–20)** — the striker aims at the corner away from the
   keeper, and the shot goes off line by a normal error in angle (about 10° at
