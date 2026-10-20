@@ -30,7 +30,11 @@ without it, on a full-size 105 m × 68 m pitch. Each match has its own pitch
   and keep clear of each other.
 - **Passing (1–20)** — on the ball, a few times a second, the carrier weighs
   keeping it against each pass they could play. A pass goes to feet, or into
-  space ahead of a teammate, weighted so the runner meets it in stride. Each
+  space ahead of a teammate, weighted so the runner meets it in stride. Passes
+  are struck firmly, as in a real match: one to feet arrives at about 10 m/s, so
+  a 15 m pass takes little more than a second and no one can run it down. An
+  opponent whose foot is in the path of a pass cuts it out; one at full stretch
+  only gets a touch, taking the pace off it. Each
   option is rated by expected threat: what it's worth if it gets through, less
   the other team's threat from where it would be lost. The space model judges
   how likely it is to get through, from where the carrier reckons everyone

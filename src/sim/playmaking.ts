@@ -36,11 +36,19 @@ export interface PassOption {
   value: number
 }
 
-/** Passes to feet arrive at about this pace (m/s): firm enough not to dawdle, soft enough to take. */
-const FEET_ARRIVAL = 6
-/** Through balls are struck to meet the runner at between these paces (m/s), so they can run onto it in stride. */
-const THROUGH_SLOWEST = 1.5
-const THROUGH_FASTEST = 7
+/**
+ * Passes to feet arrive at about this pace (m/s), as firm as a good pass is
+ * in a real match: struck at 15–20 m/s, so it gets there well ahead of
+ * anyone chasing it.
+ */
+const FEET_ARRIVAL = 10
+/**
+ * Through balls are struck to meet the runner at between these paces (m/s),
+ * so they can run onto it in stride. Never slower: a ball weighted to wait for
+ * a slow runner would dawdle, and anyone sprinting could run it down.
+ */
+const THROUGH_SLOWEST = 7
+const THROUGH_FASTEST = 11
 /** How far (m) ahead of a teammate to try putting a through ball. */
 const THROUGH_LEADS = [4, 7, 10, 13]
 /** The ball should get to the meeting point this long (s) after the runner, not before. */

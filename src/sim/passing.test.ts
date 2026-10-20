@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Dribbler, Facing, Passer, Position, Run, RunPhase, Velocity } from './components'
-import { BALL_RADIUS } from './constants'
+import { BALL_RADIUS, MAX_GRADE } from './constants'
+import { topSpeed } from './grades'
 import { FULL_PITCH, SMALL_SIDED_PITCH } from './pitch'
 import { createMatch, handOver, setVec, stepMatch, type GradeOverrides, type Match } from './match'
 import { rollDistance, rollDistanceIn, rollSpeedAfter, rollSpeedFor, rollSpeedToArrive, rollStopTime, rollTime } from './passing'
@@ -47,6 +48,21 @@ describe('weighting a pass', () => {
     expect(rollTime(speed, 20)).toBeCloseTo(2, 2)
     expect(rollSpeedAfter(speed, 2)).toBeLessThan(speed)
     expect(rollSpeedToArrive(80, 1)).toBe(Infinity)
+  })
+
+  test('a pass along the ground to a teammate standing still, to feet or into space, outruns the fastest player', () => {
+    const world = scene(4, -10, -6, 8, 8)
+    const [, mate] = world.teams[RED].outfielders
+    const bx = Position.x[world.ball]
+    const by = Position.y[world.ball]
+    const options = passOptions(world, world.carrier).filter((o) => o.receiver === mate && o.flight === 0)
+    expect(options.some((o) => o.kind === 'feet')).toBe(true)
+    expect(options.some((o) => o.kind === 'through')).toBe(true)
+    for (const o of options) {
+      const distance = Math.hypot(o.x - bx, o.y - by)
+      // Over the whole way, well quicker than anyone can sprint, so a chaser can't simply run it down.
+      expect(distance / rollTime(o.speed, distance)).toBeGreaterThan(1.15 * topSpeed(MAX_GRADE))
+    }
   })
 })
 
@@ -303,12 +319,12 @@ describe('choosing a pass', () => {
         place(from, -17, -14, 0)
         place(ahead, -4, 2, 0)
         place(wide, -2, 14, 0)
-        // One presses the carrier and one waits upfield of the other back player; the rest mark tight.
+        // One presses the carrier and one waits upfield of the other back player; the rest mark tight, goal-side.
         const [presser, screen, onAhead, onWide] = world.teams[BLUE].outfielders
         place(presser, -15, -1, Math.PI)
         place(screen, -8, -10, Math.PI)
         place(onAhead, -5, 2, Math.PI)
-        place(onWide, -3, 13, Math.PI)
+        place(onWide, 0, 13, Math.PI)
         lookAround(world)
         Passer.receivedFrom[carrier] = from
         Passer.receivedAt[carrier] = world.time
