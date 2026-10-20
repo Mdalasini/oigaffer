@@ -6,9 +6,12 @@ import { handOver, setPhase, setVec, type Match } from '../match'
 import { rollSpeedFor } from '../passing'
 import { playBall } from '../offside'
 import { gaussian } from '../rng'
-import { passSafety } from '../space/control'
+import { inOwnArea, KEEPER_HANDS, passSafety } from '../space/control'
+import { arrivalTime, REACTION_TIME } from '../space/arrival'
+import { dropPoint } from '../flight'
 import { ownGoalX } from '../teams'
 import { atan2, cos, exp, hypot, sin } from '../fmath'
+import { ballAtFeet } from '../touch'
 import { playerLabel } from '../trace'
 
 // How far off the line (m) the keeper stands, along the bisector of the
@@ -30,6 +33,8 @@ const DIVE_SPEED = 5
 const DIVE_ACCEL = 16
 /** Furthest the keeper's centre goes beyond a post. */
 const POST_OVERRUN = 0.4
+/** A keeper comes for a ball in the air that they can get to before it drops below this height (m): at full stretch, hands up. */
+const CLAIM_HEIGHT = 2.3
 /** Reach (m) beyond the keeper's body when stretching out. */
 export const ARM_REACH = 0.9
 /**
@@ -81,8 +86,9 @@ export function keeperSystem(world: Match, dt: number) {
     } else setPosition(world, eid, dt)
     Position.x[eid] += Velocity.x[eid] * dt
     Position.y[eid] += Velocity.y[eid] * dt
+    // Guarding the goal they stay about the posts; coming for a ball in the air, they go where it is.
     const limit = GOAL_HALF_WIDTH + POST_OVERRUN
-    if (Math.abs(Position.y[eid]) > limit) {
+    if (Math.abs(Position.y[eid]) > limit && !comingForIt(world, eid)) {
       Position.y[eid] = Math.sign(Position.y[eid]) * limit
       Velocity.y[eid] = 0
     }
@@ -97,6 +103,7 @@ export function keeperSystem(world: Match, dt: number) {
 function setPosition(world: Match, eid: number, dt: number) {
   const ball = world.ball
   const team = Team.id[eid]
+  if (comingForIt(world, eid)) return goFor(world, eid)
   const lineX = ownGoalX(world.pitch, team)
   const bx = Position.x[ball]
   const by = Position.y[ball]
@@ -119,6 +126,48 @@ function setPosition(world: Match, eid: number, dt: number) {
   const speed = Math.min(through ? RUSH_SPEED : SET_SPEED, dist / dt)
   Velocity.x[eid] = dist > 1e-4 ? (dx / dist) * speed : 0
   Velocity.y[eid] = dist > 1e-4 ? (dy / dist) * speed : 0
+}
+
+/**
+ * Whether `eid` is coming for a ball lofted into their area that they can
+ * get their hands to before it comes down out of reach, to claim it (see
+ * `outcome`).
+ */
+function comingForIt(world: Match, eid: number): boolean {
+  const team = Team.id[eid]
+  // They take a moment to judge its flight, as anyone would.
+  if (!world.pass?.lofted || team === world.possession || world.time - world.pass.time < REACTION_TIME) return false
+  const drop = dropPoint(world, CLAIM_HEIGHT)
+  if (!drop || !inOwnArea(world.pitch, team, drop.x, drop.y)) return false
+  return arrivalTime(world, eid, drop.x, drop.y, Body.radius[eid] + ARM_REACH, 0) <= drop.t
+}
+
+/** Rushes to where the ball in the air comes down to them. */
+function goFor(world: Match, eid: number) {
+  const drop = dropPoint(world, CLAIM_HEIGHT)!
+  const dx = drop.x - Position.x[eid]
+  const dy = drop.y - Position.y[eid]
+  const distance = hypot(dx, dy)
+  const speed = Math.min(RUSH_SPEED, distance / Math.max(drop.t, 0.15))
+  Velocity.x[eid] = distance > 1e-4 ? (dx / distance) * speed : 0
+  Velocity.y[eid] = distance > 1e-4 ? (dy / distance) * speed : 0
+}
+
+/**
+ * The keeper who can gather the loose ball or a ball in the air where it
+ * is, or -1: within reach of their hands, not at an outfielder's feet, and
+ * not just after parrying it or playing it out. They come first, before
+ * anyone's head, and claim it (see `outcome`).
+ */
+export function claimingKeeper(world: Match): number {
+  const ball = world.ball
+  if (Position.z[ball] > KEEPER_HANDS) return -1
+  if (world.teams.some(({ outfielders }) => outfielders.some((eid) => ballAtFeet(eid, ball)))) return -1
+  for (const { keeper } of world.teams) {
+    if (Goalkeeper.recover[keeper] > 0) continue
+    if (hypot(Position.x[ball] - Position.x[keeper], Position.y[ball] - Position.y[keeper]) <= Body.radius[keeper] + ARM_REACH) return keeper
+  }
+  return -1
 }
 
 /** Whether any of `team`'s outfielders is nearer their own goal than the ball, `distance` from it, is. */

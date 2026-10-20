@@ -9,6 +9,14 @@ export const POST_WIDTH = 0.12
 export const GRAVITY = 9.81
 export const BALL_RADIUS = 0.11
 export const BALL_RESTITUTION = 0.55
+/**
+ * Friction between ball and turf as it bounces: the pace over the ground it
+ * loses is this much of the push the ground gives it upwards. It can't lose
+ * more than it takes to set it rolling, keeping BALL_ROLLING_SHARE of its
+ * pace (a hollow ball's share, as it starts to spin).
+ */
+export const BALL_GRIP = 0.3
+export const BALL_ROLLING_SHARE = 0.6
 /** Rolling resistance: a constant deceleration plus drag proportional to speed. */
 export const BALL_ROLL_DECEL = 0.8
 export const BALL_ROLL_DRAG = 0.3

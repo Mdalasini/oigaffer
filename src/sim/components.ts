@@ -74,6 +74,8 @@ export const Outfielder = {
   offTheBall: new Uint8Array(MAX_ENTITIES),
   /** How well a defender keeps track of the runner they're marking, even one going behind them. */
   positioning: new Uint8Array(MAX_ENTITIES),
+  /** How often a player wins a ball in the air, and how cleanly they head it. */
+  heading: new Uint8Array(MAX_ENTITIES),
 }
 
 /**

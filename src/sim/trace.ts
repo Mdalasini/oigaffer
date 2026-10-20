@@ -59,7 +59,7 @@ export function describeSituation(world: Match): string {
     parts.push(`carrier ${playerLabel(world, world.carrier)}`)
     parts.push(`presser ${playerLabel(world, world.presser)} (${DEFENDER_MODE_NAME[Defender.mode[world.presser]]})`)
   }
-  if (world.pass) parts.push(`pass ${world.pass.kind} ${playerLabel(world, world.pass.from)}→${playerLabel(world, world.pass.to)} aimed ${at(world.pass.x, world.pass.y).trim()}`)
+  if (world.pass) parts.push(`pass ${world.pass.lofted ? 'lofted ' : ''}${world.pass.kind} ${playerLabel(world, world.pass.from)}→${playerLabel(world, world.pass.to)} aimed ${at(world.pass.x, world.pass.y).trim()}`)
   if (world.restart) parts.push(`restart ${world.restart.kind} to ${TEAM_LETTER[world.restart.team]}`)
   parts.push(`ball ${at(Position.x[ball], Position.y[ball]).trim()} z ${Position.z[ball].toFixed(1)} at ${speed.toFixed(1)}`)
   return parts.join(' | ')
@@ -101,9 +101,10 @@ export function describeCue(world: Match, c: Cue): string {
     case 'held': return `${p(c.keeper)} holds the ball`
     case 'passStruck': return `pass struck ${p(c.passer)}→${p(c.receiver)}`
     case 'run': return `${p(c.runner)} makes a run in behind`
-    case 'passShaped': return `${p(c.passer)} shapes to pass ${c.option.kind} to ${p(c.option.receiver)} in ${c.windup.toFixed(2)}s (safety ${c.option.safety.toFixed(2)}, value ${c.option.value.toFixed(3)})`
+    case 'passShaped': return `${p(c.passer)} shapes to pass ${c.option.flight > 0 ? 'lofted ' : ''}${c.option.kind} to ${p(c.option.receiver)} in ${c.windup.toFixed(2)}s (safety ${c.option.safety.toFixed(2)}, value ${c.option.value.toFixed(3)})`
     case 'passCalledOff': return `pass to ${p(c.option.receiver)} called off`
     case 'trap': return `${TEAM_LETTER[c.team]} steps up for the offside trap`
+    case 'loose': return `the ball in the air comes loose off ${p(c.player)}`
   }
 }
 

@@ -11,6 +11,7 @@ import { timeOnBall } from '../space/control'
 import { threat } from '../space/threat'
 import { attackDir, opponent, ownGoalX } from '../teams'
 import { hypot } from '../fmath'
+import { airborne } from '../flight'
 import { playerLabel } from '../trace'
 
 /** Scratch for where the defence reckons an attacker is. */
@@ -156,12 +157,15 @@ export function pressCue(world: Match): boolean {
 
 /**
  * Where the presser's cover stands: behind the ball, between it and the
- * middle of the goal, to step in if the presser is beaten.
+ * middle of the goal, to step in if the presser is beaten. With a lofted
+ * pass in the air, that's behind where it's coming down, where the presser
+ * is going to meet it.
  */
 export function coverSpot(world: Match, team: number) {
   const goalX = ownGoalX(world.pitch, team)
-  const bx = Position.x[world.ball]
-  const by = Position.y[world.ball]
+  const lofted = world.pass?.lofted && airborne(world)
+  const bx = lofted ? world.pass!.x : Position.x[world.ball]
+  const by = lofted ? world.pass!.y : Position.y[world.ball]
   const length = hypot(goalX - bx, by) || 1
   return { x: bx + ((goalX - bx) / length) * COVER_DEPTH, y: by + (-by / length) * COVER_DEPTH }
 }

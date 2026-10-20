@@ -16,6 +16,7 @@ export interface PassAction {
   toU: number
   toY: number
   kind: PassKind
+  lofted: boolean
   completed: boolean
 }
 
@@ -138,6 +139,7 @@ export function recordActions(world: Match) {
         toU: along(team, pass.x),
         toY: pass.y,
         kind: pass.kind,
+        lofted: pass.lofted,
         completed: false,
       }
       log.passes.push(pending)

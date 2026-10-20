@@ -4,6 +4,7 @@ import type { Match } from './match'
 import { ownGoalX } from './teams'
 import { playerLabel } from './trace'
 import { atan2, cos, hypot, sin } from './fmath'
+import { airborne } from './flight'
 
 /**
  * Detectors for behaviour that looks wrong to someone watching: each spots
@@ -202,6 +203,8 @@ function idlePresser(): Detector {
       if (world.phase !== 'play' || down(world, p)) return found
       const mode = Defender.mode[p]
       if ((mode !== DefenderMode.Jockey && mode !== DefenderMode.Run) || speed(p) >= IDLE_SPEED) return found
+      // Waiting under a ball in the air for it to come down isn't standing idle.
+      if (world.pass?.lofted && airborne(world)) return found
       const gap = distance(p, world.ball)
       if (gap >= IDLE_FROM) found.set(`${p}`, { players: [p, world.carrier], detail: `${playerLabel(world, p)} standing ${gap.toFixed(1)} m off the ball` })
       return found

@@ -5,6 +5,7 @@ import { arrivalTime } from '../space/arrival'
 import { opponent } from '../teams'
 import { CONTROL_RADIUS, footDistance } from '../touch'
 import { hypot } from '../fmath'
+import { dropPoint, MEET_HEIGHT } from '../flight'
 
 /** Seconds quicker to the ball another defender must be before taking over the press: "mine!". */
 const PRESS_HANDOVER = 0.35
@@ -37,8 +38,10 @@ function comingTo(world: Match, eid: number) {
 export function rolesSystem(world: Match, _dt: number) {
   if (world.phase !== 'play') return
   const { ball, carrier, presser } = world
-  const bx = Position.x[ball] + Velocity.x[ball] * BALL_LOOKAHEAD
-  const by = Position.y[ball] + Velocity.y[ball] * BALL_LOOKAHEAD
+  // A ball in the air is judged by where it'll come down.
+  const drop = world.pass?.lofted ? dropPoint(world, MEET_HEIGHT) : null
+  const bx = drop ? drop.x : Position.x[ball] + Velocity.x[ball] * BALL_LOOKAHEAD
+  const by = drop ? drop.y : Position.y[ball] + Velocity.y[ball] * BALL_LOOKAHEAD
   const time = (eid: number) => (hasComponent(world, eid, Sliding) ? Infinity : arrivalTime(world, eid, bx, by, REACH))
 
   // A tackle or slide already under way plays out before anyone else takes over.

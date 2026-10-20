@@ -273,7 +273,8 @@ function drawTouchRing(b: Batch, world: Match) {
 
 /**
  * A pass on its way: a faint line from the ball to where it was aimed, and a
- * ring there. A through ball's ring is dashed, to show it's into space.
+ * ring there. A through ball's ring is dashed, to show it's into space; a
+ * lofted pass's ring is wider, for the ball coming down there.
  */
 function drawPass(b: Batch, world: Match) {
   const pass = world.pass
@@ -284,7 +285,7 @@ function drawPass(b: Batch, world: Match) {
   for (let i = 0; i < segments; i++) {
     const a0 = (i / segments) * Math.PI * 2
     const a1 = a0 + (Math.PI * 2) / segments / (pass.kind === 'through' ? 2 : 1)
-    b.arc({ x: pass.x, y: pass.y, z: 0.02 }, X, Y, 0.45, 0.07, a0, a1, PASS_RING, 12)
+    b.arc({ x: pass.x, y: pass.y, z: 0.02 }, X, Y, pass.lofted ? 0.9 : 0.45, 0.07, a0, a1, PASS_RING, 12)
   }
 }
 

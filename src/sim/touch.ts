@@ -75,6 +75,14 @@ export function roomAhead(pitch: Pitch, x: number, y: number, dx: number, dy: nu
   return Math.max(0, room)
 }
 
+/** How far (m) from a player's centre they can get a body or a head to a ball in the air. */
+export const AERIAL_REACH = 0.8
+
+/** Whether a ball no higher than `height` (m) is within `player`'s reach in the air. */
+export function withinAerialReach(player: number, ball: number, height: number): boolean {
+  return Position.z[ball] <= height && hypot(Position.x[ball] - Position.x[player], Position.y[ball] - Position.y[player]) <= AERIAL_REACH
+}
+
 /** Whether `player` can play `ball` right now. */
 export function ballAtFeet(player: number, ball: number): boolean {
   if (Position.z[ball] > MAX_TOUCH_HEIGHT) return false

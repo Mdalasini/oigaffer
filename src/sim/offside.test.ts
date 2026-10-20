@@ -48,7 +48,7 @@ function passTo(world: Match, mate: number): PassOption {
   const y = Position.y[mate]
   const bx = Position.x[world.ball]
   const by = Position.y[world.ball]
-  return { receiver: mate, kind: 'feet', x, y, speed: 6 + Math.hypot(x - bx, y - by) * 0.35, safety: 1, value: 1 }
+  return { receiver: mate, kind: 'feet', x, y, speed: 6 + Math.hypot(x - bx, y - by) * 0.35, flight: 0, safety: 1, value: 1 }
 }
 
 function play(world: Match, seconds: number) {

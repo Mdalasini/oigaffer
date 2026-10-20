@@ -55,6 +55,7 @@ import { locomotionSystem } from './systems/locomotion'
 import { offBallSystem } from './systems/offBall'
 import { outcomeSystem } from './systems/outcome'
 import { receiveSystem } from './systems/receive'
+import { aerialSystem } from './systems/aerial'
 import { rolesSystem } from './systems/roles'
 import { carrierSystem } from './systems/carrier'
 import { touchCooldownSystem, touchSystem } from './systems/touch'
@@ -113,6 +114,8 @@ export interface PassInfo {
   from: number
   to: number
   kind: PassKind
+  /** Played in the air, to drop where they're meant to meet it, rather than rolled along the ground. */
+  lofted: boolean
   x: number
   y: number
   time: number
@@ -165,6 +168,7 @@ export const GRADE_FIELDS = {
     decisions: Outfielder.decisions,
     offTheBall: Outfielder.offTheBall,
     positioning: Outfielder.positioning,
+    heading: Outfielder.heading,
     pace: Physical.pace,
     agility: Physical.agility,
     strength: Physical.strength,
@@ -189,6 +193,7 @@ export const DEFAULT_GRADES: RoleGrades = {
     decisions: 12,
     offTheBall: 12,
     positioning: 12,
+    heading: 12,
     pace: 14,
     agility: 13,
     strength: 12,
@@ -829,6 +834,7 @@ export const MATCH_SYSTEMS: readonly (readonly [string, (world: Match, dt: numbe
   ['carrier', carrierSystem],
   ['defender', defenderSystem],
   ['offBall', offBallSystem],
+  ['aerial', aerialSystem],
   ['receive', receiveSystem],
   ['touch', touchSystem],
   ['locomotion', locomotionSystem],

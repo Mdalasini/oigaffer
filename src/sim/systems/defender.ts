@@ -2,13 +2,14 @@ import { addComponent, query } from 'bitecs'
 import { angleDelta } from '../angles'
 import { bodyBetween, EXPOSED_DISTANCE, STAND_CONE, STAND_REACH } from '../challenge'
 import { Defender, DefenderMode, Pressing, Facing, MoveIntent, OffBalance, Outfielder, Physical, Position, Shield, Sliding, Team, Velocity } from '../components'
-import { gradeT, readLag, topSpeed } from '../grades'
+import { flightRead, gradeT, readLag, topSpeed } from '../grades'
 import type { Match } from '../match'
 import { attackedGoalX } from '../teams'
 import { CONTROL_RADIUS, footDistance, FOOT_OFFSET } from '../touch'
 import { seenFacing, seenVx, seenVy, seenX, seenY } from '../perception'
 import { STAND_WINDUP } from './challenge'
 import { atan2, cos, exp, hypot, sin } from '../fmath'
+import { dropPoint, MEET_HEIGHT } from '../flight'
 
 /** Distance a jockeying defender holds off the ball, goal-side. */
 const STANDOFF = 1.7
@@ -69,6 +70,17 @@ export function defenderSystem(world: Match, dt: number) {
     if (mode !== DefenderMode.Jockey && mode !== DefenderMode.Run) continue
     if (OffBalance.timer[eid] > 0) {
       MoveIntent.vx[eid] = MoveIntent.vy[eid] = 0
+      continue
+    }
+    // A pass in the air, once they've judged its flight they make for where it comes down, to contest it there.
+    // Until then they carry on as they were.
+    const drop = world.pass?.lofted ? dropPoint(world, MEET_HEIGHT) : null
+    if (drop) {
+      Defender.mode[eid] = DefenderMode.Run
+      if (world.time - world.pass!.time < flightRead(Outfielder.positioning[eid])) {
+        MoveIntent.vx[eid] = Velocity.x[eid]
+        MoveIntent.vy[eid] = Velocity.y[eid]
+      } else getUnder(eid, drop.x, drop.y, drop.t)
       continue
     }
     if (looseAndNearer(world, eid)) {
@@ -252,6 +264,18 @@ function goForBall(eid: number) {
   const speed = topSpeed(Physical.pace[eid])
   MoveIntent.vx[eid] = (dx / distance) * speed
   MoveIntent.vy[eid] = (dy / distance) * speed
+  MoveIntent.faceX[eid] = 0
+  MoveIntent.faceY[eid] = 0
+}
+
+/** Make for (x, y), getting there in `t` seconds if they can, facing the ball. */
+function getUnder(eid: number, x: number, y: number, t: number) {
+  const dx = x - Position.x[eid]
+  const dy = y - Position.y[eid]
+  const distance = hypot(dx, dy)
+  const speed = distance < 0.2 ? 0 : Math.min(topSpeed(Physical.pace[eid]), distance / Math.max(t, 0.15))
+  MoveIntent.vx[eid] = distance > 0 ? (dx / distance) * speed : 0
+  MoveIntent.vy[eid] = distance > 0 ? (dy / distance) * speed : 0
   MoveIntent.faceX[eid] = 0
   MoveIntent.faceY[eid] = 0
 }

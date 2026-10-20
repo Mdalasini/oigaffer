@@ -156,7 +156,60 @@ export function runTimingError(offTheBall: number): number {
   return lerp(0.35, 0.06, gradeT(offTheBall))
 }
 
+/**
+ * Seconds a defender takes to judge where a ball struck into the air will
+ * come down, before they set off for it: the best read it almost at once.
+ */
+export function flightRead(positioning: number): number {
+  return lerp(0.45, 0.1, gradeT(positioning))
+}
+
 /** Chance a back line steps up together to catch a runner offside as a pass is shaped to be played. */
 export function trapChance(positioning: number): number {
   return lerp(0.1, 0.6, gradeT(positioning))
+}
+
+/**
+ * Standard deviation of how far a lofted pass carries, as a share of its
+ * length. A ball in the air is harder to judge than one rolled along the
+ * ground, so the worst passers miss a 40 m ball by 4 m and the best by 1.
+ */
+export function loftCarryError(passing: number): number {
+  return lerp(0.1, 0.03, gradeT(passing))
+}
+
+/**
+ * Chance (0–1) that a player brings a dropping ball under control with
+ * their first touch, a ball coming at them at walking pace or so. The rest
+ * of the time it gets away from them. A faster ball is harder still (see
+ * `receive`).
+ */
+export function aerialControlChance(firstTouch: number): number {
+  return lerp(0.65, 0.95, gradeT(firstTouch))
+}
+
+/**
+ * Chance (0–1) that a player with `heading` and `strength` wins a ball in
+ * the air against an opponent with `otherHeading` and `otherStrength`,
+ * the two of them getting there together. Timing the jump counts for more
+ * than holding them off, and an opponent `goalSide` of them, attacking the
+ * ball as it comes, has the better of it: centre-backs win most of their
+ * duels with strikers.
+ */
+export function aerialDuelChance(heading: number, strength: number, otherHeading: number, otherStrength: number, goalSide = false): number {
+  const edge = (clampGrade(heading) - clampGrade(otherHeading)) * 0.035 + (clampGrade(strength) - clampGrade(otherStrength)) * 0.015
+  return Math.min(0.9, Math.max(0.1, 0.5 + edge - (goalSide ? GOAL_SIDE_EDGE : 0)))
+}
+
+/** How much more often (0–1) a player goal-side of their man wins the ball in the air. */
+const GOAL_SIDE_EDGE = 0.12
+
+/** Chance (0–1) that a header goes where it was meant to, rather than glancing off anywhere. */
+export function headerCleanChance(heading: number): number {
+  return lerp(0.45, 0.9, gradeT(heading))
+}
+
+/** How far (m) a player can head the ball on to a teammate, or clear it when there's no one to head it to. */
+export function headerReach(heading: number): number {
+  return lerp(8, 18, gradeT(heading))
 }

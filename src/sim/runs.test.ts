@@ -261,7 +261,7 @@ describe('five a side: complementary support', () => {
     const spot = attackingIntent(world, a)
     // The passer has gone off the other way since playing it.
     place(passer, -12, -6)
-    world.pass = { from: passer, to: deep, kind: 'feet', x: -16, y: 0, time: world.time }
+    world.pass = { from: passer, to: deep, kind: 'feet', lofted: false, x: -16, y: 0, time: world.time }
     world.time += 2
     const during = attackingIntent(world, a)
     expect(OffBall.showing[a]).toBe(1)
@@ -286,7 +286,7 @@ describe('five a side: complementary support', () => {
     // The pivot, having moved off the other way, plays it back to the base player, who as its receiver is now the
     // carrier: the wide player is deepest.
     place(pivot, -12, -6)
-    world.pass = { from: pivot, to: base, kind: 'feet', x: -16, y: 0, time: world.time }
+    world.pass = { from: pivot, to: base, kind: 'feet', lofted: false, x: -16, y: 0, time: world.time }
     handOver(world, base)
     expect(restDefender(world)).toBe(wide)
     world.time += 2

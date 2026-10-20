@@ -12,6 +12,7 @@ import {
 } from '../constants'
 import type { Match } from '../match'
 import { hypot } from '../fmath'
+import { afterBounce } from '../flight'
 
 export function ballSystem(world: Match, dt: number) {
   for (const eid of query(world, [Ball, Position, Velocity])) {
@@ -27,7 +28,15 @@ export function ballSystem(world: Match, dt: number) {
 
     if (Position.z[eid] <= BALL_RADIUS) {
       Position.z[eid] = BALL_RADIUS
-      Velocity.z[eid] = Velocity.z[eid] < -1 ? -Velocity.z[eid] * BALL_RESTITUTION : 0
+      const down = -Velocity.z[eid]
+      const bounces = down > 1
+      Velocity.z[eid] = bounces ? down * BALL_RESTITUTION : 0
+      const ground = hypot(Velocity.x[eid], Velocity.y[eid])
+      if (bounces && ground > 0) {
+        const kept = afterBounce(ground, down) / ground
+        Velocity.x[eid] *= kept
+        Velocity.y[eid] *= kept
+      }
       const speed = hypot(Velocity.x[eid], Velocity.y[eid])
       if (speed > 0) {
         const slowed = Math.max(0, speed - (BALL_ROLL_DECEL + BALL_ROLL_DRAG * speed) * dt)
