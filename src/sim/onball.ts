@@ -80,6 +80,12 @@ export function decideOnBall(sim: Sim, eid: number): void {
     setShotPlan(sim, eid, planShot(sim, eid, bx, by))
     return setIntent(sim, eid, IntentKind.Shoot)
   }
+  // Under pressure deep in their own half with nothing safe on: get rid of it.
+  if (inDangerZone(sim, eid, bx, by) && pressure < 3 && (!pass || pass.success < 0.6)) {
+    const clear = clearancePlan(sim, eid, bx, by)
+    setPlan(sim, eid, clear)
+    return setIntent(sim, eid, IntentKind.Pass, -1, clear.x, clear.y)
+  }
   if (pass && (held >= MIN_HOLD || pressed) && (pass.score > carry.score + 0.004 || (pressed && pass.success > 0.5))) {
     setPlan(sim, eid, pass)
     return setIntent(sim, eid, IntentKind.Pass, pass.target, pass.x, pass.y)
@@ -119,19 +125,40 @@ export function decideFirstTime(sim: Sim, eid: number): void {
   const { c, m } = sim
   intercept(sim, eid, ic)
   if (ic.t > FIRST_TIME_WINDOW) return
+  // A keeper coming for a loose ball uses their hands.
+  if (roleOf(sim, eid) === 'GK' && c.Intent.kind[eid] === IntentKind.Chase) return
+  // Once shaping to hit it with the ball nearly there, see it through.
+  if (c.Plan.type[eid] >= 0 && c.Plan.firstTime[eid] && ic.t < 0.35) return
   const wall = m.tick < c.Brain.wallUntil[eid] ? c.Brain.wallFor[eid] : -1
   const pressure = pressureAt(sim, eid, ic.x, ic.y)
+  // Volleying a long ball first time is rare; first-time passes stay on the ground.
+  const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
+  // Near their own goal with someone closing in and nothing safe on: clear it.
+  if (inDangerZone(sim, eid, ic.x, ic.y) && pressure < 4.5 && (!plan || plan.success < 0.7)) {
+    return setPlan(sim, eid, clearancePlan(sim, eid, ic.x, ic.y), true)
+  }
   // In front of goal a first-time finish beats taking a touch.
   const xg = estimateXg(sim, eid, ic.x, ic.y) * FIRST_TIME_SHOT
   if (wall < 0 && pressure > 3) {
     if (xg > 0.08) return setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
     return setPlan(sim, eid, null)
   }
-  // Volleying a long ball first time is rare; first-time passes stay on the ground.
-  const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
   if (xg > 0.05 && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
   else if (plan && plan.success > 0.65 && plan.score > 0.005) setPlan(sim, eid, plan, true)
   else setPlan(sim, eid, null)
+}
+
+/** Near their own goal, where losing the ball is most dangerous. */
+function inDangerZone(sim: Sim, eid: number, x: number, y: number): boolean {
+  return x * attackDir(sim, teamOf(sim, eid)) < -HALF_LENGTH + 28 && Math.abs(y) < 30
+}
+
+/** A high, long ball upfield towards the touchline on the ball's side, away from goal. */
+function clearancePlan(sim: Sim, eid: number, x: number, y: number): PassPlan {
+  const dir = attackDir(sim, teamOf(sim, eid))
+  const tx = clamp(x + dir * 40, -HALF_LENGTH + 5, HALF_LENGTH - 5)
+  const ty = (y >= 0 ? 1 : -1) * 24
+  return { type: PassType.Lofted, target: -1, x: tx, y: ty, score: 0, success: 0 }
 }
 
 /**

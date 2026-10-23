@@ -177,15 +177,17 @@ export function strikePass(sim: Sim, passer: number, plan: PassPlan, ctx: Strike
   const a = angle + gauss(sim.m.rng) * 0.04 * difficulty
   const power = 1 + gauss(sim.m.rng) * 0.05 * difficulty
   const h = Math.sqrt(vx * vx + vy * vy) * power
-  // Knocking the ball past a defender is a long touch to yourself.
-  const kind = plan.target === passer ? 'knock-on' : 'pass'
+  // Knocking the ball past a defender is a long touch to yourself; a ball
+  // hit for nobody in particular is a clearance.
+  const kind = plan.target === passer ? 'knock-on' : plan.target < 0 && name !== 'punt' ? 'clearance' : 'pass'
   kick(sim, passer, cos(a) * h, sin(a) * h, vz * power, kind, plan.target, kind === 'pass' ? { pass: name, firstTime: ctx.firstTime } : {})
 }
 
-/** True if the ball is close enough to the player's feet to strike. */
-export function canStrike(sim: Sim, eid: number): boolean {
+/** True if the ball is close enough to the player's feet to strike; a first-time strike stretches a little further. */
+export function canStrike(sim: Sim, eid: number, firstTime = false): boolean {
   const { Pos, Air } = sim.c
   const dx = Pos.x[sim.ball] - Pos.x[eid]
   const dy = Pos.y[sim.ball] - Pos.y[eid]
-  return dx * dx + dy * dy <= (FOOT_REACH + BALL_RADIUS) * (FOOT_REACH + BALL_RADIUS) && Air.z[sim.ball] <= CONTROL_HEIGHT
+  const r = FOOT_REACH + BALL_RADIUS + (firstTime ? 0.35 : 0)
+  return dx * dx + dy * dy <= r * r && Air.z[sim.ball] <= CONTROL_HEIGHT
 }

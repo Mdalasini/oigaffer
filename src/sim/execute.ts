@@ -1,13 +1,14 @@
 // Carries out each player's intent every tick: sets their motor and plays the
 // ball when the intent calls for it.
 
-import { CONTROL_HEIGHT } from './constants'
 import { pressureAt } from './evaluate'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
-import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
+import { chaseHeight, chaseReaction } from './brain'
+import { isDiving, isDown } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
+import { challenge, contain, isGrounded, isStumbling } from './defending'
 import { dribble, type DribbleMode } from './dribble'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
@@ -40,15 +41,15 @@ export function intentSystem(sim: Sim): void {
         moveTo(sim, eid, pt.x, pt.y, holdSpeed(sim, eid, pt, top))
         break
       case IntentKind.Chase:
-        // A keeper goes for the ball where their hands can take it, as they were picked to.
-        intercept(sim, eid, ic, 0.2, roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT)
-        moveTo(sim, eid, ic.x, ic.y, top)
-        break
       case IntentKind.Receive:
         receive(sim, eid, top)
         break
       case IntentKind.Press:
-        press(sim, eid, top)
+        if (roleOf(sim, eid) === 'GK') press(sim, eid, top)
+        else contain(sim, eid, top)
+        break
+      case IntentKind.Tackle:
+        challenge(sim, eid, top)
         break
       case IntentKind.Carry:
         carry(sim, eid, top)
@@ -78,8 +79,9 @@ export function intentSystem(sim: Sim): void {
         if (!isDiving(sim, eid)) setIntent(sim, eid, IntentKind.Hold)
         break
     }
-    // A keeper picking themselves up after a dive cannot move.
-    if (isDown(sim, eid)) moveTo(sim, eid, Pos.x[eid], Pos.y[eid], 0)
+    // On the ground after a dive or a slide nobody can move; a stumble slows them right down.
+    if (isDown(sim, eid) || isGrounded(sim, eid)) moveTo(sim, eid, Pos.x[eid], Pos.y[eid], 0)
+    else if (isStumbling(sim, eid)) Motor.speed[eid] = Math.min(Motor.speed[eid], 1.5)
   }
 }
 
@@ -118,16 +120,18 @@ function holdTarget(sim: Sim, eid: number, out: Point): Point {
   return out
 }
 
+/** Go to where the ball can be met, and strike it first time if that is the plan. */
 function receive(sim: Sim, eid: number, top: number) {
   const { m, c } = sim
-  intercept(sim, eid, ic)
+  intercept(sim, eid, ic, chaseReaction(sim, eid), chaseHeight(sim, eid))
   moveTo(sim, eid, ic.x, ic.y, top)
   if (!c.Plan.firstTime[eid] || c.Plan.type[eid] < 0 || m.phase !== Phase.Play) return
-  if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid)) return
+  if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid, true)) return
   const shot = shotPlanOf(sim, eid)
   const plan = planOf(sim, eid)
   // First-time passes are planned along the ground; a bouncing ball gets controlled instead.
-  if (!shot && c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
+  // Clearances (no target) are hit however the ball comes.
+  if (!shot && plan && plan.target >= 0 && c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
   setPlan(sim, eid, null)
   setIntent(sim, eid, IntentKind.Hold)
   if (shot) return strikeShot(sim, eid, shot, true)
