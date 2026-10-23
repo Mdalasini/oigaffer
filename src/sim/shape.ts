@@ -28,7 +28,7 @@ export function shapeTarget(sim: Sim, eid: number, out: Point): Point {
 
   const base = inPossession ? slot.attack : slot.defend
   // The block slides with the ball, and squeezes up and narrows without it.
-  const shiftX = clamp(bx * (inPossession ? 0.6 : 0.5), -24, 24)
+  const shiftX = clamp(bx * (inPossession ? 0.6 : 0.5), -30, 30)
   const shiftY = by * (inPossession ? 0.2 : 0.4)
   const narrow = inPossession ? 1 : 0.85
   const ax = clamp(base[0] + shiftX, -HALF_LENGTH + 4, HALF_LENGTH - 4)

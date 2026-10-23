@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { updateScratch } from './brain'
 import { IntentKind, setIntent } from './intents'
 import { newMatch } from './match'
-import { decideSupport, onsideLimit, openPlayTarget, updateTeamShape } from './offball'
+import { decideSupport, onsideLimit, openPlayTarget, SUPPORT, updateTeamShape } from './offball'
 import { revealAll } from './perception'
 import { roleOf, attackDir, type Sim } from './sim'
 import { Phase } from './state'
@@ -201,5 +201,74 @@ describe('review regressions', () => {
     updateScratch(sim)
     updateTeamShape(sim)
     expect(sim.teams[1].some((e) => sim.scratch.cover[e] === cb)).toBe(true)
+  })
+})
+
+/** Put `mate` at their place in the shape with `blocker` in the lane from the ball and `marker` tight on them. */
+function screen(sim: Sim, mate: number, blocker: number, marker: number) {
+  const dir = attackDir(sim, 0)
+  revealAll(sim)
+  const slot = shapeTarget(sim, mate, { x: 0, y: 0 })
+  place(sim, mate, slot.x, slot.y)
+  place(sim, blocker, slot.x * 0.5, slot.y * 0.5 + 0.3)
+  place(sim, marker, slot.x + dir, slot.y + 0.8)
+  revealAll(sim)
+}
+
+describe('close support', () => {
+  test('a midfielder screened from the carrier moves into space to offer a pass', () => {
+    const sim = emptyPitch()
+    const { carrier } = attack(sim, 30)
+    const mate = sim.teams[0][7]
+    const opps = [sim.teams[1][6], sim.teams[1][7]]
+    screen(sim, mate, opps[0], opps[1])
+    decideSupport(sim, mate, carrier)
+    expect(sim.c.Intent.kind[mate]).toBe(IntentKind.Hold)
+    expect(sim.c.Intent.mode[mate]).toBe(SUPPORT)
+    const t = openPlayTarget(sim, mate, { x: 0, y: 0 })
+    for (const o of opps) {
+      expect(Math.hypot(t.x - sim.c.Pos.x[o], t.y - sim.c.Pos.y[o])).toBeGreaterThan(4)
+      // The lane from the ball to the new spot is clear of them.
+      const along = Math.max(0, Math.min(1, (sim.c.Pos.x[o] * t.x + sim.c.Pos.y[o] * t.y) / (t.x * t.x + t.y * t.y)))
+      expect(Math.hypot(sim.c.Pos.x[o] - t.x * along, sim.c.Pos.y[o] - t.y * along)).toBeGreaterThan(2)
+    }
+  })
+
+  test('an open player stays where they are in the shape', () => {
+    const sim = emptyPitch()
+    const { carrier } = attack(sim, 30)
+    const mate = sim.teams[0][7]
+    revealAll(sim)
+    const slot = shapeTarget(sim, mate, { x: 0, y: 0 })
+    place(sim, mate, slot.x, slot.y)
+    revealAll(sim)
+    decideSupport(sim, mate, carrier)
+    expect(sim.c.Intent.mode[mate]).toBe(0)
+  })
+
+  test('two screened supporters do not go to the same spot', () => {
+    const sim = emptyPitch()
+    const { carrier } = attack(sim, 30)
+    const [a, b] = [sim.teams[0][7], sim.teams[0][5]]
+    screen(sim, a, sim.teams[1][5], sim.teams[1][6])
+    screen(sim, b, sim.teams[1][7], sim.teams[1][8])
+    decideSupport(sim, a, carrier)
+    decideSupport(sim, b, carrier)
+    expect(sim.c.Intent.mode[a]).toBe(SUPPORT)
+    expect(sim.c.Intent.mode[b]).toBe(SUPPORT)
+    const gap = Math.hypot(sim.c.Intent.x[a] - sim.c.Intent.x[b], sim.c.Intent.y[a] - sim.c.Intent.y[b])
+    expect(gap).toBeGreaterThan(8)
+  })
+
+  test('players far from the ball keep their place in the shape', () => {
+    const sim = emptyPitch()
+    const { carrier } = attack(sim, 30)
+    // Three teammates close to the ball; the striker parked further away is fourth nearest.
+    ;[7, 8, 5].forEach((i, k) => place(sim, sim.teams[0][i], -6 + k * 3, 6))
+    const striker = sim.teams[0][9]
+    place(sim, striker, 0, -20)
+    revealAll(sim)
+    decideSupport(sim, striker, carrier)
+    expect(sim.c.Intent.mode[striker]).toBe(0)
   })
 })
