@@ -58,6 +58,8 @@ export function createComponents() {
       warnedUntil: i32(),
       /** Earliest tick this player may commit to another challenge. */
       tackleReady: i32(),
+      /** Earliest tick this player may start another off-ball run. */
+      runReady: i32(),
     },
     /** Lunging (a slide in progress), on the ground afterwards, or stumbling after a challenge. */
     Body: { lungeUntil: i32(), downUntil: i32(), stumbleUntil: i32() },

@@ -9,6 +9,7 @@ import { isDiving, isDown } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
 import { challenge, contain, isGrounded, isStumbling } from './defending'
+import { cutLane, openPlayTarget } from './offball'
 import { dribble, type DribbleMode } from './dribble'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
@@ -50,6 +51,9 @@ export function intentSystem(sim: Sim): void {
         break
       case IntentKind.Tackle:
         challenge(sim, eid, top)
+        break
+      case IntentKind.CutLane:
+        cutLane(sim, eid, top)
         break
       case IntentKind.Carry:
         carry(sim, eid, top)
@@ -105,6 +109,7 @@ function holdTarget(sim: Sim, eid: number, out: Point): Point {
   if (m.phase === Phase.KickOff || m.phase === Phase.Goal || m.phase === Phase.HalfTime) {
     return kickOffTarget(sim, eid, teamOf(sim, eid) === m.restart.team, out)
   }
+  if (m.phase === Phase.Play) return openPlayTarget(sim, eid, out)
   shapeTarget(sim, eid, out)
   if (m.phase === Phase.Restart && teamOf(sim, eid) !== m.restart.team) {
     // Opponents give the taker the required distance.
