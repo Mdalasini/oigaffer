@@ -107,6 +107,21 @@ export function interceptRisk(
 }
 
 /**
+ * How contested a ball dropping at (x, y) after `tBall` seconds will be: 0 =
+ * nobody near, 1 = an opponent there in time to challenge for it. A ball out
+ * of the air takes a moment to bring down, so arriving just after it lands is
+ * still in time.
+ */
+export function aerialContest(sim: Sim, observer: number, defenders: number[], x: number, y: number, tBall: number): number {
+  let first = Infinity
+  for (const d of defenders) {
+    believe(sim, observer, d, seen)
+    first = Math.min(first, reachTime(x, y, seen.x, seen.y, seen.vx, seen.vy, topSpeed(sim, d), acceleration(sim, d), REACTION))
+  }
+  return clamp(0.5 + (tBall + 0.3 - first) / 0.8, 0, 1)
+}
+
+/**
  * First sample of a flight within `radius` of (x, y) and low enough to play,
  * or -1. The radius widens by half the distance between samples so a fast
  * ball cannot skip past the spot between two of them.
