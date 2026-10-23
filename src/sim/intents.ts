@@ -1,0 +1,28 @@
+import type { Sim } from './sim'
+
+/** What a player is currently trying to do. Decided by brains, executed every tick. */
+export const IntentKind = {
+  Hold: 0,
+  Chase: 1,
+  Receive: 2,
+  Carry: 3,
+  Pass: 4,
+  Press: 5,
+  TakeRestart: 6,
+  Wait: 7,
+} as const
+export type IntentKind = (typeof IntentKind)[keyof typeof IntentKind]
+
+export const INTENT_NAMES = Object.fromEntries(Object.entries(IntentKind).map(([k, v]) => [v, k])) as Record<
+  IntentKind,
+  string
+>
+
+export function setIntent(sim: Sim, eid: number, kind: IntentKind, target = -1, x = 0, y = 0): void {
+  const { Intent } = sim.c
+  if (Intent.kind[eid] !== kind || Intent.target[eid] !== target) Intent.since[eid] = sim.m.tick
+  Intent.kind[eid] = kind
+  Intent.target[eid] = target
+  Intent.x[eid] = x
+  Intent.y[eid] = y
+}
