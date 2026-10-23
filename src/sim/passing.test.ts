@@ -96,6 +96,37 @@ describe('choosing a pass', () => {
     expect(running === null || running.success < still.success - 0.3).toBe(true)
   })
 
+  test('a ball lofted to where a defender will be when it drops is judged a long shot', () => {
+    // From a flagged moment: a chip across midfield to a team-mate with a
+    // defender running to the same spot, chosen over a simple pass on the ground.
+    const sim = emptyPitch()
+    const [passer, mate] = [sim.teams[1][9], sim.teams[1][10]]
+    const [back, presser, marker] = [1, 5, 6].map((i) => sim.teams[0][i])
+    place(sim, passer, -13.5, 6.5, -2.8, -2)
+    place(sim, sim.ball, -14.3, 5.9)
+    place(sim, mate, -20.4, -12.8, -1.6, -0.1)
+    place(sim, marker, -17.2, -9.7, -4.4, -0.1)
+    place(sim, presser, -17.9, 6.9, 3.4, 1.6)
+    place(sim, back, -30.4, -18, -4.2, 1.9)
+    revealAll(sim)
+    const plan = bestPass(sim, passer, -14.3, 5.9, mate)
+    expect(plan === null || plan.type !== PassType.Lofted || plan.success < 0.5).toBe(true)
+  })
+
+  test('a ball lofted over a defender in the lane to a free team-mate is still on', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const [passer, mate] = [sim.teams[0][5], sim.teams[0][6]]
+    const blocker = sim.teams[1][5]
+    place(sim, passer, 0, 0)
+    place(sim, sim.ball, 0.5 * dir, 0)
+    place(sim, mate, 25 * dir, 0)
+    place(sim, blocker, 10 * dir, 0)
+    revealAll(sim)
+    const plan = bestPass(sim, passer, 0.5 * dir, 0, mate)
+    expect(plan!.type).toBe(PassType.Lofted)
+  })
+
   test('a winger running beyond a flat back line gets a through ball', () => {
     const sim = emptyPitch()
     const dir = attackDir(sim, 0)

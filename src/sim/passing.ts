@@ -4,7 +4,7 @@
 
 import { kick } from './actions'
 import { BALL_RADIUS, CONTROL_HEIGHT, DT, FOOT_REACH } from './constants'
-import { arrivalSample, interceptRisk, lossValue, pitchValue } from './evaluate'
+import { aerialContest, arrivalSample, interceptRisk, lossValue, pitchValue } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
 import { airKick, createFlight, FLIGHT_STRIDE, groundKickSpeed, simulateFlight } from './kicks'
 import { acceleration, runTime, topSpeed } from './movement'
@@ -110,7 +110,9 @@ export function bestPass(sim: Sim, passer: number, bx: number, by: number, only 
     const late = clamp((tMate - tBall - 0.2) / 0.8, 0, 1)
     const risk = interceptRisk(sim, passer, opponents, flight, s, target, mate.x, mate.y, mate.vx, mate.vy)
     // Balls in the air are harder to land on the spot and to control.
-    const aerial = vz > 0 ? 0.8 + 0.15 * sim.c.Attr.passing[passer] : 1
+    let aerial = vz > 0 ? 0.8 + 0.15 * sim.c.Attr.passing[passer] : 1
+    // A ball dropping onto a team-mate with an opponent arriving too is a header duel, not a pass.
+    if (type === PassType.Lofted) aerial *= 1 - 0.5 * aerialContest(sim, passer, opponents, x, y, tBall)
     const success = (1 - risk) * (1 - late) * aerial
     const score = success * pitchValue(sim, team, x, y) - (1 - success) * loss
     if (!best || score > best.score) best = { type, target, x, y, score, success }
