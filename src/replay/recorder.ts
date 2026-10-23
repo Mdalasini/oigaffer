@@ -10,7 +10,7 @@ import { snapshot, type Snapshot } from '../sim/snapshot'
 /** Per-entity values in a frame, in this order. */
 export const ENTITY_FIELDS = ['x', 'y', 'z', 'vx', 'vy', 'facing', 'intent', 'target'] as const
 /** Per-frame values ahead of the entity block, in this order. */
-export const FRAME_FIELDS = ['tick', 'phase', 'owner', 'possession'] as const
+export const FRAME_FIELDS = ['tick', 'phase', 'owner', 'possession', 'half'] as const
 
 export const WINDOW_SECONDS = 30
 const KEYFRAME_EVERY = 5 * TICK_RATE
@@ -61,6 +61,7 @@ export class Recorder {
     f[o + 1] = sim.m.phase
     f[o + 2] = sim.m.ball.owner
     f[o + 3] = sim.m.possession
+    f[o + 4] = sim.m.half
     let k = o + FRAME_FIELDS.length
     for (const eid of this.entities) {
       f[k++] = Pos.x[eid]

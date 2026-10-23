@@ -63,3 +63,43 @@ describe('flags', () => {
     expect(viewer.sim.m.tick).toBe(flag.frames.firstTick + flag.frames.count - 1)
   })
 })
+
+describe('review regressions', () => {
+  test('a window that starts on its keyframe re-simulates every frame', () => {
+    const game = new Game(CFG)
+    play(game, 50)
+    const flag: Flag = JSON.parse(JSON.stringify(game.flag('')))
+    expect(flag.keyframe.tick).toBe(flag.frames.firstTick)
+    const r = resimulate(flag)
+    expect(r.data.length).toBe(flag.frames.data.length)
+    expect(r.firstDriftTick).toBe(-1)
+    expect(() => report(flag, { data: r.data })).not.toThrow()
+  })
+
+  test('a change in ball height counts as drift', () => {
+    const game = new Game(CFG)
+    play(game, 6)
+    const flag: Flag = JSON.parse(JSON.stringify(game.flag('')))
+    const last = (flag.frames.count - 1) * flag.frames.stride
+    flag.frames.data[last + 5 + 2] += 5
+    expect(resimulate(flag).firstDriftTick).toBe(flag.frames.firstTick + flag.frames.count - 1)
+  })
+
+  test('nothing more is recorded once the match is over', () => {
+    const game = new Game({ ...CFG, halfMinutes: 0.05 })
+    play(game, 20)
+    const end = game.sim.m.tick
+    expect(game.rec.lastTick()).toBe(end)
+    expect(game.rec.frame(end - 1)[0]).toBe(end - 1)
+    expect(() => game.flag('')).not.toThrow()
+  })
+
+  test('the report gives the attacking direction of the reported half', () => {
+    const game = new Game({ ...CFG, halfMinutes: 0.2 })
+    play(game, 20)
+    expect(game.sim.m.half).toBe(2)
+    const text = report(game.flag(''))
+    expect(text).toContain('Home 4-3-3 attacks -x')
+    expect(text).toContain('spans half time')
+  })
+})

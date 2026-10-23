@@ -3,6 +3,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
+import type { ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 
 const FLAGS_DIR = resolve(import.meta.dirname, '../flags')
@@ -17,6 +18,24 @@ function slug(text: string): string {
   )
 }
 
+function send(res: ServerResponse, status: number, body: unknown) {
+  res.statusCode = status
+  res.setHeader('content-type', 'application/json')
+  res.end(typeof body === 'string' ? body : JSON.stringify(body))
+}
+
+function saveFlag(body: string): { name: string; path: string } {
+  const flag = JSON.parse(body)
+  if (typeof flag !== 'object' || flag === null || typeof flag.note !== 'string' || !flag.keyframe || !flag.frames) {
+    throw new Error('not a flag')
+  }
+  mkdirSync(FLAGS_DIR, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const name = `${stamp}-${slug(flag.note)}.json`
+  writeFileSync(join(FLAGS_DIR, name), body)
+  return { name, path: `flags/${name}` }
+}
+
 export function flagServer(): Plugin {
   return {
     name: 'flag-server',
@@ -26,31 +45,27 @@ export function flagServer(): Plugin {
           let body = ''
           req.on('data', (chunk) => (body += chunk))
           req.on('end', () => {
-            const flag = JSON.parse(body)
-            mkdirSync(FLAGS_DIR, { recursive: true })
-            const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-            const name = `${stamp}-${slug(flag.note ?? '')}.json`
-            writeFileSync(join(FLAGS_DIR, name), JSON.stringify(flag))
-            res.setHeader('content-type', 'application/json')
-            res.end(JSON.stringify({ name, path: `flags/${name}` }))
+            try {
+              send(res, 200, saveFlag(body))
+            } catch (err) {
+              send(res, 400, { error: (err as Error).message })
+            }
           })
           return
         }
         const name = basename(decodeURIComponent((req.url ?? '/').slice(1)))
-        res.setHeader('content-type', 'application/json')
         if (!name) {
           let files: string[] = []
           try {
             files = readdirSync(FLAGS_DIR).filter((f) => f.endsWith('.json'))
           } catch {}
-          res.end(JSON.stringify(files.sort()))
+          send(res, 200, files.sort())
           return
         }
         try {
-          res.end(readFileSync(join(FLAGS_DIR, name)))
+          send(res, 200, readFileSync(join(FLAGS_DIR, name), 'utf8'))
         } catch {
-          res.statusCode = 404
-          res.end('{}')
+          send(res, 404, { error: 'no such flag' })
         }
       })
     },

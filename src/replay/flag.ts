@@ -67,7 +67,7 @@ export interface Resim {
   /** Frames from the current code, laid out like Flag.frames.data. */
   data: number[]
   events: SimEvent[]
-  /** Largest position difference (m) from the recorded frames, and the first tick it exceeded 1 cm. */
+  /** Largest 3D position difference (m) from the recorded frames, and the first tick it exceeded 1 cm. */
   maxDrift: number
   firstDriftTick: number
 }
@@ -83,9 +83,17 @@ export function resimulate(flag: Flag): Resim {
   const events: SimEvent[] = []
   let maxDrift = 0
   let firstDriftTick = -1
-  while (sim.m.tick < lastTick) {
+  // The keyframe may itself be the window's first tick, so record before stepping.
+  for (;;) {
+    if (sim.m.tick >= firstTick) record()
+    if (sim.m.tick >= lastTick) break
+    const before = sim.m.tick
     step(sim)
-    if (sim.m.tick < firstTick) continue
+    if (sim.m.tick === before) break
+  }
+  return { sim, data, events, maxDrift, firstDriftTick }
+
+  function record() {
     rec.afterTick(sim)
     const frame = rec.frame(sim.m.tick)
     const base = (sim.m.tick - firstTick) * stride
@@ -95,10 +103,10 @@ export function resimulate(flag: Flag): Resim {
       const o = FRAME_FIELDS.length + e * ENTITY_FIELDS.length
       const dx = frame[o] - flag.frames.data[base + o]
       const dy = frame[o + 1] - flag.frames.data[base + o + 1]
-      const drift = Math.sqrt(dx * dx + dy * dy)
+      const dz = frame[o + 2] - flag.frames.data[base + o + 2]
+      const drift = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (drift > maxDrift) maxDrift = drift
       if (drift > 0.01 && firstDriftTick < 0) firstDriftTick = sim.m.tick
     }
   }
-  return { sim, data, events, maxDrift, firstDriftTick }
 }

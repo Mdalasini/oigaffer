@@ -85,12 +85,13 @@ export function report(flag: Flag, opts: ReportOptions = {}): string {
   const events = opts.events ?? flag.events
   const at = clampTick(r, flag.flagTick + Math.round((opts.at ?? 0) * TICK_RATE))
   const out: string[] = []
-  const homeDir = flag.keyframe.snap.m.half === 1 ? '+x (left to right)' : '-x (right to left)'
+  const homeDir = r.header(at, 'half') === 1 ? '+x (left to right)' : '-x (right to left)'
   out.push(`FLAG  ${flag.createdAt}`)
   out.push(`Note: ${flag.note || '(none)'}`)
   out.push(`Subjects: ${flag.subjects.join(', ') || '(none)'}`)
   out.push(`Flagged at ${clock(flag.flagTick)} (tick ${flag.flagTick}), seed ${flag.config.seed}`)
-  out.push(`Home ${flag.config.formations[0]} attacks ${homeDir}; Away ${flag.config.formations[1]} the other way.`)
+  out.push(`At the reported moment Home ${flag.config.formations[0]} attacks ${homeDir}; Away ${flag.config.formations[1]} the other way.`)
+  if (r.header(r.firstTick, 'half') !== r.header(r.lastTick, 'half')) out.push('The window spans half time: the teams swap ends at the second-half kick-off.')
   out.push(`Pitch x in [-${HALF_LENGTH}, ${HALF_LENGTH}], y in [-${HALF_WIDTH}, ${HALF_WIDTH}] metres; headings in degrees, 0 = +x, 90 = +y.`)
   out.push(`Window ${clock(r.firstTick)} - ${clock(r.lastTick)}`)
   out.push('')

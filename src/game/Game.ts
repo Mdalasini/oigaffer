@@ -49,10 +49,12 @@ export class Game {
   }
 
   tick(): void {
+    const before = this.sim.m.tick
     this.rec.beforeTick(this.sim)
     this.savePrev()
     step(this.sim)
-    this.rec.afterTick(this.sim)
+    // After full time the match no longer advances; keep the recording of the last stretch of play.
+    if (this.sim.m.tick !== before) this.rec.afterTick(this.sim)
   }
 
   setPaused(paused: boolean): void {

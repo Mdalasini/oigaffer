@@ -65,7 +65,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (flagOpen || (e.target as HTMLElement).closest('input, textarea')) return
+      if (flagOpen || (e.target as HTMLElement).closest('textarea, input:not([type=range])')) return
       if (e.code === 'Space') {
         e.preventDefault()
         game.setPaused(!game.paused)
