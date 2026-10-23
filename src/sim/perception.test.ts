@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { TICK_RATE } from './constants'
 import { on, recentEvents } from './events'
 import { newMatch } from './match'
-import { age, believe, perceptionSystem, revealAll } from './perception'
+import { intercept } from './movement'
+import { age, believe, call, perceptionSystem, revealAll } from './perception'
+import { restore, snapshot } from './snapshot'
+import { updateScratch } from './brain'
 import type { Sim } from './sim'
 import { Phase } from './state'
 import { step } from './step'
@@ -100,5 +103,44 @@ describe('events', () => {
     expect(recentEvents(sim, 'kick')).toHaveLength(0)
     off()
     expect(sim.listeners.phase).toHaveLength(0)
+  })
+})
+
+describe('review regressions', () => {
+  test('a player chases where they last saw the ball, not where it really is', () => {
+    const { sim, observer } = setup(30, 30)
+    sim.m.phase = Phase.Play
+    const { Pos, Vel } = sim.c
+    Pos.x[sim.ball] = 10
+    Pos.y[sim.ball] = 0
+    Vel.x[sim.ball] = 0
+    perceptionSystem(sim)
+    // The ball moves behind the player while they keep facing +x.
+    Pos.x[sim.ball] = -20
+    sim.m.tick += 1
+    perceptionSystem(sim)
+    updateScratch(sim)
+    const ic = intercept(sim, observer, { t: 0, x: 0, y: 0 })
+    expect(ic.x).toBeCloseTo(10, 5)
+  })
+
+  test('a listener can unsubscribe itself without others missing the event', () => {
+    const sim = newMatch(CFG)
+    const heard: string[] = []
+    const off = on(sim, 'call', () => {
+      heard.push('first')
+      off()
+    })
+    on(sim, 'call', () => heard.push('second'))
+    const [a, b] = sim.teams[0]
+    call(sim, a, 'man-on', b, -1)
+    expect(heard).toEqual(['first', 'second'])
+  })
+
+  test('a snapshot with a different set of components is refused', () => {
+    const sim = newMatch(CFG)
+    const snap = snapshot(sim)
+    snap.arrays.pop()
+    expect(() => restore(sim, snap)).toThrow()
   })
 })

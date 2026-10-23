@@ -56,7 +56,10 @@ export function updateScratch(sim: Sim): void {
       let bestD = Infinity
       for (const eid of sim.teams[team]) {
         if (roleOf(sim, eid) === 'GK') continue
-        const d = dist2(sim, eid, sim.ball)
+        believe(sim, eid, sim.ball, seen)
+        const dx = seen.x - c.Pos.x[eid]
+        const dy = seen.y - c.Pos.y[eid]
+        const d = dx * dx + dy * dy
         if (d < bestD) {
           best = eid
           bestD = d
@@ -72,7 +75,7 @@ function inOwnBox(sim: Sim, team: number, x: number, y: number): boolean {
   return ax < -HALF_LENGTH + PENALTY_AREA_DEPTH && Math.abs(y) < PENALTY_AREA_WIDTH / 2
 }
 
-function dist2(sim: Sim, a: number, b: number): number {
+export function dist2(sim: Sim, a: number, b: number): number {
   const { Pos } = sim.c
   const dx = Pos.x[a] - Pos.x[b]
   const dy = Pos.y[a] - Pos.y[b]
@@ -137,9 +140,11 @@ export function intentSystem(sim: Sim): void {
   const { Intent, Motor, Pos } = c
   for (const eid of sim.players) {
     const top = topSpeed(sim, eid)
+    // Players watch the ball where they believe it is.
+    believe(sim, eid, ball, seen)
     Motor.hasFace[eid] = 1
-    Motor.faceX[eid] = Pos.x[ball]
-    Motor.faceY[eid] = Pos.y[ball]
+    Motor.faceX[eid] = seen.x
+    Motor.faceY[eid] = seen.y
     switch (Intent.kind[eid]) {
       case IntentKind.Hold:
         holdTarget(sim, eid, pt)

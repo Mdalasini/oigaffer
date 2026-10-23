@@ -10,7 +10,8 @@ import type { MatchConfig } from '../sim/state'
 import { step } from '../sim/step'
 import { ENTITY_FIELDS, FRAME_FIELDS, Recorder, type Keyframe } from './recorder'
 
-export const FLAG_VERSION = 1
+/** Bump whenever components or match state change shape: older flags still report, but cannot re-simulate. */
+export const FLAG_VERSION = 2
 const BEFORE = 20 * TICK_RATE
 const AFTER = 5 * TICK_RATE
 

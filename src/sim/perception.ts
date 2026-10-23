@@ -5,6 +5,7 @@
 // Decisions read the memory through `believe`, which extrapolates stale
 // sightings a little.
 
+import type { BallState } from './ballmotion'
 import { MAX_ENTITIES } from './components'
 import { DT, TICK_RATE } from './constants'
 import { cos, sin } from './fmath'
@@ -23,12 +24,14 @@ const MAX_EXTRAPOLATION = 1
 const slot = (observer: number, target: number) => observer * MAX_ENTITIES + target
 
 function remember(sim: Sim, observer: number, target: number) {
-  const { Pos, Vel, Memory } = sim.c
+  const { Pos, Vel, Air, Memory } = sim.c
   const k = slot(observer, target)
   Memory.x[k] = Pos.x[target]
   Memory.y[k] = Pos.y[target]
+  Memory.z[k] = Air.z[target]
   Memory.vx[k] = Vel.x[target]
   Memory.vy[k] = Vel.y[target]
+  Memory.vz[k] = Air.vz[target]
   Memory.seen[k] = sim.m.tick
 }
 
@@ -106,6 +109,22 @@ export interface Belief {
   y: number
   vx: number
   vy: number
+}
+
+/**
+ * The ball's last sighted state, to predict its flight from. Unlike
+ * `believe`, not extrapolated: callers run it through the ball integrator.
+ */
+export function lastSeenBall(sim: Sim, observer: number, out: BallState): BallState {
+  const { Memory } = sim.c
+  const k = slot(observer, sim.ball)
+  out.x = Memory.x[k]
+  out.y = Memory.y[k]
+  out.z = Memory.z[k]
+  out.vx = Memory.vx[k]
+  out.vy = Memory.vy[k]
+  out.vz = Memory.vz[k]
+  return out
 }
 
 /** Where the observer believes the target is now. */

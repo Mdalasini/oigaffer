@@ -25,6 +25,10 @@ export function restore(sim: Sim, snap: Snapshot): void {
   if (JSON.stringify(sim.cfg) !== JSON.stringify(snap.cfg)) {
     throw new Error(`snapshot is for config ${JSON.stringify(snap.cfg)}, sim has ${JSON.stringify(sim.cfg)}`)
   }
-  componentArrays(sim.c).forEach((a, i) => a.set(snap.arrays[i]))
+  const arrays = componentArrays(sim.c)
+  if (snap.arrays.length !== arrays.length || snap.arrays.some((a, i) => a.length !== arrays[i].length)) {
+    throw new Error('snapshot was taken with a different set of components')
+  }
+  arrays.forEach((a, i) => a.set(snap.arrays[i]))
   sim.m = structuredClone(snap.m)
 }

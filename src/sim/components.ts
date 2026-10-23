@@ -43,7 +43,7 @@ export function createComponents() {
     Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32() },
     Brain: { nextThink: i32(), noTouchUntil: i32(), lastTouch: i32(), nextScan: i32(), nextCall: i32() },
     /** What each player last perceived of every other entity, and on which tick. */
-    Memory: { x: pairF64(), y: pairF64(), vx: pairF64(), vy: pairF64(), seen: pairI32() },
+    Memory: { x: pairF64(), y: pairF64(), z: pairF64(), vx: pairF64(), vy: pairF64(), vz: pairF64(), seen: pairI32() },
   }
 }
 

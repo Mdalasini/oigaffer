@@ -28,7 +28,8 @@ export function emit(sim: Sim, input: EventInput): void {
   const e = { ...input, tick: sim.m.tick } as SimEvent
   sim.m.events.push(e)
   const fns = sim.listeners[e.type] as Listener<typeof e.type>[] | undefined
-  if (fns) for (const fn of fns) fn(sim, e as never)
+  // Copy so listeners can unsubscribe while being called.
+  if (fns) for (const fn of fns.slice()) fn(sim, e as never)
 }
 
 export function on<T extends SimEventType>(sim: Sim, type: T, fn: Listener<T>): () => void {
