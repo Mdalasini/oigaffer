@@ -78,8 +78,7 @@ export function App() {
         const delta = (e.code === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? TICK_RATE : 1)
         game.scrubTo(game.shownTick() + delta)
       } else if (e.code === 'Escape') {
-        game.selected = []
-        game.setPaused(game.paused)
+        game.clearSelection()
       }
     }
     window.addEventListener('keydown', onKey)

@@ -86,6 +86,11 @@ export class Game {
     this.notify()
   }
 
+  clearSelection(): void {
+    this.selected = []
+    this.notify()
+  }
+
   flag(note: string): Flag {
     return createFlag(this.sim, this.rec, this.shownTick(), note, this.selected)
   }
