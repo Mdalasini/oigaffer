@@ -63,6 +63,8 @@ export function createComponents() {
     },
     /** Lunging (a slide in progress), on the ground afterwards, or stumbling after a challenge. */
     Body: { lungeUntil: i32(), downUntil: i32(), stumbleUntil: i32() },
+    /** A player's assigned spot for the current set piece, if they have one. */
+    SetPiece: { active: i32(), x: f64(), y: f64() },
     /** Goalkeeper dive state: a pending dive (tick, target) and how long the dive and recovery last. */
     Keeper: { diveAt: i32(), diveUntil: i32(), downUntil: i32(), x: f64(), y: f64() },
     /** What each player last perceived of every other entity, and on which tick. */

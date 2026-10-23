@@ -6,7 +6,7 @@ import { emit } from './events'
 import { IntentKind, setIntent } from './intents'
 import { bestPass, strikePass } from './passing'
 import { revealAll } from './perception'
-import { planShot, strikeShot } from './shooting'
+import { arrangeSetPiece, MAX_SET_WAIT, restartDelay, setPieceReady, takeSetPiece } from './setpieces'
 import { kickOffTarget, type Point } from './shape'
 import { attackDir, createSim, roleOf, type Sim } from './sim'
 import { Phase, Restart, type MatchConfig } from './state'
@@ -49,6 +49,8 @@ function setupRestart(sim: Sim, kind: Restart, team: number, x: number, y: numbe
   sim.m.advantage.team = -1
   for (const eid of sim.players) setIntent(sim, eid, IntentKind.Hold)
   setIntent(sim, taker, IntentKind.TakeRestart)
+  if (kind === Restart.KickOff) sim.c.SetPiece.active.fill(0)
+  else arrangeSetPiece(sim)
   enterPhase(sim, kind === Restart.KickOff ? Phase.KickOff : Phase.Restart)
 }
 
@@ -126,11 +128,14 @@ export function matchSystem(sim: Sim): void {
       const taker = m.restart.taker
       const dx = c.Pos.x[ball] - c.Pos.x[taker]
       const dy = c.Pos.y[ball] - c.Pos.y[taker]
-      if (elapsed < RESTART_DELAY || dx * dx + dy * dy > FOOT_REACH * FOOT_REACH) return
+      const delay = m.phase === Phase.KickOff ? RESTART_DELAY : restartDelay(m.restart.kind, m.restart.x, sim, m.restart.team)
+      if (elapsed < delay || dx * dx + dy * dy > FOOT_REACH * FOOT_REACH) return
+      // Wait for everyone to get to their set-piece spot, but not forever.
+      if (m.phase === Phase.Restart && !setPieceReady(sim) && elapsed < delay + MAX_SET_WAIT) return
       enterPhase(sim, Phase.Play)
       setIntent(sim, taker, IntentKind.Hold)
       if (m.restart.indirect) m.ball.indirectFrom = taker
-      if (m.restart.kind === Restart.Penalty) return strikeShot(sim, taker, planShot(sim, taker, c.Pos.x[ball], c.Pos.y[ball]), false)
+      if (m.restart.kind !== Restart.KickOff) return takeSetPiece(sim)
       const pass = bestPass(sim, taker, c.Pos.x[ball], c.Pos.y[ball])
       if (pass) strikePass(sim, taker, pass, { firstTime: false, pressure: Infinity })
       return
