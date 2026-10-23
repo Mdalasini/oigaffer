@@ -12,7 +12,7 @@
 import { readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { resimulate, type Flag } from '../src/replay/flag'
+import { FLAG_VERSION, resimulate, simAt, type Flag } from '../src/replay/flag'
 import { clock, report } from '../src/replay/report'
 
 const FLAGS_DIR = resolve(import.meta.dir, '../flags')
@@ -65,10 +65,22 @@ const opts = {
   to: num(values.to),
   every: num(values.every),
   trace: values.trace?.split(',').filter(Boolean),
+  simAtFlag: undefined as ReturnType<typeof simAt> | undefined,
 }
 
 console.log(`File: ${path}`)
-if (values.resim) {
+let replayable = flag.version === FLAG_VERSION
+if (replayable) {
+  try {
+    opts.simAtFlag = simAt(flag, flag.flagTick)
+  } catch (err) {
+    replayable = false
+    console.log(`Cannot re-simulate (${(err as Error).message}); showing the recording only.`)
+  }
+} else {
+  console.log(`Flag version ${flag.version} predates the current sim (version ${FLAG_VERSION}); showing the recording only.`)
+}
+if (values.resim && replayable) {
   const r = resimulate(flag)
   console.log(
     r.firstDriftTick < 0

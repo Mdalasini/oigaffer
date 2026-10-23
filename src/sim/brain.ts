@@ -8,6 +8,7 @@ import { clamp } from './fmath'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
 import { bestGroundPass, strikeGroundPass } from './passing'
+import { believe, type Belief } from './perception'
 import { readBall } from './systems/ball'
 import { predictPath } from './scratch'
 import { kickOffTarget, shapeTarget, type Point } from './shape'
@@ -24,6 +25,7 @@ const TOUCH_INTERVAL = Math.round(0.3 * TICK_RATE)
 const bs: BallState = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }
 const ic: Intercept = { t: 0, x: 0, y: 0 }
 const pt: Point = { x: 0, y: 0 }
+const seen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 
 /** Shared per-tick facts every brain reads: the ball's path and who goes to it. */
 export function updateScratch(sim: Sim): void {
@@ -54,7 +56,10 @@ export function updateScratch(sim: Sim): void {
       let bestD = Infinity
       for (const eid of sim.teams[team]) {
         if (roleOf(sim, eid) === 'GK') continue
-        const d = dist2(sim, eid, sim.ball)
+        believe(sim, eid, sim.ball, seen)
+        const dx = seen.x - c.Pos.x[eid]
+        const dy = seen.y - c.Pos.y[eid]
+        const d = dx * dx + dy * dy
         if (d < bestD) {
           best = eid
           bestD = d
@@ -70,7 +75,7 @@ function inOwnBox(sim: Sim, team: number, x: number, y: number): boolean {
   return ax < -HALF_LENGTH + PENALTY_AREA_DEPTH && Math.abs(y) < PENALTY_AREA_WIDTH / 2
 }
 
-function dist2(sim: Sim, a: number, b: number): number {
+export function dist2(sim: Sim, a: number, b: number): number {
   const { Pos } = sim.c
   const dx = Pos.x[a] - Pos.x[b]
   const dy = Pos.y[a] - Pos.y[b]
@@ -114,7 +119,10 @@ function decideOnBall(sim: Sim, eid: number): void {
   if (c.Intent.kind[eid] === IntentKind.Pass) return
 
   let pressure = Infinity
-  for (const o of sim.teams[1 - team]) pressure = Math.min(pressure, Math.sqrt(dist2(sim, eid, o)))
+  for (const o of sim.teams[1 - team]) {
+    believe(sim, eid, o, seen)
+    pressure = Math.min(pressure, Math.sqrt((seen.x - x) * (seen.x - x) + (seen.y - y) * (seen.y - y)))
+  }
   const held = m.tick - m.ball.touchTick
   const pass = bestGroundPass(sim, eid)
   const wantsPass = pass && (pressure < 4 || pass.score > 0.25 + next(m.rng) * 0.3)
@@ -132,9 +140,11 @@ export function intentSystem(sim: Sim): void {
   const { Intent, Motor, Pos } = c
   for (const eid of sim.players) {
     const top = topSpeed(sim, eid)
+    // Players watch the ball where they believe it is.
+    believe(sim, eid, ball, seen)
     Motor.hasFace[eid] = 1
-    Motor.faceX[eid] = Pos.x[ball]
-    Motor.faceY[eid] = Pos.y[ball]
+    Motor.faceX[eid] = seen.x
+    Motor.faceY[eid] = seen.y
     switch (Intent.kind[eid]) {
       case IntentKind.Hold:
         holdTarget(sim, eid, pt)
@@ -146,14 +156,15 @@ export function intentSystem(sim: Sim): void {
         moveTo(sim, eid, ic.x, ic.y, top)
         break
       case IntentKind.Press: {
-        const carrier = Intent.target[eid]
+        // Get goal side of where the carrier is believed to be.
+        believe(sim, eid, Intent.target[eid], seen)
         const goalX = -attackDir(sim, teamOf(sim, eid)) * HALF_LENGTH
-        const gx = goalX - Pos.x[carrier]
-        const gy = -Pos.y[carrier]
+        const gx = goalX - seen.x
+        const gy = -seen.y
         const gl = Math.sqrt(gx * gx + gy * gy) || 1
-        const tx = Pos.x[carrier] + (gx / gl) * 1.8
-        const ty = Pos.y[carrier] + (gy / gl) * 1.8
-        const close = Math.sqrt(dist2(sim, eid, carrier)) < 3.5
+        const tx = seen.x + (gx / gl) * 1.8
+        const ty = seen.y + (gy / gl) * 1.8
+        const close = Math.sqrt((seen.x - Pos.x[eid]) * (seen.x - Pos.x[eid]) + (seen.y - Pos.y[eid]) * (seen.y - Pos.y[eid])) < 3.5
         moveTo(sim, eid, tx, ty, close ? 2.5 : top * 0.9)
         break
       }

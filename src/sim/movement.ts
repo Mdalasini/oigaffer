@@ -1,5 +1,7 @@
 import { CONTROL_HEIGHT, DT, FOOT_REACH } from './constants'
-import { PATH_SAMPLES, PATH_STRIDE } from './scratch'
+import type { BallState } from './ballmotion'
+import { age, lastSeenBall } from './perception'
+import { PATH_SAMPLES, PATH_STRIDE, predictPath } from './scratch'
 import type { Sim } from './sim'
 
 export function topSpeed(sim: Sim, eid: number): number {
@@ -28,13 +30,36 @@ export interface Intercept {
   y: number
 }
 
+const believedPath = new Float64Array(PATH_SAMPLES * 3)
+const lastSeen: BallState = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }
+const staleShift = new Float64Array(PATH_SAMPLES * 3)
+
 /**
- * Earliest point on the predicted ball path the player can reach in time,
- * or the end of the path if they cannot catch it.
+ * The ball path as the player believes it: the shared prediction when they
+ * can see the ball, otherwise one flown on from their last sighting.
+ */
+function pathFor(sim: Sim, eid: number): Float64Array {
+  const stale = Math.round(age(sim, eid, sim.ball) / DT)
+  if (stale === 0) return sim.scratch.path
+  // Fly the last sighting forward by its age so sample 0 is "now" as they imagine it.
+  predictPath(staleShift, lastSeenBall(sim, eid, lastSeen))
+  const skip = Math.min(PATH_SAMPLES - 1, Math.round(stale / PATH_STRIDE))
+  for (let s = 0; s < PATH_SAMPLES; s++) {
+    const from = Math.min(PATH_SAMPLES - 1, s + skip) * 3
+    believedPath[s * 3] = staleShift[from]
+    believedPath[s * 3 + 1] = staleShift[from + 1]
+    believedPath[s * 3 + 2] = staleShift[from + 2]
+  }
+  return believedPath
+}
+
+/**
+ * Earliest point on the ball path (as the player believes it) they can reach
+ * in time, or the end of the path if they cannot catch it.
  */
 export function intercept(sim: Sim, eid: number, out: Intercept, reaction = 0.2): Intercept {
   const { Pos, Vel } = sim.c
-  const path = sim.scratch.path
+  const path = pathFor(sim, eid)
   const px = Pos.x[eid]
   const py = Pos.y[eid]
   const v0 = Math.sqrt(Vel.x[eid] * Vel.x[eid] + Vel.y[eid] * Vel.y[eid])

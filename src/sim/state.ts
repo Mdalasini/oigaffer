@@ -54,6 +54,8 @@ export interface MatchState {
   possession: number
   /** Events emitted during the most recent tick. */
   events: SimEvent[]
+  /** Events of the tick before that. */
+  prevEvents: SimEvent[]
 }
 
 export function createMatchState(cfg: MatchConfig): MatchState {
@@ -70,5 +72,6 @@ export function createMatchState(cfg: MatchConfig): MatchState {
     ball: { owner: -1, lastTouch: -1, lastTeam: -1, touchTick: -1 },
     possession: -1,
     events: [],
+    prevEvents: [],
   }
 }

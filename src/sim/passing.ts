@@ -3,6 +3,7 @@
 import { kick } from './actions'
 import { groundKickSpeed } from './ballmotion'
 import { cos, sin, atan2, clamp } from './fmath'
+import { believe, type Belief } from './perception'
 import { gauss } from './rng'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 
@@ -24,9 +25,12 @@ function segmentDistance(px: number, py: number, ax: number, ay: number, bx: num
   return { dist: Math.sqrt(cx * cx + cy * cy), along: t * Math.sqrt(len2) }
 }
 
-/** Best ground pass for the player on the ball, or null if every lane is closed. */
+const mate: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
+const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
+
+/** Best ground pass the player on the ball believes is on, or null if every lane looks closed. */
 export function bestGroundPass(sim: Sim, eid: number, minDist = 5, maxDist = 35): PassOption | null {
-  const { Pos, Vel } = sim.c
+  const { Pos } = sim.c
   const team = teamOf(sim, eid)
   const dir = attackDir(sim, team)
   const bx = Pos.x[sim.ball]
@@ -34,20 +38,22 @@ export function bestGroundPass(sim: Sim, eid: number, minDist = 5, maxDist = 35)
   let best: PassOption | null = null
   for (const t of sim.teams[team]) {
     if (t === eid) continue
-    const rx = Pos.x[t] - bx
-    const ry = Pos.y[t] - by
+    believe(sim, eid, t, mate)
+    const rx = mate.x - bx
+    const ry = mate.y - by
     const rough = Math.sqrt(rx * rx + ry * ry)
     if (rough < minDist || rough > maxDist) continue
     const lead = rough / 14
-    const x = Pos.x[t] + Vel.x[t] * lead
-    const y = Pos.y[t] + Vel.y[t] * lead
+    const x = mate.x + mate.vx * lead
+    const y = mate.y + mate.vy * lead
     const d = Math.sqrt((x - bx) * (x - bx) + (y - by) * (y - by))
     let blocked = false
     let space = Infinity
     for (const o of sim.teams[1 - team]) {
-      const s = segmentDistance(Pos.x[o], Pos.y[o], bx, by, x, y)
+      believe(sim, eid, o, opp)
+      const s = segmentDistance(opp.x, opp.y, bx, by, x, y)
       if (s.dist < 1.2 + 0.08 * s.along) blocked = true
-      const r = Math.sqrt((Pos.x[o] - x) * (Pos.x[o] - x) + (Pos.y[o] - y) * (Pos.y[o] - y))
+      const r = Math.sqrt((opp.x - x) * (opp.x - x) + (opp.y - y) * (opp.y - y))
       if (r < space) space = r
     }
     if (blocked) continue

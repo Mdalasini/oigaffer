@@ -1,5 +1,6 @@
 import { intentSystem, thinkSystem, updateScratch } from './brain'
 import { matchSystem } from './match'
+import { perceptionSystem } from './perception'
 import type { Sim } from './sim'
 import { Phase } from './state'
 import { ballSystem } from './systems/ball'
@@ -10,9 +11,11 @@ import { possessionSystem } from './systems/possession'
 export function step(sim: Sim): void {
   const m = sim.m
   if (m.phase === Phase.FullTime) return
+  m.prevEvents = m.events
   m.events = []
   m.tick++
   matchSystem(sim)
+  perceptionSystem(sim)
   updateScratch(sim)
   thinkSystem(sim)
   intentSystem(sim)

@@ -2,8 +2,10 @@
 
 import { placeBall } from './actions'
 import { FOOT_REACH, TICK_RATE } from './constants'
+import { emit } from './events'
 import { IntentKind, setIntent } from './intents'
 import { bestGroundPass, strikeGroundPass } from './passing'
+import { revealAll } from './perception'
 import { kickOffTarget, type Point } from './shape'
 import { attackDir, createSim, roleOf, type Sim } from './sim'
 import { Phase, Restart, type MatchConfig } from './state'
@@ -31,7 +33,7 @@ export function matchClock(sim: Sim): number {
 function enterPhase(sim: Sim, phase: Phase) {
   sim.m.phase = phase
   sim.m.phaseTick = sim.m.tick
-  sim.m.events.push({ type: 'phase', tick: sim.m.tick, phase })
+  emit(sim, { type: 'phase', phase })
   // A whistle cancels whatever players were about to do with the ball.
   if (phase === Phase.Goal || phase === Phase.HalfTime || phase === Phase.FullTime) {
     for (const eid of sim.players) setIntent(sim, eid, IntentKind.Hold)
@@ -64,17 +66,18 @@ export function startKickOff(sim: Sim, team: number): void {
   Pos.y[taker] = 0
   sim.m.possession = team
   setupRestart(sim, Restart.KickOff, team, 0, 0, taker)
+  revealAll(sim)
 }
 
 export function awardRestart(sim: Sim, kind: Restart, team: number, x: number, y: number): void {
-  sim.m.events.push({ type: 'out', tick: sim.m.tick, restart: kind, team, x, y, lastTouch: sim.m.ball.lastTouch })
+  emit(sim, { type: 'out', restart: kind, team, x, y, lastTouch: sim.m.ball.lastTouch })
   setupRestart(sim, kind, team, x, y, chooseTaker(sim, kind, team, x, y))
 }
 
 export function awardGoal(sim: Sim, team: number): void {
   const { m, c, ball } = sim
   m.score[team]++
-  m.events.push({ type: 'goal', tick: m.tick, team, scorer: m.ball.lastTouch })
+  emit(sim, { type: 'goal', team, scorer: m.ball.lastTouch })
   c.Vel.x[ball] = 0
   c.Vel.y[ball] = 0
   c.Air.vz[ball] = 0

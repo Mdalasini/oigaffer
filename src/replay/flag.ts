@@ -10,7 +10,8 @@ import type { MatchConfig } from '../sim/state'
 import { step } from '../sim/step'
 import { ENTITY_FIELDS, FRAME_FIELDS, Recorder, type Keyframe } from './recorder'
 
-export const FLAG_VERSION = 1
+/** Bump whenever components or match state change shape: older flags still report, but cannot re-simulate. */
+export const FLAG_VERSION = 2
 const BEFORE = 20 * TICK_RATE
 const AFTER = 5 * TICK_RATE
 
@@ -60,6 +61,18 @@ export function createFlag(sim: Sim, rec: Recorder, flagTick: number, note: stri
 
 function round(v: number): number {
   return Math.round(v * 1000) / 1000
+}
+
+/** The sim as it was at `tick`, rebuilt from the flag's keyframe with the current code. */
+export function simAt(flag: Flag, tick: number): Sim {
+  const sim = createSim(flag.config)
+  restore(sim, flag.keyframe.snap)
+  while (sim.m.tick < tick) {
+    const before = sim.m.tick
+    step(sim)
+    if (sim.m.tick === before) throw new Error(`the match ends before tick ${tick}`)
+  }
+  return sim
 }
 
 export interface Resim {

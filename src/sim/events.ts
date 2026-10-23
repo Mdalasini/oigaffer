@@ -1,3 +1,8 @@
+// The match's event stream. Systems either subscribe with `on` (called the
+// moment an event is emitted) or poll with `recentEvents` (this tick and the
+// one before). Every event is also kept in `m.events` for the recorder.
+
+import type { Sim } from './sim'
 import type { Phase, Restart } from './state'
 
 export type SimEvent =
@@ -6,7 +11,40 @@ export type SimEvent =
   | { type: 'out'; tick: number; restart: Restart; team: number; x: number; y: number; lastTouch: number }
   | { type: 'goal'; tick: number; team: number; scorer: number }
   | { type: 'phase'; tick: number; phase: Phase }
+  /** A player shouts to teammates; `to` hears it, `about` is who it concerns. */
+  | { type: 'call'; tick: number; by: number; call: CallKind; to: number; about: number }
 
 export type KickKind = 'pass' | 'touch' | 'restart'
+export type CallKind = 'man-on'
 
 export type SimEventType = SimEvent['type']
+export type EventOf<T extends SimEventType> = Extract<SimEvent, { type: T }>
+type WithoutTick<E> = E extends unknown ? Omit<E, 'tick'> : never
+export type EventInput = WithoutTick<SimEvent>
+export type Listener<T extends SimEventType> = (sim: Sim, e: EventOf<T>) => void
+export type Listeners = { [T in SimEventType]?: Listener<T>[] }
+
+export function emit(sim: Sim, input: EventInput): void {
+  const e = { ...input, tick: sim.m.tick } as SimEvent
+  sim.m.events.push(e)
+  const fns = sim.listeners[e.type] as Listener<typeof e.type>[] | undefined
+  // Copy so listeners can unsubscribe while being called.
+  if (fns) for (const fn of fns.slice()) fn(sim, e as never)
+}
+
+export function on<T extends SimEventType>(sim: Sim, type: T, fn: Listener<T>): () => void {
+  const list = (sim.listeners[type] ??= []) as Listener<T>[]
+  list.push(fn)
+  return () => {
+    const i = list.indexOf(fn)
+    if (i >= 0) list.splice(i, 1)
+  }
+}
+
+/** Events of a type from the previous tick and this one so far, oldest first. */
+export function recentEvents<T extends SimEventType>(sim: Sim, type: T): EventOf<T>[] {
+  const out: EventOf<T>[] = []
+  for (const e of sim.m.prevEvents) if (e.type === type) out.push(e as EventOf<T>)
+  for (const e of sim.m.events) if (e.type === type) out.push(e as EventOf<T>)
+  return out
+}
