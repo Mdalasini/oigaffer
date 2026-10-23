@@ -149,6 +149,24 @@ describe('goalkeeping', () => {
     expect(out && out.type === 'kick' && ['rollout', 'throw', 'punt']).toContain(out && out.type === 'kick' ? out.pass : '')
   })
 
+  test('the keeper comes for a cross dropping into the six-yard box, calls for it and holds it', () => {
+    const sim = emptyPitch()
+    const gk = keeperOf(sim, 1)
+    const dir = attackDir(sim, 1)
+    const line = -dir * HALF_LENGTH
+    place(sim, gk, line + dir * 2, 0)
+    place(sim, sim.teams[0][9], line + dir * 9, 4)
+    // A centre-back near enough to hear the call.
+    place(sim, sim.teams[1][2], line + dir * 8, 8)
+    revealAll(sim)
+    // A cross from the right wing, dropping about 6 m out.
+    launchBall(sim, line + dir * 10, -25, 0.2, -dir * 2, 13, 7, 0)
+    sim.m.ball.lastKick = 'pass'
+    const events = run(sim, 3)
+    expect(events.some((e) => e.type === 'call' && e.call === 'keeper' && e.by === gk)).toBe(true)
+    expect(events.find((e) => e.type === 'save')).toMatchObject({ by: gk })
+  })
+
   test('the keeper cannot pick up a deliberate back pass', () => {
     const sim = emptyPitch()
     const gk = keeperOf(sim, 1)

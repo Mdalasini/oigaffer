@@ -3,11 +3,11 @@
 // tick. On-ball choices live in onball.ts.
 
 import type { BallState } from './ballmotion'
-import { TICK_RATE } from './constants'
+import { CONTROL_HEIGHT, TICK_RATE } from './constants'
 import { IntentKind, setIntent } from './intents'
 import { isDiving, isDown, KEEPER_HEIGHT, shouldRush } from './keeper'
 import { intercept, type Intercept } from './movement'
-import { believe, type Belief } from './perception'
+import { believe, call, HEARING_RADIUS, type Belief } from './perception'
 import { decideFirstTime, decideOnBall } from './onball'
 import { HALF_LENGTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH } from './pitch'
 import { predictPath } from './scratch'
@@ -50,6 +50,11 @@ export function updateScratch(sim: Sim): void {
         }
       }
       scratch.chaser[team] = best
+      // A keeper coming for a high ball shouts so defenders leave it.
+      if (best >= 0 && roleOf(sim, best) === 'GK' && c.Air.z[sim.ball] > CONTROL_HEIGHT && m.tick >= c.Brain.nextCall[best]) {
+        const mate = nearestTeammate(sim, best)
+        if (mate >= 0) call(sim, best, 'keeper', mate, -1)
+      }
     } else if (teamOf(sim, m.ball.owner) !== team && !m.ball.inHands) {
       let best = -1
       let bestD = Infinity
@@ -67,6 +72,21 @@ export function updateScratch(sim: Sim): void {
       scratch.presser[team] = best
     }
   }
+}
+
+function nearestTeammate(sim: Sim, eid: number): number {
+  const { Pos } = sim.c
+  let best = -1
+  let bestD = HEARING_RADIUS * HEARING_RADIUS
+  for (const t of sim.teams[teamOf(sim, eid)]) {
+    if (t === eid) continue
+    const d = (Pos.x[t] - Pos.x[eid]) * (Pos.x[t] - Pos.x[eid]) + (Pos.y[t] - Pos.y[eid]) * (Pos.y[t] - Pos.y[eid])
+    if (d < bestD) {
+      best = t
+      bestD = d
+    }
+  }
+  return best
 }
 
 function inOwnBox(sim: Sim, team: number, x: number, y: number): boolean {
