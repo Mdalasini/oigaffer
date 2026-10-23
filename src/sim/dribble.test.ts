@@ -65,8 +65,10 @@ describe('choosing a dribble', () => {
     sim.c.Attr.pace[carrier] = 0.95
     sim.c.Attr.pace[defender] = 0.3
     place(sim, defender, 5 * dir, 0.5)
+    sim.c.Attr.dribbling[carrier] = 0.9
     revealAll(sim)
-    decideOnBall(sim, carrier)
+    // Taking a man on is chosen some of the time, so give them a few looks at it.
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
     expect(sim.c.Intent.kind[carrier]).toBe(IntentKind.Pass)
     expect(sim.c.Plan.target[carrier]).toBe(carrier)
     const events = []

@@ -12,7 +12,7 @@ import { topSpeed } from './movement'
 import { launch, PassType, type PassPlan } from './passing'
 import type { Belief } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
-import { gauss } from './rng'
+import { chance, gauss } from './rng'
 import { teamOf, type Sim } from './sim'
 import { Phase } from './state'
 
@@ -71,9 +71,10 @@ export function chooseDribble(sim: Sim, eid: number, tx: number, ty: number, pas
   // How much the opponent is in the way of the carry, -1 behind .. 1 dead ahead.
   const ahead = d > 0 ? (ox * cx + oy * cy) / (d * cl) : 0
   if (d < 1.8 && ahead < 0.3 && !passAvailable) return { mode: DribbleMode.Shield, knockOn: null }
-  if (ahead > 0.3 && d > 2.5 && d < 9) {
+  // Taking a man on is a decision, not a habit: better dribblers try it more.
+  if (ahead > 0.5 && d > 2.5 && d < 7 && chance(sim.m.rng, 0.15 + 0.35 * Attr.dribbling[eid])) {
     const knock = planKnockOn(sim, eid, cx / cl, cy / cl, d)
-    if (knock && topSpeed(sim, eid) + 1.5 * Attr.dribbling[eid] > topSpeed(sim, nearest)) return { mode: DribbleMode.Normal, knockOn: knock }
+    if (knock && topSpeed(sim, eid) + Attr.dribbling[eid] > topSpeed(sim, nearest) + 0.3) return { mode: DribbleMode.Normal, knockOn: knock }
   }
   if (ahead > 0 && d < 6) return { mode: DribbleMode.FaceUp, knockOn: null }
   if (d > 8 || ahead < -0.3) return { mode: DribbleMode.Sprint, knockOn: null }
@@ -100,7 +101,7 @@ function planKnockOn(sim: Sim, eid: number, ux: number, uy: number, d: number): 
   if (s < 0 || s * FLIGHT_STRIDE * DT > 2.5) return null
   const opponents = sim.teams[1 - teamOf(sim, eid)]
   const risk = interceptRisk(sim, eid, opponents, flight, s, eid, Pos.x[eid], Pos.y[eid], Vel.x[eid], Vel.y[eid])
-  if (risk > 0.35) return null
+  if (risk > 0.2) return null
   return { type: PassType.Through, target: eid, x: tx, y: ty, score: 0, success: 1 - risk }
 }
 
