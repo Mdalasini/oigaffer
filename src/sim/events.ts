@@ -27,7 +27,14 @@ export type SimEvent =
       fromBehind: boolean
       x: number
       y: number
+      /** The fouled player's velocity just before the contact. */
+      onVx: number
+      onVy: number
     }
+  /** The referee's decisions. */
+  | { type: 'offside'; tick: number; by: number; x: number; y: number }
+  | { type: 'foul'; tick: number; by: number; on: number; x: number; y: number; award: 'free-kick' | 'penalty' | 'advantage' }
+  | { type: 'card'; tick: number; to: number; color: 'yellow' | 'red'; reason: string }
   /** The ball hit a post or the bar. */
   | { type: 'woodwork'; tick: number; x: number; y: number; z: number }
   /** A goalkeeper gets hands to the ball. */

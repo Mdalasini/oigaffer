@@ -13,9 +13,11 @@ export interface Sim {
   m: MatchState
   cfg: MatchConfig
   ball: number
-  /** All 22 players, home team first, each team in formation-slot order. */
+  /** Players on the pitch, home team first, each team in formation-slot order. */
   players: number[]
   teams: [number[], number[]]
+  /** Every player each team started with, including any since sent off. */
+  roster: [number[], number[]]
   formations: [Formation, Formation]
   /** Per-tick derived caches. Not part of a snapshot; rebuilt every tick. */
   scratch: Scratch
@@ -67,6 +69,7 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
     ball,
     players: [...teams[0], ...teams[1]],
     teams,
+    roster: [[...teams[0]], [...teams[1]]],
     formations,
     scratch: createScratch(),
     listeners: {},
@@ -113,4 +116,11 @@ export function label(sim: Sim, eid: number): string {
   if (eid === sim.ball) return 'ball'
   if (eid < 0) return '-'
   return (teamOf(sim, eid) === 0 ? 'H' : 'A') + sim.c.Player.number[eid]
+}
+
+/** Rebuilds who is on the pitch from the roster, leaving out anyone sent off. */
+export function syncRoster(sim: Sim): void {
+  const off = sim.m.sentOff
+  sim.teams = [sim.roster[0].filter((e) => !off.includes(e)), sim.roster[1].filter((e) => !off.includes(e))]
+  sim.players = [...sim.teams[0], ...sim.teams[1]]
 }

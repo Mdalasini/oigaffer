@@ -20,7 +20,7 @@ function useGame(game: Game) {
       const m = game.sim.m
       const shown = game.shownTick()
       const sel = game.selected.map((e) => `${e}:${intentOf(game, e)}`).join(',')
-      return `${m.score[0]}|${m.score[1]}|${Math.floor(shown / TICK_RATE)}|${m.phase}|${game.paused}|${game.speed}|${game.scrubTick}|${sel}`
+      return `${m.score[0]}|${m.score[1]}|${Math.floor(shown / TICK_RATE)}|${m.phase}|${game.paused}|${game.speed}|${game.scrubTick}|${sel}|${Object.keys(m.yellows).length}|${m.sentOff.length}`
     },
   )
 }
@@ -31,6 +31,20 @@ function intentOf(game: Game, eid: number): string {
       ? game.sim.c.Intent.kind[eid]
       : frameValue(game.rec.frame(game.scrubTick), game.rec.entities.indexOf(eid), 'intent')
   return INTENT_NAMES[kind as IntentKind]
+}
+
+/** Yellow and red cards shown to a team so far. */
+function Cards({ game, team }: { game: Game; team: number }) {
+  const { m } = game.sim
+  const yellows = game.sim.roster[team].reduce((n, e) => n + (m.yellows[e] ?? 0), 0)
+  const reds = m.sentOff.filter((e) => game.sim.roster[team].includes(e)).length
+  if (!yellows && !reds) return null
+  return (
+    <span className={team === 0 ? 'cards home' : 'cards away'}>
+      {yellows > 0 && <span className="card yellow">{yellows}</span>}
+      {reds > 0 && <span className="card red">{reds}</span>}
+    </span>
+  )
 }
 
 async function saveFlag(flag: Flag): Promise<string> {
@@ -94,6 +108,9 @@ export function App() {
         </span>
         <span className="clock">{clock(matchClock(game.sim) - (m.tick - game.shownTick()))}</span>
         <span className="phase">{PHASE_NAMES[m.phase]}</span>
+        {[0, 1].map((team) => (
+          <Cards key={team} game={game} team={team} />
+        ))}
         <span className="spacer" />
         <button onClick={() => game.setPaused(!game.paused)}>{game.paused ? 'Play' : 'Pause'}</button>
         {SPEEDS.map((s) => (

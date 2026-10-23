@@ -13,6 +13,7 @@ function recordTouch(sim: Sim, eid: number) {
   const { m, c } = sim
   m.ball.lastKick = ''
   if (c.Player.team[eid] !== m.ball.backPassTeam) m.ball.backPassTeam = -1
+  if (eid !== m.ball.indirectFrom) m.ball.indirectFrom = -1
   m.ball.lastTouch = eid
   m.ball.lastTeam = c.Player.team[eid]
   m.ball.touchTick = m.tick

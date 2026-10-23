@@ -64,7 +64,9 @@ function checkOutOfPlay(sim: Sim, fromX: number, fromY: number, fromZ: number, s
     // The team defending this goal is the one attacking away from it.
     const defending = attackDir(sim, 0) === side ? 1 : 0
     const attacking = 1 - defending
-    if (Math.abs(y) < GOAL_WIDTH / 2 - BALL_RADIUS && z < GOAL_HEIGHT - BALL_RADIUS) {
+    // Straight in from an indirect free kick does not count: goal kick.
+    const direct = m.ball.indirectFrom >= 0 && m.ball.indirectFrom === m.ball.lastTouch
+    if (Math.abs(y) < GOAL_WIDTH / 2 - BALL_RADIUS && z < GOAL_HEIGHT - BALL_RADIUS && !direct) {
       awardGoal(sim, attacking)
     } else if (m.ball.lastTeam === defending) {
       awardRestart(sim, Restart.Corner, attacking, side * HALF_LENGTH, (y > 0 ? 1 : -1) * HALF_WIDTH)
