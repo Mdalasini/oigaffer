@@ -22,7 +22,11 @@ const MIN_HOLD = Math.round(0.3 * TICK_RATE)
 const FIRST_TIME_WINDOW = 0.6
 const CARRY_DISTANCE = 8
 const CARRY_ANGLES = [0, 0.5, -0.5, 1, -1]
-const SHOT_BIAS = 1.15
+const SHOT_BIAS = 1
+/** Below this a player keeps the ball rather than shooting. */
+const MIN_XG = 0.08
+/** A first-time finish needs a clearer chance than one taken after a touch. */
+const FIRST_TIME_MIN_XG = 0.14
 const FIRST_TIME_SHOT = 0.85
 
 const ic: Intercept = { t: 0, x: 0, y: 0 }
@@ -76,7 +80,9 @@ export function decideOnBall(sim: Sim, eid: number): void {
   const pressed = pressure < 2.5
   const xg = estimateXg(sim, eid, bx, by)
   // Players shoot a little more readily than the numbers say.
-  if (xg > 0.03 && xg * SHOT_BIAS >= Math.max(carry.score, pass ? pass.score : -1)) {
+  // Straight off the first touch only for a big chance; otherwise settle it first.
+  const settled = held >= MIN_HOLD || xg > 0.15
+  if (settled && xg > MIN_XG && xg * SHOT_BIAS >= Math.max(carry.score, pass ? pass.score : -1)) {
     setShotPlan(sim, eid, planShot(sim, eid, bx, by))
     return setIntent(sim, eid, IntentKind.Shoot)
   }
@@ -140,10 +146,10 @@ export function decideFirstTime(sim: Sim, eid: number): void {
   // In front of goal a first-time finish beats taking a touch.
   const xg = estimateXg(sim, eid, ic.x, ic.y) * FIRST_TIME_SHOT
   if (wall < 0 && pressure > 3) {
-    if (xg > 0.08) return setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
+    if (xg > FIRST_TIME_MIN_XG) return setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
     return setPlan(sim, eid, null)
   }
-  if (xg > 0.05 && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
+  if (xg > FIRST_TIME_MIN_XG && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
   else if (plan && plan.success > 0.65 && plan.score > 0.005) setPlan(sim, eid, plan, true)
   else setPlan(sim, eid, null)
 }

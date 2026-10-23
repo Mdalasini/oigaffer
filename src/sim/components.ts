@@ -60,6 +60,10 @@ export function createComponents() {
       tackleReady: i32(),
       /** Earliest tick this player may start another off-ball run. */
       runReady: i32(),
+      /** Earliest tick a carrier considers taking a man on again. */
+      takeOnReady: i32(),
+      /** Earliest tick a jockeying defender weighs up going in again. */
+      commitCheck: i32(),
     },
     /** Lunging (a slide in progress), on the ground afterwards, or stumbling after a challenge. */
     Body: { lungeUntil: i32(), downUntil: i32(), stumbleUntil: i32() },

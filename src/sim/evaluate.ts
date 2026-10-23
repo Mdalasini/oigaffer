@@ -18,7 +18,8 @@ export function pitchValue(sim: Sim, team: number, x: number, y: number): number
   const ax = x * attackDir(sim, team)
   const gx = HALF_LENGTH - ax
   const v = clamp(1 - Math.sqrt(gx * gx + y * y) / 75, 0, 1)
-  return 0.35 * v * v * v
+  // Capped: right in front of goal everyone converges, so just being there is worth no more than a good chance.
+  return Math.min(0.22, 0.35 * v * v * v)
 }
 
 /** What `team` stands to lose by giving the ball away at (x, y). */

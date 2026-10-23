@@ -68,7 +68,10 @@ describe('choosing a dribble', () => {
     sim.c.Attr.dribbling[carrier] = 0.9
     revealAll(sim)
     // Taking a man on is chosen some of the time, so give them a few looks at it.
-    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) {
+      sim.c.Brain.takeOnReady[carrier] = 0
+      decideOnBall(sim, carrier)
+    }
     expect(sim.c.Intent.kind[carrier]).toBe(IntentKind.Pass)
     expect(sim.c.Plan.target[carrier]).toBe(carrier)
     const events = []
@@ -127,7 +130,10 @@ describe('review regressions', () => {
     sim.c.Attr.dribbling[carrier] = 0.9
     place(sim, defender, 5 * dir, 0.5 * dir)
     revealAll(sim)
-    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) {
+      sim.c.Brain.takeOnReady[carrier] = 0
+      decideOnBall(sim, carrier)
+    }
     expect(sim.c.Plan.y[carrier] * dir).toBeLessThan(0)
   })
 
@@ -141,7 +147,10 @@ describe('review regressions', () => {
     sim.c.Attr.vision[carrier] = 1
     place(sim, defender, 5 * dir, 0.5)
     revealAll(sim)
-    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) {
+      sim.c.Brain.takeOnReady[carrier] = 0
+      decideOnBall(sim, carrier)
+    }
     let kicked = false
     for (let i = 0; i < TICK_RATE && !kicked; i++) {
       step(sim)

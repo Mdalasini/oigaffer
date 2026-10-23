@@ -17,8 +17,8 @@ import { readBall } from './systems/ball'
 import { Restart } from './state'
 
 /** How far a keeper's hands reach from their body, standing and at full stretch in a dive. */
-const STAND_REACH = 0.9
-const DIVE_REACH = 1.5
+const STAND_REACH = 1.0
+const DIVE_REACH = 1.8
 /** Highest a keeper can take the ball, standing and jumping/diving. */
 export const KEEPER_HEIGHT = 2.6
 const DIVE_SECONDS = 0.6
@@ -180,8 +180,9 @@ export function handle(sim: Sim, gk: number): void {
   // Parry: knock it back out and away from the middle of the goal.
   const away = c.Pos.y[ball] >= c.Pos.y[gk] ? 1 : -1
   const out = attackDir(sim, teamOf(sim, gk))
-  c.Vel.x[ball] = Math.abs(vx) * range(m.rng, 0.15, 0.4) * out
-  c.Vel.y[ball] = away * range(m.rng, 3, 7) + gauss(m.rng)
+  c.Vel.x[ball] = Math.abs(vx) * range(m.rng, 0.2, 0.45) * out
+  // Pushed wide, away from the goal mouth, where a rebound is least dangerous.
+  c.Vel.y[ball] = away * range(m.rng, 6, 11) + gauss(m.rng)
   c.Air.vz[ball] = range(m.rng, 1, 4)
   m.ball.owner = -1
   c.Brain.noTouchUntil[gk] = m.tick + Math.round(0.5 * TICK_RATE)

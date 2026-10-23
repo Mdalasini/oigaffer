@@ -139,7 +139,7 @@ function judge(sim: Sim, e: EventOf<'tackle'>): Card {
   const { c, m } = sim
   const fouler = e.by
   let card: Card = null
-  if (e.reckless) card = chance(m.rng, 0.1 + 0.2 * c.Attr.aggression[fouler]) ? 'red' : 'yellow'
+  if (e.reckless) card = chance(m.rng, 0.03 + 0.07 * c.Attr.aggression[fouler]) ? 'red' : 'yellow'
   if (deniesGoal(sim, e)) card = inPenaltyArea(sim, teamOf(sim, fouler), e.x, e.y) && e.kind !== 'slide' ? 'yellow' : 'red'
   if (!card && stopsAttack(sim, e) && chance(m.rng, 0.6)) card = 'yellow'
   if (!card && m.fouls[fouler] >= PERSISTENT && !(m.yellows[fouler] > 0)) card = 'yellow'
