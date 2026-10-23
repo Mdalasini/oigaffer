@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { TICK_RATE } from './constants'
-import { chooseDribble, DribbleMode, TAKE_ON_SECONDS } from './dribble'
+import { chooseDribble, DribbleMode, TAKE_ON_SECONDS, takeOn } from './dribble'
 import { IntentKind, setIntent } from './intents'
 import { newMatch } from './match'
 import { decideOnBall } from './onball'
@@ -156,6 +156,40 @@ describe('shielding and jostling', () => {
 })
 
 describe('review regressions', () => {
+  test('a defender beaten by a take-on pulls out of the standing tackle they were going in with', () => {
+    const sim = emptyPitch()
+    const { carrier, dir } = carrierAtCentre(sim)
+    const defender = sim.teams[1][2]
+    place(sim, defender, 1.5 * dir, 0.3)
+    revealAll(sim)
+    let beaten = false
+    for (let i = 0; i < 50 && !beaten; i++) {
+      setIntent(sim, defender, IntentKind.Tackle, carrier)
+      takeOn(sim, carrier, defender)
+      beaten = sim.m.events.some((e) => e.type === 'take-on' && e.beaten)
+    }
+    expect(beaten).toBe(true)
+    expect(sim.c.Intent.kind[defender]).toBe(IntentKind.Press)
+  })
+
+  test('a take-on turned down in favour of nothing else leaves an ordinary dribble, not a half-made cut', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const carrier = sim.teams[0][6]
+    const defender = sim.teams[1][2]
+    place(sim, carrier, 30 * dir, 8)
+    place(sim, sim.ball, 30.4 * dir, 8)
+    sim.m.ball.owner = carrier
+    sim.m.possession = 0
+    sim.c.Attr.dribbling[carrier] = 0.9
+    place(sim, defender, 32.8 * dir, 8.4)
+    revealAll(sim)
+    sim.c.Brain.takeOnKeen[carrier] = sim.m.tick + 100
+    const choice = chooseDribble(sim, carrier, 40 * dir, 8, false)
+    expect(choice.cut).not.toBeNull()
+    expect(choice.mode).not.toBe(DribbleMode.TakeOn)
+  })
+
   test('a knock-on goes round the side the defender is not on', () => {
     const sim = emptyPitch()
     const { carrier, dir } = carrierAtCentre(sim)

@@ -8,6 +8,7 @@ import { DT, FOOT_REACH, TICK_RATE } from './constants'
 import { emit } from './events'
 import { arrivalSample, dist2, interceptRisk, nearestOpponent } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
+import { IntentKind, setIntent } from './intents'
 import { createFlight, FLIGHT_STRIDE, simulateFlight } from './kicks'
 import { topSpeed } from './movement'
 import { launch, PassType, type PassPlan } from './passing'
@@ -71,7 +72,7 @@ export interface DribbleChoice {
   mode: DribbleMode
   /** Set when the best move is to knock the ball past the defender and run onto it. */
   knockOn: PassPlan | null
-  /** Set when the best move is to cut past a close defender: where to and who. */
+  /** Set when cutting past a close defender is on: where to and who. `mode` is the fallback if it is turned down. */
   cut: { x: number; y: number; on: number } | null
 }
 
@@ -104,7 +105,7 @@ export function chooseDribble(sim: Sim, eid: number, tx: number, ty: number, pas
   if (inTheWay && sim.m.tick < Brain.takeOnKeen[eid]) {
     if (close) {
       const cut = planCut(sim, eid, ox / d, oy / d, cx, cy)
-      if (cut) return { mode: DribbleMode.TakeOn, knockOn: null, cut: { ...cut, on: nearest } }
+      if (cut) return { mode: DribbleMode.FaceUp, knockOn: null, cut: { ...cut, on: nearest } }
     } else {
       const knock = planKnockOn(sim, eid, cx / cl, cy / cl, d)
       if (knock && topSpeed(sim, eid) + Attr.dribbling[eid] > topSpeed(sim, nearest) + 0.3) return { mode: DribbleMode.Normal, knockOn: knock, cut: null }
@@ -144,6 +145,8 @@ export function takeOn(sim: Sim, eid: number, defender: number): void {
   c.Brain.takeOnKeen[eid] = 0
   const beaten = chance(m.rng, beatChance(sim, eid, defender))
   if (beaten) {
+    // A standing challenge already on its way is pulled out of; a slide is past stopping.
+    if (c.Intent.kind[defender] === IntentKind.Tackle && m.tick >= c.Body.lungeUntil[defender]) setIntent(sim, defender, IntentKind.Press, eid)
     c.Body.stumbleUntil[defender] = m.tick + Math.round(WRONG_FOOTED_SECONDS * TICK_RATE)
     c.Brain.tackleReady[defender] = Math.max(c.Brain.tackleReady[defender], m.tick + Math.round((WRONG_FOOTED_SECONDS + 0.3) * TICK_RATE))
   } else c.Brain.commitCheck[defender] = m.tick

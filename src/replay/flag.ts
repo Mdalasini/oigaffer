@@ -11,7 +11,7 @@ import { step } from '../sim/step'
 import { ENTITY_FIELDS, FRAME_FIELDS, Recorder, type Keyframe } from './recorder'
 
 /** Bump whenever components or match state change shape: older flags still report, but cannot re-simulate. */
-export const FLAG_VERSION = 4
+export const FLAG_VERSION = 5
 const BEFORE = 20 * TICK_RATE
 const AFTER = 5 * TICK_RATE
 
