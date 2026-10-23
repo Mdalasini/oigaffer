@@ -75,7 +75,7 @@ export function perceptionSystem(sim: Sim): void {
 function warnCarrier(sim: Sim) {
   const { Pos, Brain } = sim.c
   const carrier = sim.m.ball.owner
-  if (carrier < 0) return
+  if (carrier < 0 || sim.m.tick < Brain.warnedUntil[carrier]) return
   const team = teamOf(sim, carrier)
   for (const opp of sim.teams[1 - team]) {
     const dx = Pos.x[opp] - Pos.x[carrier]
@@ -87,7 +87,8 @@ function warnCarrier(sim: Sim) {
       const my = Pos.y[mate] - Pos.y[carrier]
       if (mx * mx + my * my > HEARING_RADIUS * HEARING_RADIUS) continue
       call(sim, mate, 'man-on', carrier, opp)
-      break
+      Brain.warnedUntil[carrier] = sim.m.tick + 2 * TICK_RATE
+      return
     }
   }
 }

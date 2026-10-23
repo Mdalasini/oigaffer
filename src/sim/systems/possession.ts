@@ -1,7 +1,14 @@
 import { takeControl } from '../actions'
 import { CONTROL_HEIGHT, FOOT_REACH, LOSE_DISTANCE } from '../constants'
-import type { Sim } from '../sim'
+import { nearestOpponent } from '../evaluate'
+import type { Belief } from '../perception'
+import { atan2, clamp, cos, sin } from '../fmath'
+import { HALF_LENGTH } from '../pitch'
+import { chance, gauss } from '../rng'
+import { attackDir, teamOf, type Sim } from '../sim'
 import { Phase } from '../state'
+
+const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 
 /** Decides who has the ball: owners lose a ball that strays, and loose balls go to whoever reaches them. */
 export function possessionSystem(sim: Sim): void {
@@ -30,5 +37,49 @@ export function possessionSystem(sim: Sim): void {
       bestD = d2
     }
   }
-  if (best >= 0) takeControl(sim, best)
+  if (best >= 0) firstTouch(sim, best)
+}
+
+/**
+ * Controlling a ball gets harder the faster it arrives relative to the
+ * player, the higher it is and the less they face it. A good touch is
+ * directional: into space ahead, or away from pressure.
+ */
+function firstTouch(sim: Sim, eid: number) {
+  const { c, m, ball } = sim
+  const rvx = c.Vel.x[ball] - c.Vel.x[eid]
+  const rvy = c.Vel.y[ball] - c.Vel.y[eid]
+  const rel = Math.sqrt(rvx * rvx + rvy * rvy)
+  const facing = rel > 0.5 ? (1 - cos(atan2(-rvy, -rvx) - c.Facing.a[eid])) / 2 : 0
+  const heavy = clamp(
+    0.03 + (rel - 8) / 16 + (c.Air.z[ball] > 0.4 ? 0.12 : 0) + facing * 0.15 - 0.3 * c.Attr.firstTouch[eid],
+    0.01,
+    0.7,
+  )
+  if (chance(m.rng, heavy)) {
+    const a = atan2(rvy, rvx) + gauss(m.rng) * 0.9
+    const speed = 1.5 + rel * 0.35
+    return takeControl(sim, eid, false, cos(a) * speed, sin(a) * speed)
+  }
+  const dir = attackDir(sim, teamOf(sim, eid))
+  const x = c.Pos.x[eid]
+  const y = c.Pos.y[eid]
+  let ux = dir * HALF_LENGTH - x
+  let uy = -y * 0.3
+  const ul = Math.sqrt(ux * ux + uy * uy) || 1
+  ux /= ul
+  uy /= ul
+  // With someone close, take the touch away from them instead.
+  if (nearestOpponent(sim, eid, x, y, opp) >= 0) {
+    const ox = x - opp.x
+    const oy = y - opp.y
+    const d = Math.sqrt(ox * ox + oy * oy)
+    if (d < 4 && d > 0) {
+      const w = (4 - d) / 4
+      ux = ux * (1 - w) + (ox / d) * w
+      uy = uy * (1 - w) + (oy / d) * w
+    }
+  }
+  const a = atan2(uy, ux)
+  takeControl(sim, eid, true, cos(a) * 1.2, sin(a) * 1.2)
 }
