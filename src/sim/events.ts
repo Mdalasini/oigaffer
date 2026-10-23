@@ -14,12 +14,26 @@ export type SimEvent =
   | { type: 'phase'; tick: number; phase: Phase }
   /** A player shouts to teammates; `to` hears it, `about` is who it concerns. */
   | { type: 'call'; tick: number; by: number; call: CallKind; to: number; about: number }
+  /** A challenge for the ball, resolved the moment the defender gets there. */
+  | {
+      type: 'tackle'
+      tick: number
+      by: number
+      on: number
+      kind: 'standing' | 'slide' | 'charge'
+      outcome: 'won' | 'missed' | 'foul'
+      /** A slide through the back of the man: endangering an opponent. */
+      reckless: boolean
+      fromBehind: boolean
+      x: number
+      y: number
+    }
   /** The ball hit a post or the bar. */
   | { type: 'woodwork'; tick: number; x: number; y: number; z: number }
   /** A goalkeeper gets hands to the ball. */
   | { type: 'save'; tick: number; by: number; kind: 'catch' | 'parry'; speed: number }
 
-export type KickKind = 'pass' | 'touch' | 'restart' | 'shot' | 'header' | 'knock-on'
+export type KickKind = 'pass' | 'touch' | 'restart' | 'shot' | 'header' | 'knock-on' | 'tackle' | 'clearance'
 export interface KickDetail {
   /** Pass type name, e.g. "through". */
   pass?: string

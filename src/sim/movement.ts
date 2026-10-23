@@ -11,6 +11,8 @@ export function topSpeed(sim: Sim, eid: number): number {
 export function acceleration(sim: Sim, eid: number): number {
   // A diving keeper launches sideways far faster than anyone can run.
   if (sim.m.tick < sim.c.Keeper.diveUntil[eid]) return 14 + 6 * sim.c.Attr.keeping[eid]
+  // So does a player lunging into a slide.
+  if (sim.m.tick < sim.c.Body.lungeUntil[eid]) return 10
   return 3 + 2.5 * sim.c.Attr.accel[eid]
 }
 

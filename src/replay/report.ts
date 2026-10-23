@@ -92,6 +92,8 @@ export function describeEvent(flag: Flag, e: SimEvent): string {
       return `phase -> ${PHASES[e.phase]}`
     case 'call':
       return `call "${e.call}" ${name(e.by)} -> ${name(e.to)} about ${name(e.about)}`
+    case 'tackle':
+      return `${e.kind} tackle by ${name(e.by)} on ${name(e.on)}: ${e.outcome}${e.fromBehind ? ', from behind' : ''}${e.reckless ? ', reckless' : ''}`
     case 'woodwork':
       return `off the ${e.z > 2.3 ? 'bar' : 'post'} at ${at(e.x, e.y)}`
     case 'save':

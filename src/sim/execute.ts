@@ -8,6 +8,7 @@ import { intercept, topSpeed, type Intercept } from './movement'
 import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
+import { challenge, contain, isGrounded, isStumbling } from './defending'
 import { dribble, type DribbleMode } from './dribble'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
@@ -48,7 +49,11 @@ export function intentSystem(sim: Sim): void {
         receive(sim, eid, top)
         break
       case IntentKind.Press:
-        press(sim, eid, top)
+        if (roleOf(sim, eid) === 'GK') press(sim, eid, top)
+        else contain(sim, eid, top)
+        break
+      case IntentKind.Tackle:
+        challenge(sim, eid, top)
         break
       case IntentKind.Carry:
         carry(sim, eid, top)
@@ -78,8 +83,9 @@ export function intentSystem(sim: Sim): void {
         if (!isDiving(sim, eid)) setIntent(sim, eid, IntentKind.Hold)
         break
     }
-    // A keeper picking themselves up after a dive cannot move.
-    if (isDown(sim, eid)) moveTo(sim, eid, Pos.x[eid], Pos.y[eid], 0)
+    // On the ground after a dive or a slide nobody can move; a stumble slows them right down.
+    if (isDown(sim, eid) || isGrounded(sim, eid)) moveTo(sim, eid, Pos.x[eid], Pos.y[eid], 0)
+    else if (isStumbling(sim, eid)) Motor.speed[eid] = Math.min(Motor.speed[eid], 1.5)
   }
 }
 
@@ -127,7 +133,8 @@ function receive(sim: Sim, eid: number, top: number) {
   const shot = shotPlanOf(sim, eid)
   const plan = planOf(sim, eid)
   // First-time passes are planned along the ground; a bouncing ball gets controlled instead.
-  if (!shot && c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
+  // Clearances (no target) are hit however the ball comes.
+  if (!shot && plan && plan.target >= 0 && c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
   setPlan(sim, eid, null)
   setIntent(sim, eid, IntentKind.Hold)
   if (shot) return strikeShot(sim, eid, shot, true)

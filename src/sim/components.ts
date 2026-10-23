@@ -56,7 +56,11 @@ export function createComponents() {
       gotBall: i32(),
       /** No more "man on" warnings to this player until this tick. */
       warnedUntil: i32(),
+      /** Earliest tick this player may commit to another challenge. */
+      tackleReady: i32(),
     },
+    /** Lunging (a slide in progress), on the ground afterwards, or stumbling after a challenge. */
+    Body: { lungeUntil: i32(), downUntil: i32(), stumbleUntil: i32() },
     /** Goalkeeper dive state: a pending dive (tick, target) and how long the dive and recovery last. */
     Keeper: { diveAt: i32(), diveUntil: i32(), downUntil: i32(), x: f64(), y: f64() },
     /** What each player last perceived of every other entity, and on which tick. */

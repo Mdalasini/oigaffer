@@ -80,6 +80,12 @@ export function decideOnBall(sim: Sim, eid: number): void {
     setShotPlan(sim, eid, planShot(sim, eid, bx, by))
     return setIntent(sim, eid, IntentKind.Shoot)
   }
+  // Under pressure deep in their own half with nothing safe on: get rid of it.
+  if (inDangerZone(sim, eid, bx, by) && pressure < 3 && (!pass || pass.success < 0.6)) {
+    const clear = clearancePlan(sim, eid, bx, by)
+    setPlan(sim, eid, clear)
+    return setIntent(sim, eid, IntentKind.Pass, -1, clear.x, clear.y)
+  }
   if (pass && (held >= MIN_HOLD || pressed) && (pass.score > carry.score + 0.004 || (pressed && pass.success > 0.5))) {
     setPlan(sim, eid, pass)
     return setIntent(sim, eid, IntentKind.Pass, pass.target, pass.x, pass.y)
@@ -129,9 +135,25 @@ export function decideFirstTime(sim: Sim, eid: number): void {
   }
   // Volleying a long ball first time is rare; first-time passes stay on the ground.
   const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
+  if (inDangerZone(sim, eid, ic.x, ic.y) && pressure < 3 && (!plan || plan.success < 0.7)) {
+    return setPlan(sim, eid, clearancePlan(sim, eid, ic.x, ic.y), true)
+  }
   if (xg > 0.05 && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
   else if (plan && plan.success > 0.65 && plan.score > 0.005) setPlan(sim, eid, plan, true)
   else setPlan(sim, eid, null)
+}
+
+/** Near their own goal, where losing the ball is most dangerous. */
+function inDangerZone(sim: Sim, eid: number, x: number, y: number): boolean {
+  return x * attackDir(sim, teamOf(sim, eid)) < -HALF_LENGTH + 28 && Math.abs(y) < 30
+}
+
+/** A high, long ball upfield towards the touchline on the ball's side, away from goal. */
+function clearancePlan(sim: Sim, eid: number, x: number, y: number): PassPlan {
+  const dir = attackDir(sim, teamOf(sim, eid))
+  const tx = clamp(x + dir * 40, -HALF_LENGTH + 5, HALF_LENGTH - 5)
+  const ty = (y >= 0 ? 1 : -1) * 24
+  return { type: PassType.Lofted, target: -1, x: tx, y: ty, score: 0, success: 0 }
 }
 
 /**
