@@ -111,8 +111,11 @@ export function openPlayTarget(sim: Sim, eid: number, out: Point): Point {
     shapeTarget(sim, cover, out)
     return out
   }
-  markZone(sim, eid, out)
-  if (BACK_LINE.includes(roleOf(sim, eid))) out.x = sim.scratch.lineX[team] * attackDir(sim, team)
+  const dir = attackDir(sim, team)
+  // Furthest up the pitch (attacking-frame x) this player may stand and still be goal side of their man.
+  const limit = markZone(sim, eid, out)
+  // The back line holds one height, but drops rather than leave its man behind it.
+  if (BACK_LINE.includes(roleOf(sim, eid))) out.x = Math.min(sim.scratch.lineX[team], limit) * dir
   return out
 }
 
@@ -130,7 +133,8 @@ function openLane(sim: Sim, eid: number, carrier: number, out: Point) {
     const py = seen.y + dy * t - near.y
     if (t > 0.15 && t < 0.95 && px * px + py * py < 2 * 2) {
       // Move off the line on the side away from the blocker.
-      const side = (near.x - seen.x) * dy - (near.y - seen.y) * dx > 0 ? -1 : 1
+      // (-dy, dx) is the lane's left; step to the side the blocker is not on.
+      const side = (near.x - seen.x) * dy - (near.y - seen.y) * dx > 0 ? 1 : -1
       out.x = clamp(out.x + (-dy / len) * side * 4, -HALF_LENGTH + 2, HALF_LENGTH - 2)
       out.y = clamp(out.y + (dx / len) * side * 4, -HALF_WIDTH + 1.5, HALF_WIDTH - 1.5)
       return
@@ -138,8 +142,12 @@ function openLane(sim: Sim, eid: number, carrier: number, out: Point) {
   }
 }
 
-/** Zonal marking: pick up the nearest attacker in our zone, a little goal side of them. */
-function markZone(sim: Sim, eid: number, out: Point) {
+/**
+ * Zonal marking: pick up the nearest attacker in our zone, a little goal
+ * side of them. Returns the attacking-frame x the marker must stay behind
+ * to remain goal side (Infinity if marking nobody).
+ */
+function markZone(sim: Sim, eid: number, out: Point): number {
   const team = teamOf(sim, eid)
   const dir = attackDir(sim, team)
   let best = -1
@@ -155,10 +163,13 @@ function markZone(sim: Sim, eid: number, out: Point) {
       seen.y = near.y
     }
   }
-  if (best < 0) return
+  if (best < 0) return Infinity
   const gx = seen.x - dir * 1.5
   out.x = out.x * 0.4 + gx * 0.6
   out.y = out.y * 0.4 + seen.y * 0.6
+  // However the zone pulls, never end up on the wrong side of the man.
+  if ((out.x - gx) * dir > 0) out.x = gx
+  return gx * dir
 }
 
 /** The second man out of possession: stand in the lane to the carrier's nearest teammate. */
@@ -199,7 +210,8 @@ export function updateTeamShape(sim: Sim): void {
     scratch.lineX[team] = n ? sum / n : 0
     scratch.laneCutter[team] = -1
     scratch.laneOption[team] = -1
-    if (m.possession === team || m.ball.owner < 0) continue
+    // Cover holds while out of possession, a loose ball included; lane cutting needs a carrier.
+    if (m.possession === team) continue
     // Cover: a slot whose player has been pulled away is filled by the nearest teammate holding shape.
     for (const e of sim.teams[team]) {
       const role = roleOf(sim, e)
@@ -221,6 +233,7 @@ export function updateTeamShape(sim: Sim): void {
     }
     // Second man: the nearest free teammate to the carrier's nearest option cuts that lane.
     const carrier = m.ball.owner
+    if (carrier < 0) continue
     let option = -1
     let optionD = 25 * 25
     for (const o of sim.teams[1 - team]) {

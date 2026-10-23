@@ -137,3 +137,69 @@ describe('without the ball', () => {
     expect(sim.scratch.laneCutter[1]).not.toBe(sim.scratch.presser[1])
   })
 })
+
+describe('review regressions', () => {
+  test('stepping out of a blocked lane moves away from the blocker', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const carrier = sim.teams[0][6]
+    const mate = sim.teams[0][7]
+    place(sim, carrier, 0, 0)
+    place(sim, sim.ball, 0.4 * dir, 0)
+    sim.m.ball.owner = carrier
+    sim.m.possession = 0
+    place(sim, mate, 18 * dir, 0)
+    const blocker = sim.teams[1][6]
+    place(sim, blocker, 9 * dir, 1.5)
+    revealAll(sim)
+    const t = openPlayTarget(sim, mate, { x: 0, y: 0 })
+    // Lane from carrier to the new spot passes further from the blocker than the old one did.
+    const lx = t.x
+    const ly = t.y
+    const along = (9 * dir * lx + 1.5 * ly) / (lx * lx + ly * ly)
+    const off = Math.hypot(9 * dir - lx * along, 1.5 - ly * along)
+    expect(off).toBeGreaterThan(1.5)
+  })
+
+  test('a marker always ends up goal side of the attacker they pick up', () => {
+    const sim = emptyPitch()
+    attack(sim, 20)
+    revealAll(sim)
+    updateScratch(sim)
+    updateTeamShape(sim)
+    const dirAway = attackDir(sim, 1)
+    for (const d of sim.teams[1]) {
+      if (roleOf(sim, d) === 'GK') continue
+      const shape = shapeTarget(sim, d, { x: 0, y: 0 })
+      // Put a home attacker just ahead of this defender's slot (towards the away goal).
+      const att = sim.teams[0][9]
+      place(sim, att, shape.x - dirAway * 3, shape.y)
+      revealAll(sim)
+      const t = openPlayTarget(sim, d, { x: 0, y: 0 })
+      expect((t.x - sim.c.Pos.x[att]) * dirAway).toBeLessThan(0)
+    }
+  })
+
+  test('cover holds while an opponent’s pass is in the air', () => {
+    const sim = emptyPitch()
+    attack(sim, 20)
+    const cb = sim.teams[1][2]
+    revealAll(sim)
+    updateScratch(sim)
+    updateTeamShape(sim)
+    const shape = shapeTarget(sim, cb, { x: 0, y: 0 })
+    place(sim, cb, shape.x, shape.y + 25)
+    setIntent(sim, cb, IntentKind.Press, sim.teams[0][6])
+    for (const e of sim.teams[1]) {
+      if (e === cb) continue
+      const t = openPlayTarget(sim, e, { x: 0, y: 0 })
+      place(sim, e, t.x, t.y)
+      setIntent(sim, e, IntentKind.Hold)
+    }
+    sim.m.ball.owner = -1
+    revealAll(sim)
+    updateScratch(sim)
+    updateTeamShape(sim)
+    expect(sim.teams[1].some((e) => sim.scratch.cover[e] === cb)).toBe(true)
+  })
+})
