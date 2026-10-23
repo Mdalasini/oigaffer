@@ -41,7 +41,22 @@ export function createComponents() {
     Motor: { tx: f64(), ty: f64(), speed: f64(), faceX: f64(), faceY: f64(), hasFace: i32() },
     /** The player's current plan; see intents.ts. */
     Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32() },
-    Brain: { nextThink: i32(), noTouchUntil: i32(), lastTouch: i32(), nextScan: i32(), nextCall: i32() },
+    /** The ball action a player will make when they get to the ball; type -1 = none. */
+    Plan: { type: i32(), target: i32(), x: f64(), y: f64(), firstTime: i32() },
+    Brain: {
+      nextThink: i32(),
+      noTouchUntil: i32(),
+      lastTouch: i32(),
+      nextScan: i32(),
+      nextCall: i32(),
+      /** A teammate who asked this player to play the ball straight back, and until when. */
+      wallFor: i32(),
+      wallUntil: i32(),
+      /** Tick the player last brought the ball under control. */
+      gotBall: i32(),
+      /** No more "man on" warnings to this player until this tick. */
+      warnedUntil: i32(),
+    },
     /** What each player last perceived of every other entity, and on which tick. */
     Memory: { x: pairF64(), y: pairF64(), z: pairF64(), vx: pairF64(), vy: pairF64(), vz: pairF64(), seen: pairI32() },
   }

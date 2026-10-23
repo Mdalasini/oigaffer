@@ -4,7 +4,7 @@ import { placeBall } from './actions'
 import { FOOT_REACH, TICK_RATE } from './constants'
 import { emit } from './events'
 import { IntentKind, setIntent } from './intents'
-import { bestGroundPass, strikeGroundPass } from './passing'
+import { bestPass, strikePass } from './passing'
 import { revealAll } from './perception'
 import { kickOffTarget, type Point } from './shape'
 import { attackDir, createSim, roleOf, type Sim } from './sim'
@@ -107,6 +107,10 @@ function chooseTaker(sim: Sim, kind: Restart, team: number, x: number, y: number
 export function matchSystem(sim: Sim): void {
   const { m, c, ball } = sim
   const elapsed = m.tick - m.phaseTick
+  // The half ends on time, whether the ball is in play or waiting to be restarted.
+  if ((m.phase === Phase.Play || m.phase === Phase.Restart) && m.tick - m.halfStartTick >= halfTicks(sim)) {
+    return enterPhase(sim, m.half === 1 ? Phase.HalfTime : Phase.FullTime)
+  }
   switch (m.phase) {
     case Phase.KickOff:
     case Phase.Restart: {
@@ -114,11 +118,10 @@ export function matchSystem(sim: Sim): void {
       const dx = c.Pos.x[ball] - c.Pos.x[taker]
       const dy = c.Pos.y[ball] - c.Pos.y[taker]
       if (elapsed < RESTART_DELAY || dx * dx + dy * dy > FOOT_REACH * FOOT_REACH) return
-      const backwards = m.restart.kind === Restart.KickOff
-      const pass = bestGroundPass(sim, taker, backwards ? 4 : 6, 30)
+      const pass = bestPass(sim, taker, c.Pos.x[ball], c.Pos.y[ball])
       enterPhase(sim, Phase.Play)
-      if (pass) strikeGroundPass(sim, taker, pass.target, pass.x, pass.y)
       setIntent(sim, taker, IntentKind.Hold)
+      if (pass) strikePass(sim, taker, pass, { firstTime: false, pressure: Infinity })
       return
     }
     case Phase.Goal:
@@ -132,8 +135,6 @@ export function matchSystem(sim: Sim): void {
       }
       return
     case Phase.Play:
-      if (m.tick - m.halfStartTick >= halfTicks(sim)) enterPhase(sim, m.half === 1 ? Phase.HalfTime : Phase.FullTime)
-      return
     case Phase.FullTime:
       return
   }

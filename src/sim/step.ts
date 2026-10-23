@@ -1,4 +1,5 @@
-import { intentSystem, thinkSystem, updateScratch } from './brain'
+import { thinkSystem, updateScratch } from './brain'
+import { intentSystem } from './execute'
 import { matchSystem } from './match'
 import { perceptionSystem } from './perception'
 import type { Sim } from './sim'

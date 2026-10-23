@@ -6,8 +6,9 @@ import type { Sim } from './sim'
 import type { Phase, Restart } from './state'
 
 export type SimEvent =
-  | { type: 'kick'; tick: number; by: number; kind: KickKind; to: number; x: number; y: number }
-  | { type: 'control'; tick: number; by: number; x: number; y: number }
+  | ({ type: 'kick'; tick: number; by: number; kind: KickKind; to: number; x: number; y: number } & KickDetail)
+  /** A player's first touch on a loose ball; `clean` is false when it got away from them. */
+  | { type: 'control'; tick: number; by: number; x: number; y: number; clean: boolean }
   | { type: 'out'; tick: number; restart: Restart; team: number; x: number; y: number; lastTouch: number }
   | { type: 'goal'; tick: number; team: number; scorer: number }
   | { type: 'phase'; tick: number; phase: Phase }
@@ -15,7 +16,13 @@ export type SimEvent =
   | { type: 'call'; tick: number; by: number; call: CallKind; to: number; about: number }
 
 export type KickKind = 'pass' | 'touch' | 'restart'
-export type CallKind = 'man-on'
+export interface KickDetail {
+  /** Pass type name, e.g. "through". */
+  pass?: string
+  /** Played without controlling the ball first. */
+  firstTime?: boolean
+}
+export type CallKind = 'man-on' | 'give-and-go'
 
 export type SimEventType = SimEvent['type']
 export type EventOf<T extends SimEventType> = Extract<SimEvent, { type: T }>

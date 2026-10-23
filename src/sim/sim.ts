@@ -40,7 +40,7 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
   for (const team of [0, 1]) {
     formations[team].slots.forEach((slot, i) => {
       const eid = addEntity(world)
-      for (const comp of [c.Pos, c.Vel, c.Facing, c.Player, c.Attr, c.Motor, c.Intent, c.Brain]) {
+      for (const comp of [c.Pos, c.Vel, c.Facing, c.Player, c.Attr, c.Motor, c.Intent, c.Plan, c.Brain]) {
         addComponent(world, eid, comp)
       }
       c.Player.team[eid] = team
@@ -52,6 +52,8 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
       c.Brain.nextScan[eid] = teams[team].length * 4
       c.Brain.noTouchUntil[eid] = -1
       c.Brain.lastTouch[eid] = -1
+      c.Brain.wallFor[eid] = -1
+      c.Plan.type[eid] = -1
       teams[team].push(eid)
     })
   }

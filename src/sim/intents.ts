@@ -10,6 +10,8 @@ export const IntentKind = {
   Press: 5,
   TakeRestart: 6,
   Wait: 7,
+  /** Run to a point, e.g. after a pass in a give-and-go. */
+  Run: 8,
 } as const
 export type IntentKind = (typeof IntentKind)[keyof typeof IntentKind]
 
