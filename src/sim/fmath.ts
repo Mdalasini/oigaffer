@@ -70,6 +70,7 @@ export function atan2(y: number, x: number): number {
   return 0
 }
 
+/** Accurate for |x| <= 700; the sim only needs small arguments. */
 export function exp(x: number): number {
   if (x > 700) return Infinity
   if (x < -700) return 0
