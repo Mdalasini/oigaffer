@@ -22,10 +22,20 @@ export function halfTicks(sim: Sim): number {
   return sim.cfg.halfMinutes * 60 * TICK_RATE
 }
 
+/** Match clock in ticks: time played in earlier halves plus time into this one. */
+export function matchClock(sim: Sim): number {
+  const { m } = sim
+  return (m.half - 1) * halfTicks(sim) + Math.min(m.tick - m.halfStartTick, halfTicks(sim))
+}
+
 function enterPhase(sim: Sim, phase: Phase) {
   sim.m.phase = phase
   sim.m.phaseTick = sim.m.tick
   sim.m.events.push({ type: 'phase', tick: sim.m.tick, phase })
+  // A whistle cancels whatever players were about to do with the ball.
+  if (phase === Phase.Goal || phase === Phase.HalfTime || phase === Phase.FullTime) {
+    for (const eid of sim.players) setIntent(sim, eid, IntentKind.Hold)
+  }
 }
 
 function setupRestart(sim: Sim, kind: Restart, team: number, x: number, y: number, taker: number) {
@@ -114,12 +124,12 @@ export function matchSystem(sim: Sim): void {
     case Phase.HalfTime:
       if (elapsed >= HALF_TIME_PAUSE) {
         m.half = 2
+        m.halfStartTick = m.tick
         startKickOff(sim, 1 - m.firstKickOff)
       }
       return
     case Phase.Play:
-      if (m.half === 1 && m.tick >= halfTicks(sim)) enterPhase(sim, Phase.HalfTime)
-      else if (m.half === 2 && m.tick >= 2 * halfTicks(sim)) enterPhase(sim, Phase.FullTime)
+      if (m.tick - m.halfStartTick >= halfTicks(sim)) enterPhase(sim, m.half === 1 ? Phase.HalfTime : Phase.FullTime)
       return
     case Phase.FullTime:
       return

@@ -162,7 +162,7 @@ export function intentSystem(sim: Sim): void {
         break
       case IntentKind.Pass:
         moveTo(sim, eid, Pos.x[ball], Pos.y[ball], top * 0.6)
-        if (m.ball.owner === eid && Math.sqrt(dist2(sim, eid, ball)) <= FOOT_REACH) {
+        if (m.phase === Phase.Play && m.ball.owner === eid && Math.sqrt(dist2(sim, eid, ball)) <= FOOT_REACH) {
           strikeGroundPass(sim, eid, Intent.target[eid], Intent.x[eid], Intent.y[eid])
           setIntent(sim, eid, IntentKind.Hold)
         } else if (m.ball.owner !== eid) {
@@ -233,7 +233,7 @@ function carry(sim: Sim, eid: number, top: number) {
   c.Motor.faceX[eid] = Intent.x[eid]
   c.Motor.faceY[eid] = Intent.y[eid]
   const near = Math.sqrt(dist2(sim, eid, ball)) <= FOOT_REACH
-  if (near && m.tick - m.ball.touchTick >= TOUCH_INTERVAL) {
+  if (near && m.phase === Phase.Play && m.tick - m.ball.touchTick >= TOUCH_INTERVAL) {
     const speed = Math.sqrt(Vel.x[eid] * Vel.x[eid] + Vel.y[eid] * Vel.y[eid])
     const push = speed + 2.2
     touch(sim, eid, ux * push, uy * push)

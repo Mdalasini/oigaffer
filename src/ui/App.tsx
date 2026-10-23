@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Game } from '../game/Game'
 import { TICK_RATE } from '../sim/constants'
+import { matchClock } from '../sim/match'
 import { Phase } from '../sim/state'
 import { PitchCanvas } from './PitchCanvas'
 
@@ -18,7 +19,7 @@ export function App() {
     (fn) => game.subscribe(fn),
     () => {
       const m = game.sim.m
-      return `${m.score[0]}|${m.score[1]}|${clock(m.tick)}|${PHASE_NAMES[m.phase]}|${game.paused}|${game.speed}`
+      return `${m.score[0]}|${m.score[1]}|${clock(matchClock(game.sim))}|${PHASE_NAMES[m.phase]}|${game.paused}|${game.speed}`
     },
   )
   const [home, away, time, phase, paused, speed] = status.split('|')

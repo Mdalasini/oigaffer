@@ -35,6 +35,8 @@ export interface MatchState {
   tick: number
   rng: Rng
   half: 1 | 2
+  /** Tick the current half kicked off. */
+  halfStartTick: number
   phase: Phase
   phaseTick: number
   restart: { kind: Restart; team: number; x: number; y: number; taker: number }
@@ -59,6 +61,7 @@ export function createMatchState(cfg: MatchConfig): MatchState {
     tick: 0,
     rng: createRng(cfg.seed),
     half: 1,
+    halfStartTick: 0,
     phase: Phase.KickOff,
     phaseTick: 0,
     restart: { kind: Restart.KickOff, team: 0, x: 0, y: 0, taker: -1 },

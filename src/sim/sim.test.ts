@@ -128,3 +128,55 @@ describe('determinism', () => {
     expect(state(c)).not.toBe(state(a))
   })
 })
+
+describe('review regressions', () => {
+  function loose(sim: Sim, x: number, y: number, vx: number, vy: number, lastTeam = 1) {
+    sim.m.phase = Phase.Play
+    sim.m.ball.owner = -1
+    sim.m.ball.lastTeam = lastTeam
+    sim.c.Pos.x[sim.ball] = x
+    sim.c.Pos.y[sim.ball] = y
+    sim.c.Vel.x[sim.ball] = vx
+    sim.c.Vel.y[sim.ball] = vy
+    for (const eid of sim.players) sim.c.Brain.noTouchUntil[eid] = sim.m.tick + 100
+  }
+
+  test('a ball that crosses the goal line wide of the post is not a goal even if it ends level with the goal', () => {
+    const sim = newMatch(CFG)
+    loose(sim, 52.6, 3.7, 9, -9)
+    const events = run(sim, 0.1)
+    expect(events.some((e) => e.type === 'goal')).toBe(false)
+    expect(events.find((e) => e.type === 'out')).toBeDefined()
+  })
+
+  test('a ball that crosses the touchline first is a throw-in, not a goal kick', () => {
+    const sim = newMatch(CFG)
+    loose(sim, 52.4, 34.1, 9, 9)
+    const out = run(sim, 0.1).find((e) => e.type === 'out')
+    expect(out?.type === 'out' && out.restart).toBe(Restart.ThrowIn)
+  })
+
+  test('no one plays the ball after the half-time whistle', () => {
+    const sim = newMatch({ ...CFG, halfMinutes: 0.25 })
+    const events = run(sim, 20)
+    const whistle = events.findIndex((e) => e.type === 'phase' && e.phase === Phase.HalfTime)
+    expect(whistle).toBeGreaterThan(-1)
+    const kickoff = events.findIndex((e, i) => i > whistle && e.type === 'phase' && e.phase === Phase.KickOff)
+    expect(events.slice(whistle, kickoff).some((e) => e.type === 'kick')).toBe(false)
+  })
+
+  test('both halves get the full configured time', () => {
+    const sim = newMatch({ ...CFG, halfMinutes: 0.25 })
+    const events = run(sim, 40)
+    const phases = events.filter((e) => e.type === 'phase')
+    const half = phases.find((e) => e.phase === Phase.HalfTime)!.tick
+    const full = phases.find((e) => e.phase === Phase.FullTime)!.tick
+    expect(full - half).toBe(15 * TICK_RATE + 3 * TICK_RATE)
+  })
+
+  test('a snapshot refuses to restore into a sim built with another config', () => {
+    const a = newMatch(CFG)
+    const b = newMatch({ ...CFG, formations: ['3-4-3', '4-3-3'] })
+    expect(() => restore(b, snapshot(a))).toThrow()
+  })
+})

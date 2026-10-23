@@ -34,32 +34,41 @@ function writeBall(sim: Sim, s: BallState) {
 export function ballSystem(sim: Sim): void {
   if (sim.m.phase !== Phase.Play) return
   readBall(sim, b)
+  const fromX = b.x
+  const fromY = b.y
+  const fromZ = b.z
   integrateBall(b)
   writeBall(sim, b)
-  checkOutOfPlay(sim, b)
+  checkOutOfPlay(sim, fromX, fromY, fromZ, b)
 }
 
-function checkOutOfPlay(sim: Sim, s: BallState) {
+/** Judges the first line the ball crossed during this tick, where it crossed it. */
+function checkOutOfPlay(sim: Sim, fromX: number, fromY: number, fromZ: number, s: BallState) {
+  const lineX = HALF_LENGTH + BALL_RADIUS
+  const lineY = HALF_WIDTH + BALL_RADIUS
+  const outX = Math.abs(s.x) > lineX
+  const outY = Math.abs(s.y) > lineY
+  if (!outX && !outY) return
+  const tx = outX ? (Math.sign(s.x) * lineX - fromX) / (s.x - fromX) : Infinity
+  const ty = outY ? (Math.sign(s.y) * lineY - fromY) / (s.y - fromY) : Infinity
   const { m } = sim
-  if (Math.abs(s.x) > HALF_LENGTH + BALL_RADIUS) {
+  if (tx <= ty) {
+    const y = fromY + (s.y - fromY) * tx
+    const z = fromZ + (s.z - fromZ) * tx
     const side = s.x > 0 ? 1 : -1
     // The team defending this goal is the one attacking away from it.
     const defending = attackDir(sim, 0) === side ? 1 : 0
     const attacking = 1 - defending
-    if (Math.abs(s.y) < GOAL_WIDTH / 2 - BALL_RADIUS && s.z < GOAL_HEIGHT - BALL_RADIUS) {
+    if (Math.abs(y) < GOAL_WIDTH / 2 - BALL_RADIUS && z < GOAL_HEIGHT - BALL_RADIUS) {
       awardGoal(sim, attacking)
-      return
-    }
-    if (m.ball.lastTeam === defending) {
-      awardRestart(sim, Restart.Corner, attacking, side * HALF_LENGTH, (s.y > 0 ? 1 : -1) * HALF_WIDTH)
+    } else if (m.ball.lastTeam === defending) {
+      awardRestart(sim, Restart.Corner, attacking, side * HALF_LENGTH, (y > 0 ? 1 : -1) * HALF_WIDTH)
     } else {
-      awardRestart(sim, Restart.GoalKick, defending, side * (HALF_LENGTH - GOAL_AREA_DEPTH), s.y > 0 ? 5 : -5)
+      awardRestart(sim, Restart.GoalKick, defending, side * (HALF_LENGTH - GOAL_AREA_DEPTH), y > 0 ? 5 : -5)
     }
     return
   }
-  if (Math.abs(s.y) > HALF_WIDTH + BALL_RADIUS) {
-    const team = m.ball.lastTeam === 0 ? 1 : 0
-    const x = Math.max(-HALF_LENGTH, Math.min(HALF_LENGTH, s.x))
-    awardRestart(sim, Restart.ThrowIn, team, x, (s.y > 0 ? 1 : -1) * HALF_WIDTH)
-  }
+  const x = fromX + (s.x - fromX) * ty
+  const team = m.ball.lastTeam === 0 ? 1 : 0
+  awardRestart(sim, Restart.ThrowIn, team, Math.max(-HALF_LENGTH, Math.min(HALF_LENGTH, x)), (s.y > 0 ? 1 : -1) * HALF_WIDTH)
 }
