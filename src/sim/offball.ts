@@ -1,11 +1,11 @@
 // Off-ball movement. With the ball: runs in behind timed to stay onside,
-// coming short when tightly marked, and stepping out of a blocked passing
-// lane. Without it: a second man cutting off the carrier's easiest pass,
+// coming short when tightly marked, the players nearest the carrier moving
+// into space to offer a pass, and stepping out of a blocked passing lane. Without it: a second man cutting off the carrier's easiest pass,
 // zonal marking goal side, a level back line, and covering for a teammate
 // who has been pulled out of position.
 
 import { TICK_RATE } from './constants'
-import { clamp, hypot } from './fmath'
+import { clamp, cos, hypot, sin, TAU } from './fmath'
 import { IntentKind, setIntent } from './intents'
 import { believe, type Belief } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
@@ -13,7 +13,7 @@ import type { Role } from './formation'
 import { chance } from './rng'
 import { shapeTarget, type Point } from './shape'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
-import { nearestOpponent } from './evaluate'
+import { nearestOpponent, pressureAt } from './evaluate'
 
 const seen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 const near: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
@@ -21,6 +21,19 @@ const RUNNERS: Role[] = ['ST', 'W', 'WB', 'FB', 'CM']
 const BACK_LINE: Role[] = ['CB', 'FB', 'WB']
 /** A slot this far from its player counts as vacated. */
 const VACATED = 12
+/** Hold mode for a player who has picked a spot to offer the carrier a pass from (Intent.x/y). */
+export const SUPPORT = 1
+/** How many of the carrier's nearest teammates move to give them an option. */
+const SUPPORTERS = 3
+const SUPPORT_RANGE = 30
+const SUPPORT_RADII = [10, 15]
+const SUPPORT_ANGLES = 12
+/** Furthest a supporter will go from where they are for a better spot. */
+const SUPPORT_REACH = 15
+/** How much better a new spot must look than the one already taken up. */
+const SUPPORT_MARGIN = 0.15
+const spot: Point = { x: 0, y: 0 }
+const slot: Point = { x: 0, y: 0 }
 
 /**
  * How far up the pitch (attacking-frame x) the observer can stand without
@@ -88,7 +101,113 @@ export function decideSupport(sim: Sim, eid: number, carrier: number): void {
     c.Brain.runReady[eid] = m.tick + 3 * TICK_RATE
     return setIntent(sim, eid, IntentKind.Run, -1, tx, ty)
   }
+
+  // Close support: the few nearest the ball find space to take a pass in rather than hold their slot.
+  if (toCarrier < SUPPORT_RANGE && supportRank(sim, eid, carrier, cx, cy, toCarrier) < SUPPORTERS) {
+    const keep = c.Intent.kind[eid] === IntentKind.Hold && c.Intent.mode[eid] === SUPPORT
+    if (supportSpot(sim, eid, cx, cy, line, keep, spot)) return setIntent(sim, eid, IntentKind.Hold, -1, spot.x, spot.y, SUPPORT)
+  }
   setIntent(sim, eid, IntentKind.Hold)
+}
+
+/** How many outfield teammates `eid` sees nearer the carrier, believed to be at (cx, cy), than themselves. */
+function supportRank(sim: Sim, eid: number, carrier: number, cx: number, cy: number, toCarrier: number): number {
+  let rank = 0
+  for (const mate of sim.teams[teamOf(sim, eid)]) {
+    if (mate === eid || mate === carrier || roleOf(sim, mate) === 'GK') continue
+    believe(sim, eid, mate, near)
+    if (hypot(near.x - cx, near.y - cy) < toCarrier) rank++
+  }
+  return rank
+}
+
+/**
+ * A better spot round the carrier (cx, cy) to offer a pass from than the
+ * player's place in the shape: away from opponents, with a clear lane, ahead
+ * of the ball if possible and not on top of a teammate. `keep` favours the
+ * spot already chosen so the player does not dither between two. False if
+ * their place in the shape is as good.
+ */
+function supportSpot(sim: Sim, eid: number, cx: number, cy: number, line: number, keep: boolean, out: Point): boolean {
+  const { c } = sim
+  const team = teamOf(sim, eid)
+  const dir = attackDir(sim, team)
+  shapeTarget(sim, eid, slot)
+  openLane(sim, eid, sim.m.ball.owner, slot)
+  // Judged where they would really stand: no further up than the onside line.
+  if (slot.x * dir > line - 0.5) slot.x = (line - 0.5) * dir
+  // Their place in the shape is the spot to beat.
+  let best = spotValue(sim, eid, cx, cy, slot.x, slot.y, dir) + SUPPORT_MARGIN
+  let found = false
+  const ring = SUPPORT_RADII.length * SUPPORT_ANGLES
+  for (let i = 0; i <= ring; i++) {
+    let sx: number
+    let sy: number
+    if (i < ring) {
+      const r = SUPPORT_RADII[i % SUPPORT_RADII.length]
+      const a = ((Math.floor(i / SUPPORT_RADII.length) + 0.5) / SUPPORT_ANGLES) * TAU
+      sx = cx + cos(a) * r
+      sy = cy + sin(a) * r
+    } else if (keep) {
+      sx = c.Intent.x[eid]
+      sy = c.Intent.y[eid]
+    } else break
+    if (Math.abs(sx) > HALF_LENGTH - 1.5 || Math.abs(sy) > HALF_WIDTH - 1.5) continue
+    if (sx * dir > line - 0.5) continue
+    const run = hypot(sx - c.Pos.x[eid], sy - c.Pos.y[eid])
+    if (run > SUPPORT_REACH) continue
+    const score =
+      spotValue(sim, eid, cx, cy, sx, sy, dir) -
+      0.6 * clamp((hypot(sx - slot.x, sy - slot.y) - 6) / 14, 0, 1) -
+      0.3 * (run / SUPPORT_REACH) +
+      (i === ring ? SUPPORT_MARGIN : 0)
+    if (score > best) {
+      best = score
+      found = true
+      out.x = sx
+      out.y = sy
+    }
+  }
+  return found
+}
+
+/** How good (sx, sy) is to take a pass from the carrier at (cx, cy) in. */
+function spotValue(sim: Sim, eid: number, cx: number, cy: number, sx: number, sy: number, dir: number): number {
+  return (
+    clamp(pressureAt(sim, eid, sx, sy) / 8, 0, 1) +
+    laneClearance(sim, eid, cx, cy, sx, sy) +
+    0.5 * clamp(((sx - cx) * dir) / 15, -1, 1) +
+    0.5 * clamp(nearestMate(sim, eid, sx, sy) / 8, 0, 1)
+  )
+}
+
+/** 0 when an opponent stands in the lane from (cx, cy) to (sx, sy), 1 when nobody is within 4 m of it. */
+function laneClearance(sim: Sim, eid: number, cx: number, cy: number, sx: number, sy: number): number {
+  const dx = sx - cx
+  const dy = sy - cy
+  const len2 = dx * dx + dy * dy
+  let clear = 4
+  for (const o of sim.teams[1 - teamOf(sim, eid)]) {
+    believe(sim, eid, o, near)
+    const t = clamp(((near.x - cx) * dx + (near.y - cy) * dy) / len2, 0, 1)
+    if (t < 0.1) continue
+    clear = Math.min(clear, hypot(cx + dx * t - near.x, cy + dy * t - near.y))
+  }
+  return clamp((clear - 1) / 3, 0, 1)
+}
+
+/** Distance from (x, y) to the nearest teammate, counting where other supporters are heading. */
+function nearestMate(sim: Sim, eid: number, x: number, y: number): number {
+  const { c } = sim
+  let d = Infinity
+  for (const mate of sim.teams[teamOf(sim, eid)]) {
+    if (mate === eid || mate === sim.m.ball.owner) continue
+    const heading = c.Intent.kind[mate] === IntentKind.Hold && c.Intent.mode[mate] === SUPPORT
+    const mx = heading ? c.Intent.x[mate] : c.Pos.x[mate]
+    const my = heading ? c.Intent.y[mate] : c.Pos.y[mate]
+    d = Math.min(d, hypot(mx - x, my - y))
+  }
+  return d
 }
 
 /** Where a player holding position should stand during open play. */
@@ -98,7 +217,11 @@ export function openPlayTarget(sim: Sim, eid: number, out: Point): Point {
   const team = teamOf(sim, eid)
   const owner = sim.m.ball.owner
   if (sim.m.possession === team) {
-    if (owner >= 0 && owner !== eid && teamOf(sim, owner) === team) openLane(sim, eid, owner, out)
+    const { Intent } = sim.c
+    if (Intent.kind[eid] === IntentKind.Hold && Intent.mode[eid] === SUPPORT) {
+      out.x = Intent.x[eid]
+      out.y = Intent.y[eid]
+    } else if (owner >= 0 && owner !== eid && teamOf(sim, owner) === team) openLane(sim, eid, owner, out)
     // Hold the line: never drift offside while waiting.
     const dir = attackDir(sim, team)
     const limit = onsideLimit(sim, eid) - 0.5
