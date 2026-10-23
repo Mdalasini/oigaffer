@@ -5,6 +5,7 @@
 import type { BallState } from './ballmotion'
 import { TICK_RATE } from './constants'
 import { IntentKind, setIntent } from './intents'
+import { isDiving, isDown, KEEPER_HEIGHT, shouldRush } from './keeper'
 import { intercept, type Intercept } from './movement'
 import { believe, type Belief } from './perception'
 import { decideFirstTime, decideOnBall } from './onball'
@@ -39,15 +40,17 @@ export function updateScratch(sim: Sim): void {
           best = eid
           break
         }
-        intercept(sim, eid, ic)
-        if (roleOf(sim, eid) === 'GK' && !inOwnBox(sim, team, ic.x, ic.y)) continue
+        // Keepers come for anything they can take with their hands in their own box.
+        const keeper = roleOf(sim, eid) === 'GK'
+        intercept(sim, eid, ic, 0.2, keeper ? KEEPER_HEIGHT : undefined)
+        if (keeper && !inOwnBox(sim, team, ic.x, ic.y)) continue
         if (ic.t < bestT) {
           best = eid
           bestT = ic.t
         }
       }
       scratch.chaser[team] = best
-    } else if (teamOf(sim, m.ball.owner) !== team) {
+    } else if (teamOf(sim, m.ball.owner) !== team && !m.ball.inHands) {
       let best = -1
       let bestD = Infinity
       for (const eid of sim.teams[team]) {
@@ -91,6 +94,7 @@ function decide(sim: Sim, eid: number): void {
   const owner = m.ball.owner
   const kind = c.Intent.kind[eid]
   if (owner === eid) return decideOnBall(sim, eid)
+  if (kind === IntentKind.Dive && (isDiving(sim, eid) || isDown(sim, eid))) return
   if (kind === IntentKind.Run && owner < 0 && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
   if (kind === IntentKind.Run && owner >= 0 && teamOf(sim, owner) === team && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
   if (owner < 0) {
@@ -99,5 +103,8 @@ function decide(sim: Sim, eid: number): void {
     return setIntent(sim, eid, IntentKind.Hold)
   }
   if (teamOf(sim, owner) !== team && scratch.presser[team] === eid) return setIntent(sim, eid, IntentKind.Press, owner)
+  if (teamOf(sim, owner) !== team && roleOf(sim, eid) === 'GK' && shouldRush(sim, eid, owner)) {
+    return setIntent(sim, eid, IntentKind.Press, owner)
+  }
   setIntent(sim, eid, IntentKind.Hold)
 }

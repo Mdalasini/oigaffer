@@ -9,6 +9,8 @@ export function topSpeed(sim: Sim, eid: number): number {
 }
 
 export function acceleration(sim: Sim, eid: number): number {
+  // A diving keeper launches sideways far faster than anyone can run.
+  if (sim.m.tick < sim.c.Keeper.diveUntil[eid]) return 14 + 6 * sim.c.Attr.keeping[eid]
   return 3 + 2.5 * sim.c.Attr.accel[eid]
 }
 
@@ -57,7 +59,7 @@ function pathFor(sim: Sim, eid: number): Float64Array {
  * Earliest point on the ball path (as the player believes it) they can reach
  * in time, or the end of the path if they cannot catch it.
  */
-export function intercept(sim: Sim, eid: number, out: Intercept, reaction = 0.2): Intercept {
+export function intercept(sim: Sim, eid: number, out: Intercept, reaction = 0.2, maxHeight = CONTROL_HEIGHT): Intercept {
   const { Pos, Vel } = sim.c
   const path = pathFor(sim, eid)
   const px = Pos.x[eid]
@@ -68,7 +70,7 @@ export function intercept(sim: Sim, eid: number, out: Intercept, reaction = 0.2)
   for (let s = 0; s < PATH_SAMPLES; s++) {
     const bx = path[s * 3]
     const by = path[s * 3 + 1]
-    if (path[s * 3 + 2] > CONTROL_HEIGHT) continue
+    if (path[s * 3 + 2] > maxHeight) continue
     const t = s * PATH_STRIDE * DT
     const dist = Math.sqrt((bx - px) * (bx - px) + (by - py) * (by - py)) - FOOT_REACH
     if (reaction + runTime(dist, v0 * 0.5, vmax, acc) <= t) {

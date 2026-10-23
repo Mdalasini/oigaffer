@@ -1,4 +1,7 @@
 import { integrateBall, type BallState } from '../ballmotion'
+import { emit } from '../events'
+import { collideGoalFrame } from '../goalframe'
+import { carryInHands } from '../keeper'
 import { BALL_RADIUS } from '../constants'
 import { awardGoal, awardRestart } from '../match'
 import { GOAL_AREA_DEPTH, GOAL_HEIGHT, GOAL_WIDTH, HALF_LENGTH, HALF_WIDTH } from '../pitch'
@@ -33,11 +36,13 @@ function writeBall(sim: Sim, s: BallState) {
 /** Moves the ball and blows up for goals and balls that leave the pitch. */
 export function ballSystem(sim: Sim): void {
   if (sim.m.phase !== Phase.Play) return
+  if (sim.m.ball.inHands) return carryInHands(sim)
   readBall(sim, b)
   const fromX = b.x
   const fromY = b.y
   const fromZ = b.z
   integrateBall(b)
+  if (collideGoalFrame(fromX, fromY, fromZ, b)) emit(sim, { type: 'woodwork', x: b.x, y: b.y, z: b.z })
   writeBall(sim, b)
   checkOutOfPlay(sim, fromX, fromY, fromZ, b)
 }

@@ -1,5 +1,6 @@
 import { thinkSystem, updateScratch } from './brain'
 import { intentSystem } from './execute'
+import { keeperSystem } from './keeper'
 import { matchSystem } from './match'
 import { perceptionSystem } from './perception'
 import type { Sim } from './sim'
@@ -20,6 +21,7 @@ export function step(sim: Sim): void {
   updateScratch(sim)
   thinkSystem(sim)
   intentSystem(sim)
+  keeperSystem(sim)
   locomotionSystem(sim)
   separationSystem(sim)
   ballSystem(sim)

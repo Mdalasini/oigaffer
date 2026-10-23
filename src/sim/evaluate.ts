@@ -9,12 +9,21 @@ import { believe, type Belief } from './perception'
 import { HALF_LENGTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH } from './pitch'
 import { attackDir, type Sim } from './sim'
 
-/** How promising it is for `team` to have the ball at (x, y): 0 far from goal, ~0.75 at the penalty spot. */
+/**
+ * Roughly the chance that `team` having the ball at (x, y) leads to a goal:
+ * ~0.2 at the penalty spot, ~0.1 at 25 m, next to nothing in their own half.
+ * Same units as a shot's xG, so passes, carries and shots compare directly.
+ */
 export function pitchValue(sim: Sim, team: number, x: number, y: number): number {
   const ax = x * attackDir(sim, team)
   const gx = HALF_LENGTH - ax
-  const v = clamp(1 - Math.sqrt(gx * gx + y * y) / 80, 0, 1)
-  return v * v
+  const v = clamp(1 - Math.sqrt(gx * gx + y * y) / 75, 0, 1)
+  return 0.35 * v * v * v
+}
+
+/** What `team` stands to lose by giving the ball away at (x, y). */
+export function lossValue(sim: Sim, team: number, x: number, y: number): number {
+  return 0.01 + pitchValue(sim, 1 - team, x, y)
 }
 
 export function inAttackingBox(sim: Sim, team: number, x: number, y: number): boolean {

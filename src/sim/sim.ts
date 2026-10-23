@@ -54,6 +54,7 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
       c.Brain.lastTouch[eid] = -1
       c.Brain.wallFor[eid] = -1
       c.Plan.type[eid] = -1
+      c.Keeper.diveAt[eid] = -1
       teams[team].push(eid)
     })
   }

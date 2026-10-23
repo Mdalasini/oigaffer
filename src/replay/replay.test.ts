@@ -50,7 +50,7 @@ describe('flags', () => {
     expect(text).toContain('STATE at')
     expect(text).toContain('MAP at')
     expect(text).toContain('TRACE A9 (ST)')
-    expect(text).toMatch(/kick pass \w+ -> \w+/)
+    expect(text).toMatch(/kick pass( \([^)]*\))? \w+ -> \w+/)
     expect(text).toContain('BELIEFS of A9')
   })
 

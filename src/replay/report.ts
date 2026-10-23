@@ -72,7 +72,7 @@ export function describeEvent(flag: Flag, e: SimEvent): string {
   const at = (x: number, y: number) => `(${x.toFixed(1)}, ${y.toFixed(1)})`
   switch (e.type) {
     case 'kick':
-      return `kick ${e.kind} ${name(e.by)}${e.to >= 0 ? ` -> ${name(e.to)}` : ''} at ${at(e.x, e.y)}`
+      return `kick ${e.kind}${e.pass ? ` (${e.pass}${e.firstTime ? ', first time' : ''})` : e.firstTime ? ' (first time)' : ''} ${name(e.by)}${e.to >= 0 ? ` -> ${name(e.to)}` : ''} at ${at(e.x, e.y)}`
     case 'control':
       return `control ${name(e.by)} at ${at(e.x, e.y)}`
     case 'out':
@@ -83,6 +83,10 @@ export function describeEvent(flag: Flag, e: SimEvent): string {
       return `phase -> ${PHASES[e.phase]}`
     case 'call':
       return `call "${e.call}" ${name(e.by)} -> ${name(e.to)} about ${name(e.about)}`
+    case 'woodwork':
+      return `off the ${e.z > 2.3 ? 'bar' : 'post'} at ${at(e.x, e.y)}`
+    case 'save':
+      return `save (${e.kind}) by ${name(e.by)}, ball at ${e.speed.toFixed(0)} m/s`
   }
 }
 

@@ -42,7 +42,7 @@ export function createComponents() {
     /** The player's current plan; see intents.ts. */
     Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32() },
     /** The ball action a player will make when they get to the ball; type -1 = none. */
-    Plan: { type: i32(), target: i32(), x: f64(), y: f64(), firstTime: i32() },
+    Plan: { type: i32(), target: i32(), x: f64(), y: f64(), z: f64(), firstTime: i32() },
     Brain: {
       nextThink: i32(),
       noTouchUntil: i32(),
@@ -57,6 +57,8 @@ export function createComponents() {
       /** No more "man on" warnings to this player until this tick. */
       warnedUntil: i32(),
     },
+    /** Goalkeeper dive state: a pending dive (tick, target) and how long the dive and recovery last. */
+    Keeper: { diveAt: i32(), diveUntil: i32(), downUntil: i32(), x: f64(), y: f64() },
     /** What each player last perceived of every other entity, and on which tick. */
     Memory: { x: pairF64(), y: pairF64(), z: pairF64(), vx: pairF64(), vy: pairF64(), vz: pairF64(), seen: pairI32() },
   }

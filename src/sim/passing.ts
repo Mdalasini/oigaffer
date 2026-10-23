@@ -4,10 +4,11 @@
 
 import { kick } from './actions'
 import { BALL_RADIUS, CONTROL_HEIGHT, DT, FOOT_REACH } from './constants'
-import { arrivalSample, interceptRisk, pitchValue } from './evaluate'
+import { arrivalSample, interceptRisk, lossValue, pitchValue } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
 import { airKick, createFlight, FLIGHT_STRIDE, groundKickSpeed, simulateFlight } from './kicks'
 import { acceleration, runTime, topSpeed } from './movement'
+import { release } from './keeper'
 import { believe, type Belief } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { gauss } from './rng'
@@ -93,7 +94,7 @@ export function bestPass(sim: Sim, passer: number, bx: number, by: number, only 
   const dir = attackDir(sim, team)
   const opponents = sim.teams[1 - team]
   const wide = bx * dir > 22 && Math.abs(by) > 14
-  const loss = 0.12 + 0.6 * pitchValue(sim, 1 - team, bx, by)
+  const loss = lossValue(sim, team, bx, by)
   let best: PassPlan | null = null
 
   const consider = (type: PassType, target: number, x: number, y: number) => {
@@ -153,6 +154,13 @@ export interface StrikeContext {
 /** Strikes a planned pass from wherever the ball is now, with error that grows with difficulty. */
 export function strikePass(sim: Sim, passer: number, plan: PassPlan, ctx: StrikeContext): void {
   const { Pos, Attr, Facing } = sim.c
+  // A keeper's distribution: rolled out, thrown, or kicked out of the hands.
+  let name: string = PASS_NAMES[plan.type]
+  if (sim.m.ball.inHands) {
+    const d = Math.sqrt((plan.x - Pos.x[passer]) * (plan.x - Pos.x[passer]) + (plan.y - Pos.y[passer]) * (plan.y - Pos.y[passer]))
+    name = plan.type === PassType.Ground ? 'rollout' : d < 35 ? 'throw' : 'punt'
+    release(sim)
+  }
   const bx = Pos.x[sim.ball]
   const by = Pos.y[sim.ball]
   const [vx, vy, vz] = launch(plan.type, bx, by, plan.x, plan.y)
@@ -169,7 +177,7 @@ export function strikePass(sim: Sim, passer: number, plan: PassPlan, ctx: Strike
   const a = angle + gauss(sim.m.rng) * 0.04 * difficulty
   const power = 1 + gauss(sim.m.rng) * 0.05 * difficulty
   const h = Math.sqrt(vx * vx + vy * vy) * power
-  kick(sim, passer, cos(a) * h, sin(a) * h, vz * power, 'pass', plan.target, { pass: PASS_NAMES[plan.type], firstTime: ctx.firstTime })
+  kick(sim, passer, cos(a) * h, sin(a) * h, vz * power, 'pass', plan.target, { pass: name, firstTime: ctx.firstTime })
 }
 
 /** True if the ball is close enough to the player's feet to strike. */
