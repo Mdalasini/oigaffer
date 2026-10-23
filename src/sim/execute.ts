@@ -1,11 +1,11 @@
 // Carries out each player's intent every tick: sets their motor and plays the
 // ball when the intent calls for it.
 
-import { CONTROL_HEIGHT } from './constants'
 import { pressureAt } from './evaluate'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
-import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
+import { chaseHeight, chaseReaction } from './brain'
+import { isDiving, isDown } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
 import { challenge, contain, isGrounded, isStumbling } from './defending'
@@ -41,10 +41,6 @@ export function intentSystem(sim: Sim): void {
         moveTo(sim, eid, pt.x, pt.y, holdSpeed(sim, eid, pt, top))
         break
       case IntentKind.Chase:
-        // A keeper goes for the ball where their hands can take it, as they were picked to.
-        intercept(sim, eid, ic, 0.2, roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT)
-        moveTo(sim, eid, ic.x, ic.y, top)
-        break
       case IntentKind.Receive:
         receive(sim, eid, top)
         break
@@ -124,12 +120,13 @@ function holdTarget(sim: Sim, eid: number, out: Point): Point {
   return out
 }
 
+/** Go to where the ball can be met, and strike it first time if that is the plan. */
 function receive(sim: Sim, eid: number, top: number) {
   const { m, c } = sim
-  intercept(sim, eid, ic)
+  intercept(sim, eid, ic, chaseReaction(sim, eid), chaseHeight(sim, eid))
   moveTo(sim, eid, ic.x, ic.y, top)
   if (!c.Plan.firstTime[eid] || c.Plan.type[eid] < 0 || m.phase !== Phase.Play) return
-  if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid)) return
+  if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid, true)) return
   const shot = shotPlanOf(sim, eid)
   const plan = planOf(sim, eid)
   // First-time passes are planned along the ground; a bouncing ball gets controlled instead.

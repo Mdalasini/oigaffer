@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { TICK_RATE } from './constants'
-import { challenge, contain, isGrounded, TackleKind } from './defending'
+import { challenge, contain, decideDefending, isGrounded, TackleKind } from './defending'
 import type { SimEvent } from './events'
 import { IntentKind, setIntent } from './intents'
 import { newMatch } from './match'
@@ -152,5 +152,53 @@ describe('clearances', () => {
     expect(sim.c.Intent.kind[cb]).toBe(IntentKind.Pass)
     expect(sim.c.Plan.target[cb]).toBe(-1)
     expect((sim.c.Plan.x[cb] - sim.c.Pos.x[cb]) * dir).toBeGreaterThan(30)
+  })
+})
+
+describe('review regressions', () => {
+  test('a slider still on the floor neither tackles nor picks up the ball', () => {
+    const sim = emptyPitch()
+    const { dir, carrier, defender } = duel(sim, 1)
+    sim.c.Body.lungeUntil[defender] = sim.m.tick
+    sim.c.Body.downUntil[defender] = sim.m.tick + 40
+    decideDefending(sim, defender, carrier)
+    expect(sim.c.Intent.kind[defender]).toBe(IntentKind.Press)
+    // A loose ball at their feet stays loose.
+    sim.m.ball.owner = -1
+    place(sim, carrier, -20 * dir, 0)
+    place(sim, sim.ball, sim.c.Pos.x[defender] + 0.3, 0)
+    sim.c.Brain.nextThink.fill(1e9)
+    const events = collect(sim, 0.3, [])
+    expect(events.some((e) => e.type === 'control' && e.by === defender)).toBe(false)
+  })
+
+  test('a committed tackle is followed through when a teammate becomes nearer the ball', () => {
+    const sim = emptyPitch()
+    const { carrier, defender } = duel(sim, 2)
+    setIntent(sim, defender, IntentKind.Tackle, carrier, 0, 0, TackleKind.Standing)
+    // A teammate now closer to the ball than the tackler.
+    place(sim, sim.teams[1][3], sim.c.Pos.x[sim.ball] + 0.2, 0.6)
+    revealAll(sim)
+    sim.c.Brain.nextThink[defender] = sim.m.tick + 1
+    step(sim)
+    expect([IntentKind.Tackle, IntentKind.Press]).toContain(sim.c.Intent.kind[defender] as 11 | 5)
+    expect(sim.c.Intent.kind[defender]).not.toBe(IntentKind.Hold)
+  })
+
+  test('a defender cutting out an opponent’s pass near goal can clear it first time', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 1)
+    const own = -dir * HALF_LENGTH
+    const cb = sim.teams[1][2]
+    place(sim, cb, own + dir * 10, 0)
+    place(sim, sim.teams[0][9], own + dir * 8, 1.5)
+    // An opponent's pass rolling across the defender.
+    place(sim, sim.ball, own + dir * 10, -8, 0, 9)
+    sim.m.ball.owner = -1
+    sim.m.ball.lastTeam = 0
+    revealAll(sim)
+    const events = collect(sim, 1.5, [])
+    const first = events.find((e) => (e.type === 'kick' || e.type === 'control') && e.by === cb)
+    expect(first).toMatchObject({ type: 'kick' })
   })
 })

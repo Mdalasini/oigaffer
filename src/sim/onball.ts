@@ -125,18 +125,23 @@ export function decideFirstTime(sim: Sim, eid: number): void {
   const { c, m } = sim
   intercept(sim, eid, ic)
   if (ic.t > FIRST_TIME_WINDOW) return
+  // A keeper coming for a loose ball uses their hands.
+  if (roleOf(sim, eid) === 'GK' && c.Intent.kind[eid] === IntentKind.Chase) return
+  // Once shaping to hit it with the ball nearly there, see it through.
+  if (c.Plan.type[eid] >= 0 && c.Plan.firstTime[eid] && ic.t < 0.35) return
   const wall = m.tick < c.Brain.wallUntil[eid] ? c.Brain.wallFor[eid] : -1
   const pressure = pressureAt(sim, eid, ic.x, ic.y)
+  // Volleying a long ball first time is rare; first-time passes stay on the ground.
+  const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
+  // Near their own goal with someone closing in and nothing safe on: clear it.
+  if (inDangerZone(sim, eid, ic.x, ic.y) && pressure < 4.5 && (!plan || plan.success < 0.7)) {
+    return setPlan(sim, eid, clearancePlan(sim, eid, ic.x, ic.y), true)
+  }
   // In front of goal a first-time finish beats taking a touch.
   const xg = estimateXg(sim, eid, ic.x, ic.y) * FIRST_TIME_SHOT
   if (wall < 0 && pressure > 3) {
     if (xg > 0.08) return setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
     return setPlan(sim, eid, null)
-  }
-  // Volleying a long ball first time is rare; first-time passes stay on the ground.
-  const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
-  if (inDangerZone(sim, eid, ic.x, ic.y) && pressure < 3 && (!plan || plan.success < 0.7)) {
-    return setPlan(sim, eid, clearancePlan(sim, eid, ic.x, ic.y), true)
   }
   if (xg > 0.05 && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
   else if (plan && plan.success > 0.65 && plan.score > 0.005) setPlan(sim, eid, plan, true)

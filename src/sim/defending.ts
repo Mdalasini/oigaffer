@@ -58,6 +58,8 @@ export function decideDefending(sim: Sim, d: number, carrier: number): void {
   const { c, m } = sim
   const kind = c.Intent.kind[d]
   if (kind === IntentKind.Tackle && m.tick - c.Intent.since[d] < COMMIT_SECONDS * TICK_RATE) return
+  // Nobody tackles from the floor or mid-stumble.
+  if (isGrounded(sim, d) || isStumbling(sim, d)) return setIntent(sim, d, IntentKind.Press, carrier)
   if (m.tick < c.Brain.tackleReady[d]) return setIntent(sim, d, IntentKind.Press, carrier)
   believe(sim, d, carrier, carrierSeen)
   believe(sim, d, sim.ball, ballSeen)

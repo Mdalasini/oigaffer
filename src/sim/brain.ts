@@ -43,9 +43,7 @@ export function updateScratch(sim: Sim): void {
         }
         // Keepers come for anything they can take with their hands in their own box.
         const keeper = roleOf(sim, eid) === 'GK'
-        // Defenders who read the game move for an opponent's pass sooner.
-        const reaction = m.ball.lastTeam === team ? 0.2 : 0.35 - 0.2 * c.Attr.positioning[eid]
-        intercept(sim, eid, ic, reaction, keeper ? KEEPER_HEIGHT : undefined)
+        intercept(sim, eid, ic, chaseReaction(sim, eid), chaseHeight(sim, eid))
         if (keeper && !inOwnBox(sim, team, ic.x, ic.y)) continue
         if (ic.t < bestT) {
           best = eid
@@ -92,6 +90,16 @@ function nearestTeammate(sim: Sim, eid: number): number {
   return best
 }
 
+/** How quickly a player moves for a loose ball: defenders who read the game go sooner for an opponent's pass. */
+export function chaseReaction(sim: Sim, eid: number): number {
+  return sim.m.ball.lastTeam === teamOf(sim, eid) ? 0.2 : 0.35 - 0.2 * sim.c.Attr.positioning[eid]
+}
+
+/** Highest ball a player goes for: keepers with their hands, everyone else with feet. */
+export function chaseHeight(sim: Sim, eid: number): number {
+  return roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT
+}
+
 function inOwnBox(sim: Sim, team: number, x: number, y: number): boolean {
   const ax = x * attackDir(sim, team)
   return ax < -HALF_LENGTH + PENALTY_AREA_DEPTH && Math.abs(y) < PENALTY_AREA_WIDTH / 2
@@ -118,12 +126,18 @@ function decide(sim: Sim, eid: number): void {
   const owner = m.ball.owner
   const kind = c.Intent.kind[eid]
   if (owner === eid) return decideOnBall(sim, eid)
+  // A committed challenge plays out whoever is now nearest the ball.
+  if (kind === IntentKind.Tackle && owner === c.Intent.target[eid]) return decideDefending(sim, eid, owner)
   if (kind === IntentKind.Dive && (isDiving(sim, eid) || isDown(sim, eid))) return
   if (kind === IntentKind.Run && owner < 0 && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
   if (kind === IntentKind.Run && owner >= 0 && teamOf(sim, owner) === team && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
   if (owner < 0) {
     if (kind === IntentKind.Receive && m.ball.lastTeam === team) return decideFirstTime(sim, eid)
-    if (scratch.chaser[team] === eid) return setIntent(sim, eid, IntentKind.Chase)
+    if (scratch.chaser[team] === eid) {
+      // Whoever goes for a loose ball may still play it first time: a clearance, a pass or a finish.
+      if (kind !== IntentKind.Chase) setIntent(sim, eid, IntentKind.Chase)
+      return decideFirstTime(sim, eid)
+    }
     return setIntent(sim, eid, IntentKind.Hold)
   }
   if (teamOf(sim, owner) !== team && scratch.presser[team] === eid) return decideDefending(sim, eid, owner)

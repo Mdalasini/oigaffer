@@ -7,6 +7,7 @@ import { HALF_LENGTH } from '../pitch'
 import { chance, gauss } from '../rng'
 import { attackDir, teamOf, type Sim } from '../sim'
 import { Phase } from '../state'
+import { isGrounded } from '../defending'
 import { canHandle, handle, inHandsReach, keeperOf } from '../keeper'
 import { header, headerHeight } from '../shooting'
 
@@ -43,7 +44,13 @@ export function possessionSystem(sim: Sim): void {
   let best = -1
   let bestD = Infinity
   for (const eid of sim.players) {
-    if (m.tick < c.Brain.noTouchUntil[eid]) continue
+    if (m.tick < c.Brain.noTouchUntil[eid] || isGrounded(sim, eid)) continue
+    if (c.Plan.type[eid] >= 0 && c.Plan.firstTime[eid]) {
+      // Shaping to hit it first time: no trap while the ball is still coming; if it has gone past, take it.
+      const approaching = (c.Pos.x[eid] - bx) * (c.Vel.x[ball] - c.Vel.x[eid]) + (c.Pos.y[eid] - by) * (c.Vel.y[ball] - c.Vel.y[eid]) > 0
+      if (approaching) continue
+      c.Plan.type[eid] = -1
+    }
     const reach = bz <= CONTROL_HEIGHT ? FOOT_REACH : bz <= headerHeight(sim, eid) ? 0.6 : 0
     const dx = bx - c.Pos.x[eid]
     const dy = by - c.Pos.y[eid]
