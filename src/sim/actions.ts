@@ -11,6 +11,8 @@ const KICK_RECOVERY = 0.3
 
 function recordTouch(sim: Sim, eid: number) {
   const { m, c } = sim
+  m.ball.lastKick = ''
+  if (c.Player.team[eid] !== m.ball.backPassTeam) m.ball.backPassTeam = -1
   m.ball.lastTouch = eid
   m.ball.lastTeam = c.Player.team[eid]
   m.ball.touchTick = m.tick
@@ -34,7 +36,10 @@ export function kick(
   c.Vel.y[ball] = vy
   c.Air.vz[ball] = vz
   m.ball.owner = -1
+  m.ball.inHands = false
   recordTouch(sim, eid)
+  m.ball.lastKick = kind
+  m.ball.backPassTeam = kind === 'pass' ? c.Player.team[eid] : -1
   c.Brain.noTouchUntil[eid] = m.tick + Math.round(KICK_RECOVERY / DT)
   emit(sim, { type: 'kick', by: eid, kind, to, x: c.Pos.x[ball], y: c.Pos.y[ball], ...detail })
   if (to >= 0) {
@@ -85,4 +90,5 @@ export function placeBall(sim: Sim, x: number, y: number): void {
   c.Air.z[ball] = 0
   c.Air.vz[ball] = 0
   m.ball.owner = -1
+  m.ball.inHands = false
 }

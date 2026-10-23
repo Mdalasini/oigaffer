@@ -2,20 +2,24 @@
 // ball when the intent calls for it.
 
 import { touch } from './actions'
-import { FOOT_REACH, TICK_RATE } from './constants'
+import { CONTROL_HEIGHT, FOOT_REACH, TICK_RATE } from './constants'
 import { dist2, pressureAt } from './evaluate'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
-import { maybeGiveAndGo, planOf, setPlan } from './onball'
+import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
+import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
+import { strikeShot } from './shooting'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
 import { CENTRE_CIRCLE_RADIUS, HALF_LENGTH } from './pitch'
 import { kickOffTarget, shapeTarget, type Point } from './shape'
-import { attackDir, teamOf, type Sim } from './sim'
+import { attackDir, roleOf, teamOf, type Sim } from './sim'
 import { Phase } from './state'
 
 const TOUCH_INTERVAL = Math.round(0.3 * TICK_RATE)
 const FIRST_TIME_HEIGHT = 0.4
+/** Top speed of a keeper's dive across goal. */
+const DIVE_SPEED = 6.5
 
 const ic: Intercept = { t: 0, x: 0, y: 0 }
 const pt: Point = { x: 0, y: 0 }
@@ -37,7 +41,8 @@ export function intentSystem(sim: Sim): void {
         moveTo(sim, eid, pt.x, pt.y, holdSpeed(sim, eid, pt, top))
         break
       case IntentKind.Chase:
-        intercept(sim, eid, ic)
+        // A keeper goes for the ball where their hands can take it, as they were picked to.
+        intercept(sim, eid, ic, 0.2, roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT)
         moveTo(sim, eid, ic.x, ic.y, top)
         break
       case IntentKind.Receive:
@@ -66,7 +71,16 @@ export function intentSystem(sim: Sim): void {
       case IntentKind.Run:
         moveTo(sim, eid, Intent.x[eid], Intent.y[eid], top * 0.95)
         break
+      case IntentKind.Shoot:
+        shoot(sim, eid, top)
+        break
+      case IntentKind.Dive:
+        moveTo(sim, eid, Intent.x[eid], Intent.y[eid], DIVE_SPEED)
+        if (!isDiving(sim, eid)) setIntent(sim, eid, IntentKind.Hold)
+        break
     }
+    // A keeper picking themselves up after a dive cannot move.
+    if (isDown(sim, eid)) moveTo(sim, eid, Pos.x[eid], Pos.y[eid], 0)
   }
 }
 
@@ -109,15 +123,34 @@ function receive(sim: Sim, eid: number, top: number) {
   const { m, c } = sim
   intercept(sim, eid, ic)
   moveTo(sim, eid, ic.x, ic.y, top)
-  const plan = planOf(sim, eid)
-  if (!plan || !c.Plan.firstTime[eid] || m.phase !== Phase.Play) return
+  if (!c.Plan.firstTime[eid] || c.Plan.type[eid] < 0 || m.phase !== Phase.Play) return
   if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid)) return
+  const shot = shotPlanOf(sim, eid)
+  const plan = planOf(sim, eid)
   // First-time passes are planned along the ground; a bouncing ball gets controlled instead.
-  if (c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
+  if (!shot && c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
   setPlan(sim, eid, null)
   setIntent(sim, eid, IntentKind.Hold)
+  if (shot) return strikeShot(sim, eid, shot, true)
+  if (!plan) return
   strikePass(sim, eid, plan, { firstTime: true, pressure: pressureAt(sim, eid, c.Pos.x[sim.ball], c.Pos.y[sim.ball]) })
   maybeGiveAndGo(sim, eid, plan)
+}
+
+function shoot(sim: Sim, eid: number, top: number) {
+  const { m, c, ball } = sim
+  const shot = shotPlanOf(sim, eid)
+  if (m.ball.owner !== eid || !shot) {
+    setPlan(sim, eid, null)
+    return setIntent(sim, eid, IntentKind.Hold)
+  }
+  moveTo(sim, eid, c.Pos.x[ball], c.Pos.y[ball], top * 0.6)
+  c.Motor.faceX[eid] = shot.x
+  c.Motor.faceY[eid] = shot.y
+  if (m.phase !== Phase.Play || !canStrike(sim, eid)) return
+  setPlan(sim, eid, null)
+  setIntent(sim, eid, IntentKind.Hold)
+  strikeShot(sim, eid, shot, false)
 }
 
 function press(sim: Sim, eid: number, top: number) {

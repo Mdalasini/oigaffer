@@ -7,13 +7,19 @@ import { HALF_LENGTH } from '../pitch'
 import { chance, gauss } from '../rng'
 import { attackDir, teamOf, type Sim } from '../sim'
 import { Phase } from '../state'
+import { canHandle, handle, inHandsReach, keeperOf } from '../keeper'
+import { header, headerHeight } from '../shooting'
 
 const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 
-/** Decides who has the ball: owners lose a ball that strays, and loose balls go to whoever reaches them. */
+/**
+ * Decides who has the ball: owners lose a ball that strays, keepers take
+ * what their hands reach, and loose balls go to whoever gets a foot or a
+ * head to them first.
+ */
 export function possessionSystem(sim: Sim): void {
   const { m, c, ball } = sim
-  if (m.phase !== Phase.Play) return
+  if (m.phase !== Phase.Play || m.ball.inHands) return
   const bx = c.Pos.x[ball]
   const by = c.Pos.y[ball]
   const bz = c.Air.z[ball]
@@ -21,23 +27,35 @@ export function possessionSystem(sim: Sim): void {
   if (owner >= 0) {
     const dx = bx - c.Pos.x[owner]
     const dy = by - c.Pos.y[owner]
-    if (dx * dx + dy * dy > LOSE_DISTANCE * LOSE_DISTANCE || bz > CONTROL_HEIGHT) m.ball.owner = -1
+    const d2 = dx * dx + dy * dy
+    if (d2 > LOSE_DISTANCE * LOSE_DISTANCE || bz > CONTROL_HEIGHT) m.ball.owner = -1
+    // A keeper can smother a ball that is off the carrier's feet.
+    else if (d2 > 0.6 * 0.6) {
+      const gk = keeperOf(sim, 1 - teamOf(sim, owner))
+      if (canHandle(sim, gk) && inHandsReach(sim, gk)) handle(sim, gk)
+    }
     return
   }
-  if (bz > CONTROL_HEIGHT) return
+  for (const team of [0, 1]) {
+    const gk = keeperOf(sim, team)
+    if (canHandle(sim, gk) && inHandsReach(sim, gk)) return handle(sim, gk)
+  }
   let best = -1
-  let bestD = FOOT_REACH * FOOT_REACH
+  let bestD = Infinity
   for (const eid of sim.players) {
     if (m.tick < c.Brain.noTouchUntil[eid]) continue
+    const reach = bz <= CONTROL_HEIGHT ? FOOT_REACH : bz <= headerHeight(sim, eid) ? 0.6 : 0
     const dx = bx - c.Pos.x[eid]
     const dy = by - c.Pos.y[eid]
     const d2 = dx * dx + dy * dy
-    if (d2 <= bestD) {
+    if (d2 <= reach * reach && d2 < bestD) {
       best = eid
       bestD = d2
     }
   }
-  if (best >= 0) firstTouch(sim, best)
+  if (best < 0) return
+  if (bz > CONTROL_HEIGHT) header(sim, best)
+  else firstTouch(sim, best)
 }
 
 /**

@@ -2,6 +2,7 @@
 // derived from the formation slot, the ball and whether the team has it.
 
 import { clamp } from './fmath'
+import { keeperPosition } from './keeper'
 import { believe, type Belief } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { attackDir, type Sim } from './sim'
@@ -18,28 +19,20 @@ export function shapeTarget(sim: Sim, eid: number, out: Point): Point {
   const { Player } = sim.c
   const team = Player.team[eid]
   const slot = sim.formations[team].slots[Player.slot[eid]]
+  if (slot.role === 'GK') return keeperPosition(sim, eid, out)
   const dir = attackDir(sim, team)
   believe(sim, eid, sim.ball, ball)
   const bx = ball.x * dir
   const by = ball.y * dir
   const inPossession = sim.m.possession === team
 
-  let ax: number
-  let ay: number
-  if (slot.role === 'GK') {
-    ax = -HALF_LENGTH + 1.5 + clamp((bx + HALF_LENGTH) * 0.1, 0, 14)
-    ay = clamp(by * 0.12, -3, 3)
-  } else {
-    const base = inPossession ? slot.attack : slot.defend
-    // The block slides with the ball, and squeezes up and narrows without it.
-    const shiftX = clamp(bx * (inPossession ? 0.6 : 0.5), -24, 24)
-    const shiftY = by * (inPossession ? 0.2 : 0.4)
-    const narrow = inPossession ? 1 : 0.85
-    ax = base[0] + shiftX
-    ay = base[1] * narrow + shiftY
-    ax = clamp(ax, -HALF_LENGTH + 4, HALF_LENGTH - 4)
-    ay = clamp(ay, -HALF_WIDTH + 1.5, HALF_WIDTH - 1.5)
-  }
+  const base = inPossession ? slot.attack : slot.defend
+  // The block slides with the ball, and squeezes up and narrows without it.
+  const shiftX = clamp(bx * (inPossession ? 0.6 : 0.5), -24, 24)
+  const shiftY = by * (inPossession ? 0.2 : 0.4)
+  const narrow = inPossession ? 1 : 0.85
+  const ax = clamp(base[0] + shiftX, -HALF_LENGTH + 4, HALF_LENGTH - 4)
+  const ay = clamp(base[1] * narrow + shiftY, -HALF_WIDTH + 1.5, HALF_WIDTH - 1.5)
   out.x = ax * dir
   out.y = ay * dir
   return out

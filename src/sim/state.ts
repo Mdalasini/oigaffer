@@ -46,7 +46,13 @@ export interface MatchState {
   ball: {
     /** Player in control of the ball, or -1 when loose. */
     owner: number
+    /** The owner is a goalkeeper holding it in their hands. */
+    inHands: boolean
     lastTouch: number
+    /** Kind of the last kick ('' after a touch or save). */
+    lastKick: string
+    /** Team whose player last deliberately passed it with the foot, until an opponent touches it: their keeper may not handle it. */
+    backPassTeam: number
     lastTeam: number
     touchTick: number
   }
@@ -69,7 +75,7 @@ export function createMatchState(cfg: MatchConfig): MatchState {
     restart: { kind: Restart.KickOff, team: 0, x: 0, y: 0, taker: -1 },
     score: [0, 0],
     firstKickOff: 0,
-    ball: { owner: -1, lastTouch: -1, lastTeam: -1, touchTick: -1 },
+    ball: { owner: -1, inHands: false, lastTouch: -1, lastKick: '', backPassTeam: -1, lastTeam: -1, touchTick: -1 },
     possession: -1,
     events: [],
     prevEvents: [],

@@ -1,14 +1,17 @@
-// Decisions with the ball, or about to get it: pass, carry, or play it
-// first time, and the give-and-go that can follow a pass.
+// Decisions with the ball, or about to get it: shoot, pass, carry, or play
+// it first time, the give-and-go that can follow a pass, and a keeper
+// getting the ball out of their hands.
 
 import { TICK_RATE } from './constants'
-import { pitchValue, pressureAt } from './evaluate'
+import { lossValue, pitchValue, pressureAt } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
 import { IntentKind, setIntent } from './intents'
 import { intercept, type Intercept } from './movement'
 import { bestPass, PassType, type PassPlan } from './passing'
 import { believe, call, HEARING_RADIUS, type Belief } from './perception'
+import { heldFor, mustRelease } from './keeper'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
+import { estimateXg, planShot, type ShotPlan } from './shooting'
 import { chance } from './rng'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 
@@ -18,6 +21,8 @@ const MIN_HOLD = Math.round(0.3 * TICK_RATE)
 const FIRST_TIME_WINDOW = 0.6
 const CARRY_DISTANCE = 8
 const CARRY_ANGLES = [0, 0.5, -0.5, 1, -1]
+const SHOT_BIAS = 1.15
+const FIRST_TIME_SHOT = 0.85
 
 const ic: Intercept = { t: 0, x: 0, y: 0 }
 const seen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
@@ -31,15 +36,36 @@ export function setPlan(sim: Sim, eid: number, plan: PassPlan | null, firstTime 
   Plan.firstTime[eid] = firstTime ? 1 : 0
 }
 
+/** Plan type marking a shot rather than a pass. */
+export const SHOT_PLAN = 99
+
+export function setShotPlan(sim: Sim, eid: number, shot: ShotPlan, firstTime = false): void {
+  const { Plan } = sim.c
+  Plan.type[eid] = SHOT_PLAN
+  Plan.target[eid] = -1
+  Plan.x[eid] = shot.x
+  Plan.y[eid] = shot.y
+  Plan.z[eid] = shot.z
+  Plan.firstTime[eid] = firstTime ? 1 : 0
+}
+
+export function shotPlanOf(sim: Sim, eid: number): ShotPlan | null {
+  const { Plan } = sim.c
+  if (Plan.type[eid] !== SHOT_PLAN) return null
+  return { x: Plan.x[eid], y: Plan.y[eid], z: Plan.z[eid], xg: 0 }
+}
+
 export function planOf(sim: Sim, eid: number): PassPlan | null {
   const { Plan } = sim.c
-  if (Plan.type[eid] < 0) return null
+  if (Plan.type[eid] < 0 || Plan.type[eid] === SHOT_PLAN) return null
   return { type: Plan.type[eid] as PassType, target: Plan.target[eid], x: Plan.x[eid], y: Plan.y[eid], score: 0, success: 1 }
 }
 
 export function decideOnBall(sim: Sim, eid: number): void {
   const { c, m, ball } = sim
-  if (c.Intent.kind[eid] === IntentKind.Pass && c.Plan.type[eid] >= 0) return
+  const kind = c.Intent.kind[eid]
+  if ((kind === IntentKind.Pass || kind === IntentKind.Shoot) && c.Plan.type[eid] >= 0) return
+  if (m.ball.inHands) return decideInHands(sim, eid)
   const bx = c.Pos.x[ball]
   const by = c.Pos.y[ball]
   const pressure = pressureAt(sim, eid, bx, by)
@@ -47,7 +73,13 @@ export function decideOnBall(sim: Sim, eid: number): void {
   const carry = bestCarry(sim, eid, pressure)
   const pass = bestPass(sim, eid, bx, by)
   const pressed = pressure < 2.5
-  if (pass && (held >= MIN_HOLD || pressed) && (pass.score > carry.score + 0.02 || (pressed && pass.success > 0.5))) {
+  const xg = estimateXg(sim, eid, bx, by)
+  // Players shoot a little more readily than the numbers say.
+  if (xg > 0.03 && xg * SHOT_BIAS >= Math.max(carry.score, pass ? pass.score : -1)) {
+    setShotPlan(sim, eid, planShot(sim, eid, bx, by))
+    return setIntent(sim, eid, IntentKind.Shoot)
+  }
+  if (pass && (held >= MIN_HOLD || pressed) && (pass.score > carry.score + 0.004 || (pressed && pass.success > 0.5))) {
     setPlan(sim, eid, pass)
     return setIntent(sim, eid, IntentKind.Pass, pass.target, pass.x, pass.y)
   }
@@ -70,25 +102,50 @@ function bestCarry(sim: Sim, eid: number, pressure: number): { x: number; y: num
     const ty = clamp(y + sin(a) * CARRY_DISTANCE, -HALF_WIDTH + 1, HALF_WIDTH - 1)
     const room = pressureAt(sim, eid, (x + tx) / 2, (y + ty) / 2)
     const risk = clamp((4 - room) / 4, 0, 1) * 0.6 + clamp((3 - pressure) / 3, 0, 1) * 0.3
-    const loss = 0.12 + 0.6 * pitchValue(sim, 1 - team, tx, ty)
-    const score = (1 - risk) * pitchValue(sim, team, tx, ty) - risk * loss - Math.abs(turn) * 0.01
+    const score = (1 - risk) * pitchValue(sim, team, tx, ty) - risk * lossValue(sim, team, tx, ty) - Math.abs(turn) * 0.002
     if (score > best.score) best = { x: tx, y: ty, score }
   }
   return best
 }
 
-/** A receiver about to get the ball decides whether to play it first time. */
+/** A receiver about to get the ball decides whether to play it first time: a finish or a pass. */
 export function decideFirstTime(sim: Sim, eid: number): void {
   const { c, m } = sim
   intercept(sim, eid, ic)
   if (ic.t > FIRST_TIME_WINDOW) return
   const wall = m.tick < c.Brain.wallUntil[eid] ? c.Brain.wallFor[eid] : -1
   const pressure = pressureAt(sim, eid, ic.x, ic.y)
-  if (wall < 0 && pressure > 3) return setPlan(sim, eid, null)
+  // In front of goal a first-time finish beats taking a touch.
+  const xg = estimateXg(sim, eid, ic.x, ic.y) * FIRST_TIME_SHOT
+  if (wall < 0 && pressure > 3) {
+    if (xg > 0.08) return setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
+    return setPlan(sim, eid, null)
+  }
   // Volleying a long ball first time is rare; first-time passes stay on the ground.
   const plan = bestPass(sim, eid, ic.x, ic.y, wall, true)
-  if (plan && plan.success > 0.65 && plan.score > 0.03) setPlan(sim, eid, plan, true)
+  if (xg > 0.05 && xg >= (plan ? plan.score : 0)) setShotPlan(sim, eid, planShot(sim, eid, ic.x, ic.y), true)
+  else if (plan && plan.success > 0.65 && plan.score > 0.005) setPlan(sim, eid, plan, true)
   else setPlan(sim, eid, null)
+}
+
+/**
+ * A keeper with the ball in their hands waits for the team to spread out,
+ * then rolls, throws or kicks it to the best option, or launches it long
+ * if nothing is on before they must let go.
+ */
+function decideInHands(sim: Sim, gk: number): void {
+  const { c, ball } = sim
+  if (heldFor(sim, gk) < 1.5) return setIntent(sim, gk, IntentKind.Wait)
+  const pass = bestPass(sim, gk, c.Pos.x[ball], c.Pos.y[ball])
+  if (pass && (pass.success > 0.7 || mustRelease(sim, gk))) {
+    setPlan(sim, gk, pass)
+    return setIntent(sim, gk, IntentKind.Pass, pass.target, pass.x, pass.y)
+  }
+  if (!mustRelease(sim, gk)) return setIntent(sim, gk, IntentKind.Wait)
+  const dir = attackDir(sim, teamOf(sim, gk))
+  const long: PassPlan = { type: PassType.Lofted, target: -1, x: c.Pos.x[gk] + dir * 50, y: 0, score: 0, success: 0 }
+  setPlan(sim, gk, long)
+  setIntent(sim, gk, IntentKind.Pass, -1, long.x, long.y)
 }
 
 /**

@@ -1,5 +1,6 @@
 import { thinkSystem, updateScratch } from './brain'
 import { intentSystem } from './execute'
+import { keeperSystem } from './keeper'
 import { matchSystem } from './match'
 import { perceptionSystem } from './perception'
 import type { Sim } from './sim'
@@ -24,4 +25,6 @@ export function step(sim: Sim): void {
   separationSystem(sim)
   ballSystem(sim)
   possessionSystem(sim)
+  // Last, so keepers see every shot and header struck this tick.
+  keeperSystem(sim)
 }

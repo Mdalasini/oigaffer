@@ -14,15 +14,19 @@ export type SimEvent =
   | { type: 'phase'; tick: number; phase: Phase }
   /** A player shouts to teammates; `to` hears it, `about` is who it concerns. */
   | { type: 'call'; tick: number; by: number; call: CallKind; to: number; about: number }
+  /** The ball hit a post or the bar. */
+  | { type: 'woodwork'; tick: number; x: number; y: number; z: number }
+  /** A goalkeeper gets hands to the ball. */
+  | { type: 'save'; tick: number; by: number; kind: 'catch' | 'parry'; speed: number }
 
-export type KickKind = 'pass' | 'touch' | 'restart'
+export type KickKind = 'pass' | 'touch' | 'restart' | 'shot' | 'header'
 export interface KickDetail {
   /** Pass type name, e.g. "through". */
   pass?: string
   /** Played without controlling the ball first. */
   firstTime?: boolean
 }
-export type CallKind = 'man-on' | 'give-and-go'
+export type CallKind = 'man-on' | 'give-and-go' | 'keeper'
 
 export type SimEventType = SimEvent['type']
 export type EventOf<T extends SimEventType> = Extract<SimEvent, { type: T }>
