@@ -80,3 +80,80 @@ body,
 .bar button.active {
   background: #3d7a47;
 }
+
+.bar .flag {
+  background: #7a3d1f;
+  border-color: #a35a33;
+}
+
+.bar .scrub {
+  flex: 1;
+}
+
+.bar .hint {
+  opacity: 0.6;
+}
+
+.bar .selected {
+  color: #ffe866;
+}
+
+.bar .toast {
+  margin-left: auto;
+  color: #9fe0a8;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  display: grid;
+  place-items: center;
+}
+
+.dialog {
+  background: #142a18;
+  border: 1px solid #2f5a36;
+  border-radius: 8px;
+  padding: 16px;
+  width: min(480px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dialog p {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.dialog textarea {
+  font: inherit;
+  background: #0d1a10;
+  color: inherit;
+  border: 1px solid #2f5a36;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog button {
+  background: #1f3d24;
+  color: inherit;
+  border: 1px solid #2f5a36;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font: inherit;
+  cursor: pointer;
+}
