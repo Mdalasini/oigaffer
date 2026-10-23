@@ -23,8 +23,10 @@ export const INTENT_NAMES = Object.fromEntries(Object.entries(IntentKind).map(([
   string
 >
 
-export function setIntent(sim: Sim, eid: number, kind: IntentKind, target = -1, x = 0, y = 0): void {
+/** `mode` refines the intent, e.g. the dribbling style of a Carry. */
+export function setIntent(sim: Sim, eid: number, kind: IntentKind, target = -1, x = 0, y = 0, mode = 0): void {
   const { Intent } = sim.c
+  Intent.mode[eid] = mode
   if (Intent.kind[eid] !== kind || Intent.target[eid] !== target) Intent.since[eid] = sim.m.tick
   Intent.kind[eid] = kind
   Intent.target[eid] = target

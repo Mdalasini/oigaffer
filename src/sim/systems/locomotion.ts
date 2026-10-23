@@ -1,6 +1,8 @@
 import { query } from 'bitecs'
 import { DT, PLAYER_RADIUS } from '../constants'
 import { atan2, clamp, wrapAngle } from '../fmath'
+import { DribbleMode } from '../dribble'
+import { IntentKind } from '../intents'
 import { acceleration, BRAKING } from '../movement'
 import type { Sim } from '../sim'
 
@@ -46,9 +48,13 @@ export function locomotionSystem(sim: Sim): void {
   }
 }
 
-/** Pushes overlapping players apart so nobody runs through anyone. */
+/**
+ * Pushes overlapping players apart so nobody runs through anyone. The
+ * stronger player gives less ground, and a carrier shielding the ball is
+ * braced for it: this is the physical jostling for position.
+ */
 export function separationSystem(sim: Sim): void {
-  const { Pos } = sim.c
+  const { Pos, Attr, Intent } = sim.c
   const players = sim.players
   const min = PLAYER_RADIUS * 2
   for (let i = 0; i < players.length; i++) {
@@ -60,11 +66,19 @@ export function separationSystem(sim: Sim): void {
       const d2 = dx * dx + dy * dy
       if (d2 >= min * min || d2 === 0) continue
       const d = Math.sqrt(d2)
-      const push = (min - d) / 2 / d
-      Pos.x[a] -= dx * push
-      Pos.y[a] -= dy * push
-      Pos.x[b] += dx * push
-      Pos.y[b] += dy * push
+      const sa = (0.5 + Attr.strength[a]) * (braced(Intent.kind[a], Intent.mode[a]) ? 1.4 : 1)
+      const sb = (0.5 + Attr.strength[b]) * (braced(Intent.kind[b], Intent.mode[b]) ? 1.4 : 1)
+      const overlap = (min - d) / d
+      const pa = (overlap * sb) / (sa + sb)
+      const pb = (overlap * sa) / (sa + sb)
+      Pos.x[a] -= dx * pa
+      Pos.y[a] -= dy * pa
+      Pos.x[b] += dx * pb
+      Pos.y[b] += dy * pb
     }
   }
+}
+
+function braced(kind: number, mode: number): boolean {
+  return kind === IntentKind.Carry && mode === DribbleMode.Shield
 }

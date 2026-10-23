@@ -40,7 +40,7 @@ export function createComponents() {
     /** Where locomotion steers the player this tick. */
     Motor: { tx: f64(), ty: f64(), speed: f64(), faceX: f64(), faceY: f64(), hasFace: i32() },
     /** The player's current plan; see intents.ts. */
-    Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32() },
+    Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32(), mode: i32() },
     /** The ball action a player will make when they get to the ball; type -1 = none. */
     Plan: { type: i32(), target: i32(), x: f64(), y: f64(), z: f64(), firstTime: i32() },
     Brain: {

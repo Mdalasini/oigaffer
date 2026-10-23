@@ -1,14 +1,14 @@
 // Carries out each player's intent every tick: sets their motor and plays the
 // ball when the intent calls for it.
 
-import { touch } from './actions'
-import { CONTROL_HEIGHT, FOOT_REACH, TICK_RATE } from './constants'
-import { dist2, pressureAt } from './evaluate'
+import { CONTROL_HEIGHT } from './constants'
+import { pressureAt } from './evaluate'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
 import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
+import { dribble, type DribbleMode } from './dribble'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
 import { CENTRE_CIRCLE_RADIUS, HALF_LENGTH } from './pitch'
@@ -16,7 +16,6 @@ import { kickOffTarget, shapeTarget, type Point } from './shape'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 import { Phase } from './state'
 
-const TOUCH_INTERVAL = Math.round(0.3 * TICK_RATE)
 const FIRST_TIME_HEIGHT = 0.4
 /** Top speed of a keeper's dive across goal. */
 const DIVE_SPEED = 6.5
@@ -186,22 +185,7 @@ function pass(sim: Sim, eid: number, top: number) {
 }
 
 function carry(sim: Sim, eid: number, top: number) {
-  const { c, m, ball } = sim
-  const { Pos, Vel, Intent } = c
+  const { m, c } = sim
   if (m.ball.owner !== eid) return setIntent(sim, eid, IntentKind.Hold)
-  const dx = Intent.x[eid] - Pos.x[ball]
-  const dy = Intent.y[eid] - Pos.y[ball]
-  const dl = Math.sqrt(dx * dx + dy * dy) || 1
-  const ux = dx / dl
-  const uy = dy / dl
-  // Run onto the ball, slightly beyond it along the carry line.
-  moveTo(sim, eid, Pos.x[ball] + ux * 0.6, Pos.y[ball] + uy * 0.6, top * 0.75)
-  c.Motor.faceX[eid] = Intent.x[eid]
-  c.Motor.faceY[eid] = Intent.y[eid]
-  const near = Math.sqrt(dist2(sim, eid, ball)) <= FOOT_REACH
-  if (near && m.phase === Phase.Play && m.tick - m.ball.touchTick >= TOUCH_INTERVAL) {
-    const speed = Math.sqrt(Vel.x[eid] * Vel.x[eid] + Vel.y[eid] * Vel.y[eid])
-    const push = speed + 2.2
-    touch(sim, eid, ux * push, uy * push)
-  }
+  dribble(sim, eid, c.Intent.mode[eid] as DribbleMode, c.Intent.x[eid], c.Intent.y[eid], top)
 }

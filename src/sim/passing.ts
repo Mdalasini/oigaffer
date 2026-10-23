@@ -177,7 +177,9 @@ export function strikePass(sim: Sim, passer: number, plan: PassPlan, ctx: Strike
   const a = angle + gauss(sim.m.rng) * 0.04 * difficulty
   const power = 1 + gauss(sim.m.rng) * 0.05 * difficulty
   const h = Math.sqrt(vx * vx + vy * vy) * power
-  kick(sim, passer, cos(a) * h, sin(a) * h, vz * power, 'pass', plan.target, { pass: name, firstTime: ctx.firstTime })
+  // Knocking the ball past a defender is a long touch to yourself.
+  const kind = plan.target === passer ? 'knock-on' : 'pass'
+  kick(sim, passer, cos(a) * h, sin(a) * h, vz * power, kind, plan.target, kind === 'pass' ? { pass: name, firstTime: ctx.firstTime } : {})
 }
 
 /** True if the ball is close enough to the player's feet to strike. */
