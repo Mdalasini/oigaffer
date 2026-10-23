@@ -46,7 +46,8 @@ export function estimateXg(sim: Sim, shooter: number, x: number, y: number): num
   const d = Math.sqrt((gx - x) * (gx - x) + y * y)
   if (d > MAX_SHOT_DISTANCE || (x - gx) * attackDir(sim, team) > 0) return 0
   const theta = goalAngle(sim, team, x, y)
-  let xg = Math.min(0.65, 1 / (1 + exp(-(-1.4 + 3 * theta - 0.11 * d))))
+  // About 0.27 from the penalty spot, 0.09 from the edge of the box, for an average finisher.
+  let xg = Math.min(0.65, 1 / (1 + exp(-(-1.6 + 3 * theta - 0.12 * d))))
   // Defenders in the triangle between the ball and the posts block the shot;
   // a keeper in it narrows the angle, more the closer they have come.
   for (const o of sim.teams[1 - team]) {
@@ -60,7 +61,7 @@ export function estimateXg(sim: Sim, shooter: number, x: number, y: number): num
   }
   const { Attr } = sim.c
   xg *= 0.6 + 0.4 * clamp(pressureAt(sim, shooter, x, y) / 3, 0, 1)
-  xg *= (0.7 + 0.6 * Attr.shooting[shooter]) * (0.85 + 0.3 * Attr.composure[shooter])
+  xg *= (0.85 + 0.5 * (Attr.shooting[shooter] - 0.6)) * (0.95 + 0.2 * (Attr.composure[shooter] - 0.6))
   return xg
 }
 
@@ -80,15 +81,19 @@ export function planShot(sim: Sim, shooter: number, x: number, y: number): ShotP
   const keeper = sim.teams[1 - team].find((e) => roleOf(sim, e) === 'GK')!
   believe(sim, shooter, keeper, seen)
   const side = seen.y > 0 ? -1 : 1
-  const aimY = side * (GOAL_WIDTH / 2 - 0.75)
+  // Better finishers aim tighter to the post.
+  const aimY = side * (GOAL_WIDTH / 2 - 1.4 + 0.8 * sim.c.Attr.shooting[shooter])
   // Low unless the keeper is well off their line, when it goes over them.
   const off = Math.abs(gx - seen.x)
   const aimZ = off > 4 ? 1.9 : 0.35
   return { x: gx, y: aimY, z: aimZ, xg: estimateXg(sim, shooter, x, y) }
 }
 
-/** Strikes a shot at the plan's aim point; error grows with distance, pressure and a first-time strike. */
-export function strikeShot(sim: Sim, shooter: number, plan: ShotPlan, firstTime: boolean): void {
+/**
+ * Strikes a shot at the plan's aim point; error grows with distance, pressure
+ * and a first-time strike. `care` scales it, e.g. down for a placed penalty.
+ */
+export function strikeShot(sim: Sim, shooter: number, plan: ShotPlan, firstTime: boolean, care = 1): void {
   const { Pos, Attr } = sim.c
   const bx = Pos.x[sim.ball]
   const by = Pos.y[sim.ball]
@@ -97,7 +102,7 @@ export function strikeShot(sim: Sim, shooter: number, plan: ShotPlan, firstTime:
   const d = Math.sqrt(dx * dx + dy * dy)
   const speed = (22 + 9 * Attr.shooting[shooter]) * (firstTime ? 0.9 : 1)
   const pressure = clamp((3 - pressureAt(sim, shooter, bx, by)) / 3, 0, 1)
-  const sigma = (0.045 + 0.08 * (1 - Attr.shooting[shooter])) * (1 + pressure * 0.6) * (firstTime ? 1.3 : 1) * (1 + d / 40)
+  const sigma = care * (0.065 + 0.1 * (1 - Attr.shooting[shooter])) * (1 + pressure * 0.6) * (firstTime ? 1.3 : 1) * (1 + d / 40)
   const a = atan2(dy, dx) + gauss(sim.m.rng) * sigma
   const t = d / speed
   // Launch so the ball is at the aim height as it reaches the line.

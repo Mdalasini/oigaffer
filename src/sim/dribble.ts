@@ -49,6 +49,8 @@ const STYLES: Record<DribbleMode, Style> = {
 }
 
 const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
+/** Ticks between a carrier's considered decisions to take a man on. */
+const TAKE_ON_COOLDOWN = Math.round(1.5 * TICK_RATE)
 const flight = createFlight()
 
 export interface DribbleChoice {
@@ -73,8 +75,10 @@ export function chooseDribble(sim: Sim, eid: number, tx: number, ty: number, pas
   // How much the opponent is in the way of the carry, -1 behind .. 1 dead ahead.
   const ahead = d > 0 ? (ox * cx + oy * cy) / (d * cl) : 0
   if (d < 1.8 && ahead < 0.3 && !passAvailable) return { mode: DribbleMode.Shield, knockOn: null }
-  // Taking a man on is a decision, not a habit: better dribblers try it more.
-  if (ahead > 0.5 && d > 2.5 && d < 7 && chance(sim.m.rng, 0.15 + 0.35 * Attr.dribbling[eid])) {
+  // Taking a man on is a decision made now and then, not every look: better dribblers try it more.
+  const looked = ahead > 0.5 && d > 2.5 && d < 7 && sim.m.tick >= sim.c.Brain.takeOnReady[eid]
+  if (looked) sim.c.Brain.takeOnReady[eid] = sim.m.tick + TAKE_ON_COOLDOWN
+  if (looked && chance(sim.m.rng, 0.15 + 0.35 * Attr.dribbling[eid])) {
     const knock = planKnockOn(sim, eid, cx / cl, cy / cl, d)
     if (knock && topSpeed(sim, eid) + Attr.dribbling[eid] > topSpeed(sim, nearest) + 0.3) return { mode: DribbleMode.Normal, knockOn: knock }
   }

@@ -30,6 +30,8 @@ const SLIDE_DOWN_SECONDS = 1.1
 const STUMBLE_SECONDS = 0.45
 /** Gap a jockeying defender keeps from the carrier, goal side. */
 const CONTAIN_GAP = 1.8
+/** Ticks between a defender weighing up whether to go in. */
+const COMMIT_CHECK = Math.round(1 * TICK_RATE)
 
 const carrierSeen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 const ballSeen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
@@ -79,15 +81,22 @@ export function decideDefending(sim: Sim, d: number, carrier: number): void {
   // Running alongside: lean in with the shoulder.
   if (cs > 3 && ds > 3 && dist < 1.3) {
     const parallel = (carrierSeen.vx * c.Vel.x[d] + carrierSeen.vy * c.Vel.y[d]) / (cs * ds)
-    if (parallel > 0.7 && chance(m.rng, 0.3 + 0.4 * aggression)) return commit(sim, d, carrier, TackleKind.Charge)
+    // Only shoulder to shoulder: from behind it would be a foul.
+    const fx = cos(c.Facing.a[carrier])
+    const fy = sin(c.Facing.a[carrier])
+    const alongside = Math.abs((dx * fx + dy * fy) / (dist || 1)) < 0.5
+    if (parallel > 0.7 && alongside && chance(m.rng, 0.3 + 0.4 * aggression)) return commit(sim, d, carrier, TackleKind.Charge)
   }
   // Beaten and chasing: a last-ditch slide.
   if (!inBox && !goalSide && dist < 3 && cs > ds - 0.5 && chance(m.rng, 0.15 + 0.35 * aggression)) {
     return commit(sim, d, carrier, TackleKind.Slide)
   }
   // Squared up: go in when the ball is off the carrier's foot, or out of impatience.
-  if (dist < 2.4) {
-    const eagerness = 0.08 + 0.25 * aggression - 0.1 * c.Attr.positioning[d] + clamp((exposed - 0.4) / 0.6, 0, 1) * 0.6
+  // Impatience is weighed now and then; an exposed ball is pounced on at once.
+  const ballLoose = exposed > 0.8
+  if (dist < 2.4 && (ballLoose || m.tick >= c.Brain.commitCheck[d])) {
+    c.Brain.commitCheck[d] = m.tick + COMMIT_CHECK
+    const eagerness = 0.04 + 0.18 * aggression - 0.1 * c.Attr.positioning[d] + clamp((exposed - 0.4) / 0.6, 0, 1) * 0.6
     if (chance(m.rng, clamp(eagerness, 0.02, 0.9))) return commit(sim, d, carrier, TackleKind.Standing)
   }
   setIntent(sim, d, IntentKind.Press, carrier)
@@ -175,6 +184,8 @@ function resolve(sim: Sim, d: number, carrier: number, kind: TackleKind) {
     win = clamp(0.35 + 0.5 * skill + 0.3 * exposure, 0.05, 0.9) * (kind === TackleKind.Slide ? 0.8 : 1)
     foul = 0.04 + (fromBehind ? 0.35 : 0) + (kind === TackleKind.Slide ? 0.12 : 0) + 0.1 * A.aggression[d] - 0.08 * A.tackling[d]
   }
+  // Defenders in their own box go in carefully.
+  if (inOwnPenaltyArea(sim, teamOf(sim, d), c.Pos.x[ball], c.Pos.y[ball])) foul *= 0.5
   const onVx = c.Vel.x[carrier]
   const onVy = c.Vel.y[carrier]
   const roll = next(m.rng)

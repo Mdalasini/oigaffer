@@ -105,6 +105,7 @@ describe('chance quality', () => {
     place(sim, sim.ball, dir * (HALF_LENGTH - 9.5), 1)
     place(sim, keeperOf(sim, 1), dir * (HALF_LENGTH - 1), 0)
     sim.m.ball.owner = striker
+    sim.c.Brain.gotBall[striker] = -100
     revealAll(sim)
     decideOnBall(sim, striker)
     expect(sim.c.Intent.kind[striker]).toBe(IntentKind.Shoot)

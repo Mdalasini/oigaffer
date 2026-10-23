@@ -144,14 +144,14 @@ function openLane(sim: Sim, eid: number, carrier: number, out: Point) {
 
 /**
  * Zonal marking: pick up the nearest attacker in our zone, a little goal
- * side of them. Returns the attacking-frame x the marker must stay behind
- * to remain goal side (Infinity if marking nobody).
+ * side of them; near our own goal, tight to them. Returns the
+ * attacking-frame x the marker must stay behind (Infinity if marking nobody).
  */
 function markZone(sim: Sim, eid: number, out: Point): number {
   const team = teamOf(sim, eid)
   const dir = attackDir(sim, team)
   let best = -1
-  let bestD = 8 * 8
+  let bestD = 10 * 10
   for (const o of sim.teams[1 - team]) {
     if (roleOf(sim, o) === 'GK') continue
     believe(sim, eid, o, near)
@@ -164,12 +164,21 @@ function markZone(sim: Sim, eid: number, out: Point): number {
     }
   }
   if (best < 0) return Infinity
-  const gx = seen.x - dir * 1.5
-  out.x = out.x * 0.4 + gx * 0.6
-  out.y = out.y * 0.4 + seen.y * 0.6
+  const ownGoal = -dir * HALF_LENGTH
+  const danger = hypot(seen.x - ownGoal, seen.y) < 28
+  if (!danger && bestD > 8 * 8) return Infinity
+  // Goal side, on the line between the attacker and the middle of our goal.
+  const gl = hypot(ownGoal - seen.x, -seen.y) || 1
+  const gap = danger ? 1 : 1.5
+  const gx = seen.x + ((ownGoal - seen.x) / gl) * gap
+  const gy = seen.y + (-seen.y / gl) * gap
+  const w = danger ? 0.9 : 0.6
+  out.x = out.x * (1 - w) + gx * w
+  out.y = out.y * (1 - w) + gy * w
   // However the zone pulls, never end up on the wrong side of the man.
   if ((out.x - gx) * dir > 0) out.x = gx
-  return gx * dir
+  // Near goal the marker's own spot is the limit: the line marks rather than holds.
+  return danger ? out.x * dir : gx * dir
 }
 
 /** The second man out of possession: stand in the lane to the carrier's nearest teammate. */

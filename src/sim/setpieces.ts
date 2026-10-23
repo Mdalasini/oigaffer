@@ -283,13 +283,15 @@ function penalty(sim: Sim, taker: number) {
   const gk = keeperOf(sim, 1 - team)
   const plan = planShot(sim, taker, c.Pos.x[sim.ball], c.Pos.y[sim.ball])
   // Penalty takers pick a side rather than reading the keeper.
-  plan.y = (chance(m.rng, 0.5) ? 1 : -1) * (GOAL_WIDTH / 2 - range(m.rng, 0.4, 1.2))
+  plan.y = (chance(m.rng, 0.5) ? 1 : -1) * (GOAL_WIDTH / 2 - range(m.rng, 0.3, 1.0))
   plan.z = range(m.rng, 0.3, 1.6)
-  strikeShot(sim, taker, plan, false)
+  // A placed, unhurried kick: half the usual error.
+  strikeShot(sim, taker, plan, false, 0.5)
   const guess = next(m.rng)
   c.Keeper.diveAt[gk] = m.tick
   c.Keeper.x[gk] = c.Pos.x[gk]
-  c.Keeper.y[gk] = guess < 0.42 ? 2.6 : guess < 0.84 ? -2.6 : 0
+  // A guess made before the kick rarely reaches right into the corner.
+  c.Keeper.y[gk] = guess < 0.42 ? 1.9 : guess < 0.84 ? -1.9 : 0
 }
 
 /** A throw: both feet on the line, ball released from above the head to a nearby teammate. */
