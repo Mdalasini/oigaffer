@@ -17,6 +17,8 @@ export const IntentKind = {
   Dive: 10,
   /** Committed to a challenge; mode is the TackleKind. */
   Tackle: 11,
+  /** Out of possession: standing in the lane to the target, the carrier's nearest option. */
+  CutLane: 12,
 } as const
 export type IntentKind = (typeof IntentKind)[keyof typeof IntentKind]
 

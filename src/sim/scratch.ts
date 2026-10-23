@@ -1,4 +1,5 @@
 import { integrateBall, type BallState } from './ballmotion'
+import { MAX_ENTITIES } from './components'
 
 /** Ball path prediction: one sample every PATH_STRIDE ticks. */
 export const PATH_STRIDE = 3
@@ -11,10 +12,25 @@ export interface Scratch {
   chaser: [number, number]
   /** Per team: the player closing down an opponent on the ball, or -1. */
   presser: [number, number]
+  /** Per player: the teammate whose vacated slot they are covering, or -1. */
+  cover: Int32Array
+  /** Per team: height (attacking-frame x) its back line holds. */
+  lineX: [number, number]
+  /** Per team: the second man cutting the lane to the carrier's nearest option, and that option. */
+  laneCutter: [number, number]
+  laneOption: [number, number]
 }
 
 export function createScratch(): Scratch {
-  return { path: new Float64Array(PATH_SAMPLES * 3), chaser: [-1, -1], presser: [-1, -1] }
+  return {
+    path: new Float64Array(PATH_SAMPLES * 3),
+    chaser: [-1, -1],
+    presser: [-1, -1],
+    cover: new Int32Array(MAX_ENTITIES).fill(-1),
+    lineX: [0, 0],
+    laneCutter: [-1, -1],
+    laneOption: [-1, -1],
+  }
 }
 
 export function predictPath(out: Float64Array, start: BallState): void {

@@ -9,6 +9,7 @@ import { isDiving, isDown, KEEPER_HEIGHT, shouldRush } from './keeper'
 import { intercept, type Intercept } from './movement'
 import { believe, call, HEARING_RADIUS, type Belief } from './perception'
 import { decideDefending } from './defending'
+import { decideSupport } from './offball'
 import { decideFirstTime, decideOnBall } from './onball'
 import { HALF_LENGTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH } from './pitch'
 import { predictPath } from './scratch'
@@ -100,6 +101,14 @@ export function chaseHeight(sim: Sim, eid: number): number {
   return roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT
 }
 
+/** A run carries on until the runner gets there or it has gone on too long. */
+function runGoing(sim: Sim, eid: number): boolean {
+  const { c, m } = sim
+  const dx = c.Intent.x[eid] - c.Pos.x[eid]
+  const dy = c.Intent.y[eid] - c.Pos.y[eid]
+  return m.tick - c.Intent.since[eid] < RUN_LIMIT && dx * dx + dy * dy > 1.5 * 1.5
+}
+
 function inOwnBox(sim: Sim, team: number, x: number, y: number): boolean {
   const ax = x * attackDir(sim, team)
   return ax < -HALF_LENGTH + PENALTY_AREA_DEPTH && Math.abs(y) < PENALTY_AREA_WIDTH / 2
@@ -129,8 +138,7 @@ function decide(sim: Sim, eid: number): void {
   // A committed challenge plays out whoever is now nearest the ball.
   if (kind === IntentKind.Tackle && owner === c.Intent.target[eid]) return decideDefending(sim, eid, owner)
   if (kind === IntentKind.Dive && (isDiving(sim, eid) || isDown(sim, eid))) return
-  if (kind === IntentKind.Run && owner < 0 && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
-  if (kind === IntentKind.Run && owner >= 0 && teamOf(sim, owner) === team && m.tick - c.Intent.since[eid] < RUN_LIMIT) return
+  if (kind === IntentKind.Run && runGoing(sim, eid) && (owner < 0 || teamOf(sim, owner) === team)) return
   if (owner < 0) {
     if (kind === IntentKind.Receive && m.ball.lastTeam === team) return decideFirstTime(sim, eid)
     if (scratch.chaser[team] === eid) {
@@ -140,7 +148,9 @@ function decide(sim: Sim, eid: number): void {
     }
     return setIntent(sim, eid, IntentKind.Hold)
   }
-  if (teamOf(sim, owner) !== team && scratch.presser[team] === eid) return decideDefending(sim, eid, owner)
+  if (teamOf(sim, owner) === team) return decideSupport(sim, eid, owner)
+  if (scratch.presser[team] === eid) return decideDefending(sim, eid, owner)
+  if (scratch.laneCutter[team] === eid) return setIntent(sim, eid, IntentKind.CutLane, scratch.laneOption[team])
   if (teamOf(sim, owner) !== team && roleOf(sim, eid) === 'GK' && shouldRush(sim, eid, owner)) {
     return setIntent(sim, eid, IntentKind.Press, owner)
   }
