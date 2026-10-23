@@ -6,6 +6,7 @@ import { emit } from './events'
 import { IntentKind, setIntent } from './intents'
 import { bestPass, strikePass } from './passing'
 import { revealAll } from './perception'
+import { planShot, strikeShot } from './shooting'
 import { kickOffTarget, type Point } from './shape'
 import { attackDir, createSim, roleOf, type Sim } from './sim'
 import { Phase, Restart, type MatchConfig } from './state'
@@ -40,9 +41,9 @@ function enterPhase(sim: Sim, phase: Phase) {
   }
 }
 
-function setupRestart(sim: Sim, kind: Restart, team: number, x: number, y: number, taker: number) {
+function setupRestart(sim: Sim, kind: Restart, team: number, x: number, y: number, taker: number, indirect = false) {
   placeBall(sim, x, y)
-  sim.m.restart = { kind, team, x, y, taker }
+  sim.m.restart = { kind, team, x, y, taker, indirect }
   for (const eid of sim.players) setIntent(sim, eid, IntentKind.Hold)
   setIntent(sim, taker, IntentKind.TakeRestart)
   enterPhase(sim, kind === Restart.KickOff ? Phase.KickOff : Phase.Restart)
@@ -52,7 +53,7 @@ const p: Point = { x: 0, y: 0 }
 
 export function startKickOff(sim: Sim, team: number): void {
   const { Pos, Vel, Facing } = sim.c
-  const taker = sim.teams[team].find((eid) => roleOf(sim, eid) === 'ST') ?? sim.teams[team][9]
+  const taker = sim.teams[team].find((eid) => roleOf(sim, eid) === 'ST') ?? chooseTaker(sim, Restart.FreeKick, team, 0, 0)
   for (const eid of sim.players) {
     const t = sim.c.Player.team[eid]
     kickOffTarget(sim, eid, t === team, p)
@@ -72,6 +73,11 @@ export function startKickOff(sim: Sim, team: number): void {
 export function awardRestart(sim: Sim, kind: Restart, team: number, x: number, y: number): void {
   emit(sim, { type: 'out', restart: kind, team, x, y, lastTouch: sim.m.ball.lastTouch })
   setupRestart(sim, kind, team, x, y, chooseTaker(sim, kind, team, x, y))
+}
+
+/** A free kick or penalty after the referee stops play. */
+export function awardFreeKick(sim: Sim, kind: Restart, team: number, x: number, y: number, indirect: boolean): void {
+  setupRestart(sim, kind, team, x, y, chooseTaker(sim, kind, team, x, y), indirect)
 }
 
 export function awardGoal(sim: Sim, team: number): void {
@@ -118,9 +124,11 @@ export function matchSystem(sim: Sim): void {
       const dx = c.Pos.x[ball] - c.Pos.x[taker]
       const dy = c.Pos.y[ball] - c.Pos.y[taker]
       if (elapsed < RESTART_DELAY || dx * dx + dy * dy > FOOT_REACH * FOOT_REACH) return
-      const pass = bestPass(sim, taker, c.Pos.x[ball], c.Pos.y[ball])
       enterPhase(sim, Phase.Play)
       setIntent(sim, taker, IntentKind.Hold)
+      if (m.restart.indirect) m.ball.indirectFrom = taker
+      if (m.restart.kind === Restart.Penalty) return strikeShot(sim, taker, planShot(sim, taker, c.Pos.x[ball], c.Pos.y[ball]), false)
+      const pass = bestPass(sim, taker, c.Pos.x[ball], c.Pos.y[ball])
       if (pass) strikePass(sim, taker, pass, { firstTime: false, pressure: Infinity })
       return
     }

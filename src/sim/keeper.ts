@@ -161,6 +161,7 @@ export function handle(sim: Sim, gk: number): void {
   m.ball.lastTeam = teamOf(sim, gk)
   m.ball.lastKick = ''
   m.ball.backPassTeam = -1
+  m.ball.indirectFrom = -1
   m.ball.touchTick = m.tick
   m.possession = teamOf(sim, gk)
   if (chance(m.rng, hold)) {

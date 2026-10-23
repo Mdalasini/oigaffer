@@ -157,3 +157,27 @@ body,
   font: inherit;
   cursor: pointer;
 }
+
+.bar .cards {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.bar .card {
+  display: inline-block;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 2px;
+  color: #111;
+  font-size: 11px;
+  text-align: center;
+}
+
+.bar .card.yellow {
+  background: #f2d024;
+}
+
+.bar .card.red {
+  background: #e0362c;
+  color: #fff;
+}

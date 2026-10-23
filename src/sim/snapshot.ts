@@ -3,7 +3,7 @@
 // reproduces the original run exactly.
 
 import { componentArrays } from './components'
-import type { Sim } from './sim'
+import { syncRoster, type Sim } from './sim'
 import type { MatchConfig, MatchState } from './state'
 
 export interface Snapshot {
@@ -31,4 +31,5 @@ export function restore(sim: Sim, snap: Snapshot): void {
   }
   arrays.forEach((a, i) => a.set(snap.arrays[i]))
   sim.m = structuredClone(snap.m)
+  syncRoster(sim)
 }

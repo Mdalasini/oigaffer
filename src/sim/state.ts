@@ -39,7 +39,8 @@ export interface MatchState {
   halfStartTick: number
   phase: Phase
   phaseTick: number
-  restart: { kind: Restart; team: number; x: number; y: number; taker: number }
+  /** The restart being taken; `indirect` free kicks cannot be scored direct. */
+  restart: { kind: Restart; team: number; x: number; y: number; taker: number; indirect: boolean }
   score: [number, number]
   /** Team that kicked off the first half. */
   firstKickOff: number
@@ -51,6 +52,8 @@ export interface MatchState {
     lastTouch: number
     /** Kind of the last kick ('' after a touch or save). */
     lastKick: string
+    /** Taker of an indirect free kick whose kick nobody else has touched yet: no goal direct from it. */
+    indirectFrom: number
     /** Team whose player last deliberately passed it with the foot, until an opponent touches it: their keeper may not handle it. */
     backPassTeam: number
     lastTeam: number
@@ -58,6 +61,12 @@ export interface MatchState {
   }
   /** Team currently in possession, or -1 before the first touch. */
   possession: number
+  /** Players in an offside position when `team` last played the ball. */
+  offside: { team: number; players: number[] }
+  /** Fouls and yellow cards per player id, and who has been sent off. */
+  fouls: Record<number, number>
+  yellows: Record<number, number>
+  sentOff: number[]
   /** Events emitted during the most recent tick. */
   events: SimEvent[]
   /** Events of the tick before that. */
@@ -72,11 +81,15 @@ export function createMatchState(cfg: MatchConfig): MatchState {
     halfStartTick: 0,
     phase: Phase.KickOff,
     phaseTick: 0,
-    restart: { kind: Restart.KickOff, team: 0, x: 0, y: 0, taker: -1 },
+    restart: { kind: Restart.KickOff, team: 0, x: 0, y: 0, taker: -1, indirect: false },
     score: [0, 0],
     firstKickOff: 0,
-    ball: { owner: -1, inHands: false, lastTouch: -1, lastKick: '', backPassTeam: -1, lastTeam: -1, touchTick: -1 },
+    ball: { owner: -1, inHands: false, lastTouch: -1, lastKick: '', indirectFrom: -1, backPassTeam: -1, lastTeam: -1, touchTick: -1 },
     possession: -1,
+    offside: { team: -1, players: [] },
+    fouls: {},
+    yellows: {},
+    sentOff: [],
     events: [],
     prevEvents: [],
   }

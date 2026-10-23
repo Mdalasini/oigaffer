@@ -4,6 +4,7 @@ import { keeperSystem } from './keeper'
 import { matchSystem } from './match'
 import { updateTeamShape } from './offball'
 import { perceptionSystem } from './perception'
+import { refereeSystem } from './referee'
 import type { Sim } from './sim'
 import { Phase } from './state'
 import { ballSystem } from './systems/ball'
@@ -27,6 +28,7 @@ export function step(sim: Sim): void {
   separationSystem(sim)
   ballSystem(sim)
   possessionSystem(sim)
+  refereeSystem(sim)
   // Last, so keepers see every shot and header struck this tick.
   keeperSystem(sim)
 }
