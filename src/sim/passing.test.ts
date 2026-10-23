@@ -79,6 +79,23 @@ describe('choosing a pass', () => {
     expect(blocked === null || blocked.success < 0.3).toBe(true)
   })
 
+  test('a defender sprinting into the lane makes the pass risky even from a distance', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const [passer, mate] = [sim.teams[0][5], sim.teams[0][6]]
+    const defender = sim.teams[1][5]
+    place(sim, passer, 0, 0)
+    place(sim, sim.ball, 0.5 * dir, 0)
+    place(sim, mate, 25 * dir, 0)
+    place(sim, defender, 10 * dir, 6)
+    revealAll(sim)
+    const still = bestPass(sim, passer, 0.5 * dir, 0, mate, true)!
+    place(sim, defender, 10 * dir, 6, 0, -8)
+    revealAll(sim)
+    const running = bestPass(sim, passer, 0.5 * dir, 0, mate, true)
+    expect(running === null || running.success < still.success - 0.3).toBe(true)
+  })
+
   test('a winger running beyond a flat back line gets a through ball', () => {
     const sim = emptyPitch()
     const dir = attackDir(sim, 0)

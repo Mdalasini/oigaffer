@@ -15,6 +15,7 @@ import { attackDir, teamOf, type Sim } from './sim'
 import { Phase } from './state'
 
 const TOUCH_INTERVAL = Math.round(0.3 * TICK_RATE)
+const FIRST_TIME_HEIGHT = 0.4
 
 const ic: Intercept = { t: 0, x: 0, y: 0 }
 const pt: Point = { x: 0, y: 0 }
@@ -111,6 +112,8 @@ function receive(sim: Sim, eid: number, top: number) {
   const plan = planOf(sim, eid)
   if (!plan || !c.Plan.firstTime[eid] || m.phase !== Phase.Play) return
   if (m.ball.owner >= 0 || m.tick < c.Brain.noTouchUntil[eid] || !canStrike(sim, eid)) return
+  // First-time passes are planned along the ground; a bouncing ball gets controlled instead.
+  if (c.Air.z[sim.ball] > FIRST_TIME_HEIGHT) return setPlan(sim, eid, null)
   setPlan(sim, eid, null)
   setIntent(sim, eid, IntentKind.Hold)
   strikePass(sim, eid, plan, { firstTime: true, pressure: pressureAt(sim, eid, c.Pos.x[sim.ball], c.Pos.y[sim.ball]) })

@@ -39,6 +39,32 @@ export interface PassPlan {
   success: number
 }
 
+/** Exact launch speeds (horizontal, vertical) for a pass type over a distance. */
+function solveLaunch(type: PassType, d: number): [number, number] {
+  if (type === PassType.Lofted || type === PassType.Cross) {
+    const apex = type === PassType.Cross ? clamp(2 + d * 0.1, 3.5, 6) : clamp(3 + d * 0.12, 4, 14)
+    const { vh, vz } = airKick(d, apex)
+    return [vh, vz]
+  }
+  const arrive = type === PassType.Through ? 5 + d * 0.05 : type === PassType.DrivenCross ? 9 : 3.5 + d * 0.08
+  return [Math.min(30, groundKickSpeed(d, arrive)), 0]
+}
+
+// Solving a launch takes dozens of trial flights, too many to repeat for every
+// candidate pass, so speeds are solved once per whole metre and interpolated.
+const LAUNCH_TABLE_MAX = 80
+const launchTable = new Map<number, [number, number]>()
+
+function tabled(type: PassType, metre: number): [number, number] {
+  const key = type * 1000 + metre
+  let v = launchTable.get(key)
+  if (!v) {
+    v = solveLaunch(type, Math.max(1, metre))
+    launchTable.set(key, v)
+  }
+  return v
+}
+
 /** Launch velocity that sends a pass of the given type from one point to another. */
 export function launch(type: PassType, fx: number, fy: number, tx: number, ty: number): [number, number, number] {
   const dx = tx - fx
@@ -46,14 +72,13 @@ export function launch(type: PassType, fx: number, fy: number, tx: number, ty: n
   const d = Math.sqrt(dx * dx + dy * dy) || 1
   const ux = dx / d
   const uy = dy / d
-  if (type === PassType.Lofted || type === PassType.Cross) {
-    const apex = type === PassType.Cross ? clamp(2 + d * 0.1, 3.5, 6) : clamp(3 + d * 0.12, 4, 14)
-    const { vh, vz } = airKick(d, apex)
-    return [ux * vh, uy * vh, vz]
-  }
-  const arrive = type === PassType.Through ? 5 + d * 0.05 : type === PassType.DrivenCross ? 9 : 3.5 + d * 0.08
-  const v = Math.min(30, groundKickSpeed(d, arrive))
-  return [ux * v, uy * v, 0]
+  const lo = Math.min(LAUNCH_TABLE_MAX - 1, Math.floor(d))
+  const t = Math.min(1, d - lo)
+  const a = tabled(type, lo)
+  const b = tabled(type, lo + 1)
+  const vh = a[0] + (b[0] - a[0]) * t
+  const vz = a[1] + (b[1] - a[1]) * t
+  return [ux * vh, uy * vh, vz]
 }
 
 const flight = createFlight()
@@ -82,7 +107,7 @@ export function bestPass(sim: Sim, passer: number, bx: number, by: number, only 
     const speed = Math.sqrt(mate.vx * mate.vx + mate.vy * mate.vy)
     const tMate = 0.15 + runTime(reach, speed, topSpeed(sim, target), acceleration(sim, target))
     const late = clamp((tMate - tBall - 0.2) / 0.8, 0, 1)
-    const risk = interceptRisk(sim, passer, opponents, flight, s, target, mate.x, mate.y)
+    const risk = interceptRisk(sim, passer, opponents, flight, s, target, mate.x, mate.y, mate.vx, mate.vy)
     // Balls in the air are harder to land on the spot and to control.
     const aerial = vz > 0 ? 0.8 + 0.15 * sim.c.Attr.passing[passer] : 1
     const success = (1 - risk) * (1 - late) * aerial

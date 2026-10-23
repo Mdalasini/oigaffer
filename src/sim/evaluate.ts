@@ -4,7 +4,7 @@
 import { DT, FOOT_REACH } from './constants'
 import { clamp } from './fmath'
 import { FLIGHT_STRIDE, type Flight } from './kicks'
-import { acceleration, runTime, topSpeed } from './movement'
+import { acceleration, BRAKING, runTime, topSpeed } from './movement'
 import { believe, type Belief } from './perception'
 import { HALF_LENGTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH } from './pitch'
 import { attackDir, type Sim } from './sim'
@@ -30,10 +30,27 @@ const seen: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 const near: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 
 /** Seconds for someone at (x, y) to get a foot to (px, py), from a standing start after `reaction`. */
-function reachTime(px: number, py: number, x: number, y: number, vmax: number, acc: number, reaction: number): number {
-  const reach = Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)) - FOOT_REACH
+function reachTime(
+  px: number,
+  py: number,
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  vmax: number,
+  acc: number,
+  reaction: number,
+): number {
+  const dx = px - x
+  const dy = py - y
+  const d = Math.sqrt(dx * dx + dy * dy)
+  const reach = d - FOOT_REACH
   // Someone already at the ball's line only has to put a foot out.
-  return (reach <= 0.3 ? 0 : reaction) + runTime(reach, 0, vmax, acc)
+  if (reach <= 0.3) return 0
+  // Momentum towards the point helps; running the other way means braking first.
+  const along = d > 0 ? (vx * dx + vy * dy) / d : 0
+  const turn = along < 0 ? -along / BRAKING : 0
+  return reaction + turn + runTime(reach, Math.max(0, along), vmax, acc)
 }
 
 /**
@@ -50,6 +67,8 @@ export function interceptRisk(
   receiver: number,
   rx: number,
   ry: number,
+  rvx: number,
+  rvy: number,
 ): number {
   let risk = 0
   const last = Math.min(until, f.count - 1)
@@ -63,10 +82,10 @@ export function interceptRisk(
       if (f.xyz[s * 3 + 2] > REACH_HEIGHT) continue
       const px = f.xyz[s * 3]
       const py = f.xyz[s * 3 + 1]
-      const tOpp = reachTime(px, py, seen.x, seen.y, vmax, acc, REACTION)
+      const tOpp = reachTime(px, py, seen.x, seen.y, seen.vx, seen.vy, vmax, acc, REACTION)
       const tBall = s * FLIGHT_STRIDE * DT
       // The receiver knows the pass is coming, so reacts sooner.
-      const tMate = reachTime(px, py, rx, ry, rmax, racc, 0.15)
+      const tMate = reachTime(px, py, rx, ry, rvx, rvy, rmax, racc, 0.15)
       const r = clamp(0.5 + (tBall - tOpp) / 0.6, 0, 1) * clamp(0.5 + (tMate - tOpp) / 0.6, 0, 1)
       if (r > risk) {
         risk = r
