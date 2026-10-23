@@ -1,10 +1,13 @@
-// Runs the sim at its fixed tick rate behind the render loop and keeps the
-// previous tick's positions so frames can interpolate between ticks.
+// Runs the sim at its fixed tick rate behind the render loop, records the
+// last stretch of play, and lets the viewer pause, scrub back and flag.
 
+import { createFlag, type Flag } from '../replay/flag'
+import { Recorder } from '../replay/recorder'
 import { MAX_ENTITIES } from '../sim/components'
 import { DT } from '../sim/constants'
 import { newMatch } from '../sim/match'
-import { DEFAULT_CONFIG, type Sim } from '../sim/sim'
+import { createSim, DEFAULT_CONFIG, type Sim } from '../sim/sim'
+import { restore } from '../sim/snapshot'
 import type { MatchConfig } from '../sim/state'
 import { step } from '../sim/step'
 
@@ -13,8 +16,12 @@ const MAX_TICKS_PER_FRAME = 40
 
 export class Game {
   sim: Sim
+  rec: Recorder
   speed = 1
   paused = false
+  /** Recorded tick being shown while scrubbing, or null for the live match. */
+  scrubTick: number | null = null
+  selected: number[] = []
   private acc = 0
   /** x, y, z of every entity at the previous tick. */
   readonly prev = new Float64Array(MAX_ENTITIES * 3)
@@ -22,6 +29,7 @@ export class Game {
 
   constructor(cfg: MatchConfig = DEFAULT_CONFIG) {
     this.sim = newMatch(cfg)
+    this.rec = new Recorder(this.sim)
     this.savePrev()
   }
 
@@ -41,18 +49,65 @@ export class Game {
   }
 
   tick(): void {
+    const before = this.sim.m.tick
+    this.rec.beforeTick(this.sim)
     this.savePrev()
     step(this.sim)
+    // After full time the match no longer advances; keep the recording of the last stretch of play.
+    if (this.sim.m.tick !== before) this.rec.afterTick(this.sim)
   }
 
   setPaused(paused: boolean): void {
     this.paused = paused
+    if (!paused) this.scrubTick = null
     this.notify()
   }
 
   setSpeed(speed: number): void {
     this.speed = speed
     this.notify()
+  }
+
+  /** Shows a recorded tick (pausing the match), clamped to what is recorded. */
+  scrubTo(tick: number): void {
+    if (this.rec.length === 0) return
+    this.paused = true
+    this.scrubTick = Math.max(this.rec.firstTick(), Math.min(this.rec.lastTick(), tick))
+    this.notify()
+  }
+
+  /** The tick on screen: the scrubbed one, or the latest. */
+  shownTick(): number {
+    return this.scrubTick ?? this.sim.m.tick
+  }
+
+  toggleSelected(eid: number, additive: boolean): void {
+    const has = this.selected.includes(eid)
+    if (additive) this.selected = has ? this.selected.filter((e) => e !== eid) : [...this.selected, eid]
+    else this.selected = has && this.selected.length === 1 ? [] : [eid]
+    this.notify()
+  }
+
+  clearSelection(): void {
+    this.selected = []
+    this.notify()
+  }
+
+  flag(note: string): Flag {
+    return createFlag(this.sim, this.rec, this.shownTick(), note, this.selected)
+  }
+
+  /** Re-simulates a saved flag's window and shows its flagged tick. */
+  loadFlag(flag: Flag): void {
+    const sim = createSim(flag.config)
+    restore(sim, flag.keyframe.snap)
+    this.sim = sim
+    this.rec = new Recorder(sim)
+    const last = flag.frames.firstTick + flag.frames.count - 1
+    while (sim.m.tick < last) this.tick()
+    this.savePrev()
+    this.selected = flag.subjects.map((l) => flag.entities[flag.labels.indexOf(l)]).filter((e) => e !== undefined)
+    this.scrubTo(flag.flagTick)
   }
 
   subscribe(fn: () => void): () => void {

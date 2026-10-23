@@ -7,7 +7,8 @@
     "dev": "bun --bun vite",
     "build": "bun --bun tsc --noEmit && bun --bun vite build",
     "typecheck": "bun --bun tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "flag": "bun scripts/flag.ts"
   },
   "dependencies": {
     "bitecs": "0.4.0",
