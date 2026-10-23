@@ -40,7 +40,7 @@ export function kick(
   m.ball.inHands = false
   recordTouch(sim, eid)
   m.ball.lastKick = kind
-  m.ball.backPassTeam = kind === 'pass' ? c.Player.team[eid] : -1
+  m.ball.backPassTeam = kind === 'pass' || kind === 'throw-in' ? c.Player.team[eid] : -1
   c.Brain.noTouchUntil[eid] = m.tick + Math.round(KICK_RECOVERY / DT)
   emit(sim, { type: 'kick', by: eid, kind, to, x: c.Pos.x[ball], y: c.Pos.y[ball], ...detail })
   if (to >= 0) {

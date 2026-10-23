@@ -40,7 +40,7 @@ export type SimEvent =
   /** A goalkeeper gets hands to the ball. */
   | { type: 'save'; tick: number; by: number; kind: 'catch' | 'parry'; speed: number }
 
-export type KickKind = 'pass' | 'touch' | 'restart' | 'shot' | 'header' | 'knock-on' | 'tackle' | 'clearance'
+export type KickKind = 'pass' | 'touch' | 'restart' | 'shot' | 'header' | 'knock-on' | 'tackle' | 'clearance' | 'throw-in'
 export interface KickDetail {
   /** Pass type name, e.g. "through". */
   pass?: string

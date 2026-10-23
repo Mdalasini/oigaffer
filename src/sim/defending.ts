@@ -9,6 +9,7 @@ import { emit } from './events'
 import { clamp, cos, sin } from './fmath'
 import { IntentKind, setIntent } from './intents'
 import { believe, type Belief } from './perception'
+import { inOwnPenaltyArea } from './keeper'
 import { HALF_LENGTH } from './pitch'
 import { chance, gauss, next, range } from './rng'
 import { attackDir, teamOf, type Sim } from './sim'
@@ -71,7 +72,9 @@ export function decideDefending(sim: Sim, d: number, carrier: number): void {
   const goalSide = dist > 0 && (dx * gx + dy * gy) / dist > 0.3
   const cs = Math.sqrt(carrierSeen.vx * carrierSeen.vx + carrierSeen.vy * carrierSeen.vy)
   const ds = Math.sqrt(c.Vel.x[d] * c.Vel.x[d] + c.Vel.y[d] * c.Vel.y[d])
-  const aggression = c.Attr.aggression[d]
+  // In their own box a mistimed challenge is a penalty: defenders stay on their feet and hold off.
+  const inBox = inOwnPenaltyArea(sim, teamOf(sim, d), carrierSeen.x, carrierSeen.y)
+  const aggression = c.Attr.aggression[d] * (inBox ? 0.4 : 1)
 
   // Running alongside: lean in with the shoulder.
   if (cs > 3 && ds > 3 && dist < 1.3) {
@@ -79,7 +82,7 @@ export function decideDefending(sim: Sim, d: number, carrier: number): void {
     if (parallel > 0.7 && chance(m.rng, 0.3 + 0.4 * aggression)) return commit(sim, d, carrier, TackleKind.Charge)
   }
   // Beaten and chasing: a last-ditch slide.
-  if (!goalSide && dist < 3 && cs > ds - 0.5 && chance(m.rng, 0.15 + 0.35 * aggression)) {
+  if (!inBox && !goalSide && dist < 3 && cs > ds - 0.5 && chance(m.rng, 0.15 + 0.35 * aggression)) {
     return commit(sim, d, carrier, TackleKind.Slide)
   }
   // Squared up: go in when the ball is off the carrier's foot, or out of impatience.

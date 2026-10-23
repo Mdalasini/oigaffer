@@ -14,6 +14,7 @@ import { PATH_SAMPLES, PATH_STRIDE, predictPath } from './scratch'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 import type { Point } from './shape'
 import { readBall } from './systems/ball'
+import { Restart } from './state'
 
 /** How far a keeper's hands reach from their body, standing and at full stretch in a dive. */
 const STAND_REACH = 0.9
@@ -69,6 +70,8 @@ export function keeperSystem(sim: Sim): void {
   const { m, c } = sim
   for (const e of m.events) {
     if (e.type !== 'kick' || (e.kind !== 'shot' && e.kind !== 'header')) continue
+    // A penalty is a guess, already made when the kick was struck.
+    if (m.restart.kind === Restart.Penalty && e.tick === m.phaseTick) continue
     const gk = keeperOf(sim, 1 - teamOf(sim, e.by))
     planDive(sim, gk)
   }

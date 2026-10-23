@@ -16,7 +16,7 @@ import { believe, type Belief } from './perception'
 import { CENTRE_CIRCLE_RADIUS, HALF_LENGTH } from './pitch'
 import { kickOffTarget, shapeTarget, type Point } from './shape'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
-import { Phase } from './state'
+import { Phase, Restart } from './state'
 
 const FIRST_TIME_HEIGHT = 0.4
 /** Top speed of a keeper's dive across goal. */
@@ -62,11 +62,18 @@ export function intentSystem(sim: Sim): void {
         pass(sim, eid, top)
         break
       case IntentKind.TakeRestart: {
-        // Approach from the side away from the pitch centre so the ball is struck into play.
+        // Stand behind the ball: outside the pitch for throw-ins and corners, away from goal otherwise.
         const bx = Pos.x[ball]
         const by = Pos.y[ball]
-        const l = Math.sqrt(bx * bx + by * by) || 1
-        moveTo(sim, eid, bx + (bx / l) * 0.5, by + (by / l) * 0.5, top * 0.7)
+        const kind = sim.m.restart.kind
+        if (kind === Restart.ThrowIn || kind === Restart.Corner) {
+          const l = Math.sqrt(bx * bx + by * by) || 1
+          moveTo(sim, eid, bx + (bx / l) * 0.5, by + (by / l) * 0.5, top * 0.7)
+        } else {
+          moveTo(sim, eid, bx - attackDir(sim, teamOf(sim, eid)) * 0.5, by, top * 0.7)
+        }
+        Motor.faceX[eid] = bx
+        Motor.faceY[eid] = by
         break
       }
       case IntentKind.Wait:
@@ -110,6 +117,11 @@ function holdTarget(sim: Sim, eid: number, out: Point): Point {
     return kickOffTarget(sim, eid, teamOf(sim, eid) === m.restart.team, out)
   }
   if (m.phase === Phase.Play) return openPlayTarget(sim, eid, out)
+  if (m.phase === Phase.Restart && c.SetPiece.active[eid]) {
+    out.x = c.SetPiece.x[eid]
+    out.y = c.SetPiece.y[eid]
+    return out
+  }
   shapeTarget(sim, eid, out)
   if (m.phase === Phase.Restart && teamOf(sim, eid) !== m.restart.team) {
     // Opponents give the taker the required distance.
