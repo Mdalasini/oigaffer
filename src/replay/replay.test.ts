@@ -5,7 +5,7 @@ import { label } from '../sim/sim'
 import { resimulate, simAt, type Flag } from './flag'
 import { Phase } from '../sim/state'
 import { frameValue } from './recorder'
-import { report } from './report'
+import { FrameReader, report } from './report'
 
 const CFG = { seed: 11, halfMinutes: 45, formations: ['4-3-3', '3-4-3'] as [string, string] }
 
@@ -113,4 +113,23 @@ test('rebuilding a tick after full time fails instead of hanging', () => {
   expect(game.sim.m.phase).toBe(Phase.FullTime)
   const flag = game.flag('')
   expect(() => simAt(flag, game.sim.m.tick + 10)).toThrow()
+})
+
+test('a recording from before the dribble-style field still reports correctly', () => {
+  const game = new Game(CFG)
+  play(game, 4)
+  const flag: Flag = JSON.parse(JSON.stringify(game.flag('old layout')))
+  const head = 5
+  const width = 9
+  const n = flag.entities.length
+  const old: number[] = []
+  for (let f = 0; f < flag.frames.count; f++) {
+    const o = f * flag.frames.stride
+    old.push(...flag.frames.data.slice(o, o + head))
+    for (let e = 0; e < n; e++) old.push(...flag.frames.data.slice(o + head + e * width, o + head + e * width + 8))
+  }
+  const x = flag.frames.data[(flag.frames.count - 1) * flag.frames.stride + head + 3 * width]
+  flag.frames = { ...flag.frames, stride: head + n * 8, data: old }
+  expect(new FrameReader(flag).get(flag.frames.firstTick + flag.frames.count - 1, 3, 'x')).toBe(x)
+  expect(() => report(flag)).not.toThrow()
 })

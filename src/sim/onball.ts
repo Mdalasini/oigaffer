@@ -160,7 +160,8 @@ function decideInHands(sim: Sim, gk: number): void {
  */
 export function maybeGiveAndGo(sim: Sim, passer: number, plan: PassPlan): void {
   const { c, m } = sim
-  if (plan.type !== PassType.Ground && plan.type !== PassType.Through) return
+  // A knock-on is a pass to yourself: you are already running onto it.
+  if (plan.target === passer || (plan.type !== PassType.Ground && plan.type !== PassType.Through)) return
   const role = roleOf(sim, passer)
   if (role === 'GK' || role === 'CB') return
   const team = teamOf(sim, passer)

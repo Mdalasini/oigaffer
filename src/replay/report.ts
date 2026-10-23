@@ -62,9 +62,17 @@ export class FrameReader {
     return this.data[(tick - this.firstTick) * this.flag.frames.stride + FRAME_FIELDS.indexOf(field)]
   }
 
+  /** Values per entity in this recording; older flags recorded fewer fields. */
+  get width() {
+    return (this.flag.frames.stride - FRAME_FIELDS.length) / this.flag.entities.length
+  }
+
   get(tick: number, index: number, field: (typeof ENTITY_FIELDS)[number]) {
+    const i = ENTITY_FIELDS.indexOf(field)
+    // A field the recording predates reads as unknown.
+    if (i >= this.width) return -1
     const base = (tick - this.firstTick) * this.flag.frames.stride + FRAME_FIELDS.length
-    return this.data[base + index * ENTITY_FIELDS.length + ENTITY_FIELDS.indexOf(field)]
+    return this.data[base + index * this.width + i]
   }
 }
 

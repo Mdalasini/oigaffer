@@ -116,3 +116,55 @@ describe('shielding and jostling', () => {
     expect(Math.abs(sim.c.Pos.x[strong])).toBeLessThan(Math.abs(sim.c.Pos.x[weak] - 0.4))
   })
 })
+
+describe('review regressions', () => {
+  test('a knock-on goes round the side the defender is not on', () => {
+    const sim = emptyPitch()
+    const { carrier, dir } = carrierAtCentre(sim)
+    const defender = sim.teams[1][2]
+    sim.c.Attr.pace[carrier] = 0.95
+    sim.c.Attr.pace[defender] = 0.3
+    sim.c.Attr.dribbling[carrier] = 0.9
+    place(sim, defender, 5 * dir, 0.5 * dir)
+    revealAll(sim)
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
+    expect(sim.c.Plan.y[carrier] * dir).toBeLessThan(0)
+  })
+
+  test('after a knock-on the carrier chases the ball rather than running somewhere else', () => {
+    const sim = emptyPitch()
+    const { carrier, dir } = carrierAtCentre(sim)
+    const defender = sim.teams[1][2]
+    sim.c.Attr.pace[carrier] = 0.95
+    sim.c.Attr.pace[defender] = 0.3
+    sim.c.Attr.dribbling[carrier] = 0.9
+    sim.c.Attr.vision[carrier] = 1
+    place(sim, defender, 5 * dir, 0.5)
+    revealAll(sim)
+    for (let i = 0; i < 20 && sim.c.Intent.kind[carrier] !== IntentKind.Pass; i++) decideOnBall(sim, carrier)
+    let kicked = false
+    for (let i = 0; i < TICK_RATE && !kicked; i++) {
+      step(sim)
+      kicked = sim.m.events.some((e) => e.type === 'kick' && e.kind === 'knock-on')
+    }
+    expect(kicked).toBe(true)
+    expect(sim.c.Intent.kind[carrier]).toBe(IntentKind.Receive)
+    expect(sim.m.events.some((e) => e.type === 'call')).toBe(false)
+  })
+
+  test('a sprinting dribbler actually reaches sprinting speed', () => {
+    const sim = emptyPitch()
+    const { carrier, dir } = carrierAtCentre(sim)
+    sim.c.Attr.pace[carrier] = 0.9
+    sim.c.Attr.dribbling[carrier] = 0.9
+    revealAll(sim)
+    let fastest = 0
+    for (let i = 0; i < 5 * TICK_RATE; i++) {
+      setIntent(sim, carrier, IntentKind.Carry, -1, sim.c.Pos.x[carrier] + 20 * dir, 0, DribbleMode.Sprint)
+      sim.c.Brain.nextThink[carrier] = sim.m.tick + 100
+      step(sim)
+      fastest = Math.max(fastest, Math.hypot(sim.c.Vel.x[carrier], sim.c.Vel.y[carrier]))
+    }
+    expect(fastest).toBeGreaterThan(7)
+  })
+})

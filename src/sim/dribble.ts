@@ -37,13 +37,15 @@ interface Style {
   interval: number
   /** Spread of touch direction for a poor dribbler (radians). */
   spread: number
+  /** How far beyond the ball the carrier steers (m). */
+  lead: number
 }
 
 const STYLES: Record<DribbleMode, Style> = {
-  [DribbleMode.Normal]: { speed: 0.75, push: 2.2, interval: 0.3, spread: 0.18 },
-  [DribbleMode.FaceUp]: { speed: 0.5, push: 1.0, interval: 0.2, spread: 0.08 },
-  [DribbleMode.Sprint]: { speed: 0.92, push: 3.6, interval: 0.4, spread: 0.25 },
-  [DribbleMode.Shield]: { speed: 0.18, push: 0.4, interval: 0.25, spread: 0.05 },
+  [DribbleMode.Normal]: { speed: 0.75, push: 2.2, interval: 0.3, spread: 0.18, lead: 3 },
+  [DribbleMode.FaceUp]: { speed: 0.5, push: 1.0, interval: 0.2, spread: 0.08, lead: 1 },
+  [DribbleMode.Sprint]: { speed: 0.92, push: 3.6, interval: 0.4, spread: 0.25, lead: 6 },
+  [DribbleMode.Shield]: { speed: 0.18, push: 0.4, interval: 0.25, spread: 0.05, lead: 0 },
 }
 
 const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
@@ -89,8 +91,9 @@ function planKnockOn(sim: Sim, eid: number, ux: number, uy: number, d: number): 
   const { Pos, Vel } = sim.c
   const bx = Pos.x[sim.ball]
   const by = Pos.y[sim.ball]
-  // Go round the side of the defender away from where they stand relative to the line.
-  const side = (opp.x - Pos.x[eid]) * uy - (opp.y - Pos.y[eid]) * ux > 0 ? 1 : -1
+  // Go round the side of the defender away from where they stand relative to the line:
+  // (uy, -ux) is the carry line's right-hand side.
+  const side = (opp.x - Pos.x[eid]) * uy - (opp.y - Pos.y[eid]) * ux > 0 ? -1 : 1
   const len = d + 5
   const tx = bx + ux * len + uy * side * 2.5
   const ty = by + uy * len - ux * side * 2.5
@@ -120,7 +123,8 @@ export function dribble(sim: Sim, eid: number, mode: DribbleMode, tx: number, ty
   const ul = Math.sqrt(ux * ux + uy * uy) || 1
   ux /= ul
   uy /= ul
-  const lead = mode === DribbleMode.Shield ? 0 : 0.6
+  // Steer at a point ahead of the ball so locomotion does not brake as if arriving.
+  const lead = style.lead
   Motor.tx[eid] = Pos.x[ball] + ux * lead
   Motor.ty[eid] = Pos.y[ball] + uy * lead
   Motor.speed[eid] = mode === DribbleMode.Shield ? 1.5 : top * style.speed
