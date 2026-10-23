@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { TICK_RATE } from './constants'
-import { chooseDribble, DribbleMode } from './dribble'
+import { chooseDribble, DribbleMode, TAKE_ON_SECONDS } from './dribble'
 import { IntentKind, setIntent } from './intents'
 import { newMatch } from './match'
 import { decideOnBall } from './onball'
@@ -80,6 +80,41 @@ describe('choosing a dribble', () => {
       events.push(...sim.m.events)
     }
     expect(events.find((e) => e.type === 'kick')).toMatchObject({ kind: 'knock-on', by: carrier, to: carrier })
+  })
+
+  test('in the final third a skilful carrier with a defender right in front cuts past them instead of playing it back', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const carrier = sim.teams[0][6]
+    const defender = sim.teams[1][2]
+    place(sim, carrier, 30 * dir, 8)
+    place(sim, sim.ball, 30.4 * dir, 8)
+    sim.c.Facing.a[carrier] = dir > 0 ? 0 : Math.PI
+    sim.m.ball.owner = carrier
+    sim.m.possession = 0
+    sim.c.Attr.dribbling[carrier] = 0.9
+    sim.c.Attr.agility[carrier] = 0.9
+    sim.c.Attr.positioning[defender] = 0.2
+    sim.c.Attr.agility[defender] = 0.2
+    place(sim, defender, 32.8 * dir, 8.4)
+    // A team-mate free for the safe ball back.
+    place(sim, sim.teams[0][5], 20 * dir, 2)
+    revealAll(sim)
+    // Taking a man on is chosen some of the time: give them fresh looks until they do.
+    for (let i = 0; i < 20 && sim.c.Intent.mode[carrier] !== DribbleMode.TakeOn; i++) {
+      sim.c.Brain.takeOnReady[carrier] = 0
+      sim.c.Plan.type[carrier] = -1
+      setIntent(sim, carrier, IntentKind.Carry)
+      decideOnBall(sim, carrier)
+    }
+    expect(sim.c.Intent.kind[carrier]).toBe(IntentKind.Carry)
+    expect(sim.c.Intent.mode[carrier]).toBe(DribbleMode.TakeOn)
+    const takeOn = sim.m.events.find((e) => e.type === 'take-on')
+    expect(takeOn).toMatchObject({ by: carrier, on: defender })
+    if (takeOn?.type === 'take-on' && takeOn.beaten) expect(sim.c.Body.stumbleUntil[defender]).toBeGreaterThan(sim.m.tick)
+    // The carrier keeps the ball through the cut.
+    for (let i = 1; i < TAKE_ON_SECONDS * TICK_RATE; i++) step(sim)
+    expect(sim.m.ball.owner).toBe(carrier)
   })
 
   test('someone tight on the carrier from behind with no pass on: shield', () => {

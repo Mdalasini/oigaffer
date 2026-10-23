@@ -31,6 +31,8 @@ export type SimEvent =
       onVx: number
       onVy: number
     }
+  /** A carrier tries to go past a close defender; `beaten` if the defender was wrong-footed. */
+  | { type: 'take-on'; tick: number; by: number; on: number; beaten: boolean; x: number; y: number }
   /** The referee's decisions. */
   | { type: 'offside'; tick: number; by: number; x: number; y: number }
   | { type: 'foul'; tick: number; by: number; on: number; x: number; y: number; award: 'free-kick' | 'penalty' | 'advantage' }

@@ -62,6 +62,8 @@ export function createComponents() {
       runReady: i32(),
       /** Earliest tick a carrier considers taking a man on again. */
       takeOnReady: i32(),
+      /** Until this tick the carrier has made up their mind to take on the man in front, given the chance. */
+      takeOnKeen: i32(),
       /** Earliest tick a jockeying defender weighs up going in again. */
       commitCheck: i32(),
     },

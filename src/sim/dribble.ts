@@ -1,10 +1,11 @@
 // Dribbling: how a carrier runs with the ball. Close, short touches when a
 // defender is in front; long touches at full speed into open grass; knocking
-// it past a defender and racing onto it; or turning the body to shield it
-// from someone close.
+// it past a defender and racing onto it; cutting past one who is close; or
+// turning the body to shield it from someone close.
 
 import { touch } from './actions'
 import { DT, FOOT_REACH, TICK_RATE } from './constants'
+import { emit } from './events'
 import { arrivalSample, dist2, interceptRisk, nearestOpponent } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
 import { createFlight, FLIGHT_STRIDE, simulateFlight } from './kicks'
@@ -24,9 +25,11 @@ export const DribbleMode = {
   Sprint: 2,
   /** Body between the ball and a close opponent. */
   Shield: 3,
+  /** Cutting past a close defender. */
+  TakeOn: 4,
 } as const
 export type DribbleMode = (typeof DribbleMode)[keyof typeof DribbleMode]
-export const DRIBBLE_NAMES = ['normal', 'face-up', 'sprint', 'shield'] as const
+export const DRIBBLE_NAMES = ['normal', 'face-up', 'sprint', 'shield', 'take-on'] as const
 
 interface Style {
   /** Fraction of top speed. */
@@ -46,17 +49,30 @@ const STYLES: Record<DribbleMode, Style> = {
   [DribbleMode.FaceUp]: { speed: 0.5, push: 1.0, interval: 0.2, spread: 0.08, lead: 1 },
   [DribbleMode.Sprint]: { speed: 0.92, push: 3.6, interval: 0.4, spread: 0.25, lead: 6 },
   [DribbleMode.Shield]: { speed: 0.18, push: 0.4, interval: 0.25, spread: 0.05, lead: 0 },
+  [DribbleMode.TakeOn]: { speed: 0.85, push: 2.4, interval: 0.25, spread: 0.1, lead: 3 },
 }
 
 const opp: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
 /** Ticks between a carrier's considered decisions to take a man on. */
 const TAKE_ON_COOLDOWN = Math.round(1.5 * TICK_RATE)
+/** How long a carrier who has made up their mind to take a man on waits for the moment to do it. */
+const TAKE_ON_KEEN = Math.round(1 * TICK_RATE)
+/** Closer than this a defender is beaten with a cut rather than by knocking the ball past them. */
+const CUT_RANGE = 3.5
+const CUT_ANGLE = 0.9
+const CUT_LENGTH = 6
+/** How long a carrier sees a cut through before thinking again. */
+export const TAKE_ON_SECONDS = 0.6
+/** How long a beaten defender is wrong-footed. */
+const WRONG_FOOTED_SECONDS = 0.5
 const flight = createFlight()
 
 export interface DribbleChoice {
   mode: DribbleMode
   /** Set when the best move is to knock the ball past the defender and run onto it. */
   knockOn: PassPlan | null
+  /** Set when the best move is to cut past a close defender: where to and who. */
+  cut: { x: number; y: number; on: number } | null
 }
 
 /** Picks how to run with the ball towards (tx, ty), given who is close. */
@@ -65,7 +81,7 @@ export function chooseDribble(sim: Sim, eid: number, tx: number, ty: number, pas
   const x = Pos.x[eid]
   const y = Pos.y[eid]
   const nearest = nearestOpponent(sim, eid, x, y, opp)
-  if (nearest < 0) return { mode: DribbleMode.Sprint, knockOn: null }
+  if (nearest < 0) return { mode: DribbleMode.Sprint, knockOn: null, cut: null }
   const ox = opp.x - x
   const oy = opp.y - y
   const d = Math.sqrt(ox * ox + oy * oy)
@@ -74,17 +90,64 @@ export function chooseDribble(sim: Sim, eid: number, tx: number, ty: number, pas
   const cl = Math.sqrt(cx * cx + cy * cy) || 1
   // How much the opponent is in the way of the carry, -1 behind .. 1 dead ahead.
   const ahead = d > 0 ? (ox * cx + oy * cy) / (d * cl) : 0
-  if (d < 1.8 && ahead < 0.3 && !passAvailable) return { mode: DribbleMode.Shield, knockOn: null }
+  if (d < 1.8 && ahead < 0.3 && !passAvailable) return { mode: DribbleMode.Shield, knockOn: null, cut: null }
+  // Close up, a carry that only bends round a defender still runs into them.
+  const close = d > 1.2 && d < CUT_RANGE && ahead > 0.2
+  const inTheWay = close || (ahead > 0.5 && d >= CUT_RANGE && d < 7)
+  const { Brain } = sim.c
   // Taking a man on is a decision made now and then, not every look: better dribblers try it more.
-  const looked = ahead > 0.5 && d > 2.5 && d < 7 && sim.m.tick >= sim.c.Brain.takeOnReady[eid]
-  if (looked) sim.c.Brain.takeOnReady[eid] = sim.m.tick + TAKE_ON_COOLDOWN
-  if (looked && chance(sim.m.rng, 0.15 + 0.35 * Attr.dribbling[eid])) {
-    const knock = planKnockOn(sim, eid, cx / cl, cy / cl, d)
-    if (knock && topSpeed(sim, eid) + Attr.dribbling[eid] > topSpeed(sim, nearest) + 0.3) return { mode: DribbleMode.Normal, knockOn: knock }
+  if (inTheWay && sim.m.tick >= Brain.takeOnReady[eid] && sim.m.tick >= Brain.takeOnKeen[eid]) {
+    Brain.takeOnReady[eid] = sim.m.tick + TAKE_ON_COOLDOWN
+    if (chance(sim.m.rng, 0.15 + 0.35 * Attr.dribbling[eid])) Brain.takeOnKeen[eid] = sim.m.tick + TAKE_ON_KEEN
   }
-  if (ahead > 0 && d < 6) return { mode: DribbleMode.FaceUp, knockOn: null }
-  if (d > 8 || ahead < -0.3) return { mode: DribbleMode.Sprint, knockOn: null }
-  return { mode: DribbleMode.Normal, knockOn: null }
+  // Having decided to, go at them as soon as there is a way past.
+  if (inTheWay && sim.m.tick < Brain.takeOnKeen[eid]) {
+    if (close) {
+      const cut = planCut(sim, eid, ox / d, oy / d, cx, cy)
+      if (cut) return { mode: DribbleMode.TakeOn, knockOn: null, cut: { ...cut, on: nearest } }
+    } else {
+      const knock = planKnockOn(sim, eid, cx / cl, cy / cl, d)
+      if (knock && topSpeed(sim, eid) + Attr.dribbling[eid] > topSpeed(sim, nearest) + 0.3) return { mode: DribbleMode.Normal, knockOn: knock, cut: null }
+    }
+  }
+  if (ahead > 0 && d < 6) return { mode: DribbleMode.FaceUp, knockOn: null, cut: null }
+  if (d > 8 || ahead < -0.3) return { mode: DribbleMode.Sprint, knockOn: null, cut: null }
+  return { mode: DribbleMode.Normal, knockOn: null, cut: null }
+}
+
+/**
+ * A cut past a close defender in direction (ux, uy): bent off that line to
+ * the side the carry (cx, cy) was heading, or the other way if that runs out of play.
+ */
+function planCut(sim: Sim, eid: number, ux: number, uy: number, cx: number, cy: number): { x: number; y: number } | null {
+  const { Pos } = sim.c
+  const side = ux * cy - uy * cx < 0 ? -1 : 1
+  for (const s of [side, -side]) {
+    // Turn the line to the defender anticlockwise (s = 1) or clockwise (s = -1).
+    const a = atan2(uy, ux) + s * CUT_ANGLE
+    const x = Pos.x[eid] + cos(a) * CUT_LENGTH
+    const y = Pos.y[eid] + sin(a) * CUT_LENGTH
+    if (Math.abs(x) < HALF_LENGTH - 1 && Math.abs(y) < HALF_WIDTH - 1) return { x, y }
+  }
+  return null
+}
+
+/** Chance a carrier's feint and change of direction beats the defender's footwork and reading of the game. */
+export function beatChance(sim: Sim, eid: number, defender: number): number {
+  const A = sim.c.Attr
+  return clamp(0.35 + 0.45 * (0.6 * A.dribbling[eid] + 0.4 * A.agility[eid]) - 0.35 * (0.5 * A.positioning[defender] + 0.5 * A.agility[defender]), 0.15, 0.8)
+}
+
+/** The carrier goes for it. A beaten defender is wrong-footed for a moment; one who reads it is ready to go in. */
+export function takeOn(sim: Sim, eid: number, defender: number): void {
+  const { c, m } = sim
+  c.Brain.takeOnKeen[eid] = 0
+  const beaten = chance(m.rng, beatChance(sim, eid, defender))
+  if (beaten) {
+    c.Body.stumbleUntil[defender] = m.tick + Math.round(WRONG_FOOTED_SECONDS * TICK_RATE)
+    c.Brain.tackleReady[defender] = Math.max(c.Brain.tackleReady[defender], m.tick + Math.round((WRONG_FOOTED_SECONDS + 0.3) * TICK_RATE))
+  } else c.Brain.commitCheck[defender] = m.tick
+  emit(sim, { type: 'take-on', by: eid, on: defender, beaten, x: c.Pos.x[sim.ball], y: c.Pos.y[sim.ball] })
 }
 
 /**
@@ -144,6 +207,10 @@ export function dribble(sim: Sim, eid: number, mode: DribbleMode, tx: number, ty
     const sy = Pos.y[eid] + uy * 0.45 - Pos.y[ball]
     return touch(sim, eid, Vel.x[eid] + sx * 2, Vel.y[eid] + sy * 2)
   }
-  const push = speed + style.push * clamp(0.8 + gauss(m.rng) * 0.15 * (1.1 - Attr.dribbling[eid]), 0.5, 1.4)
+  // The ball is played at the pace the carrier is settling to, not the pace they arrived at, or it runs away
+  // from them as they slow; a cut only keeps the momentum already going the new way.
+  const along = mode === DribbleMode.TakeOn ? Math.max(0, Vel.x[eid] * cos(a) + Vel.y[eid] * sin(a)) : speed
+  const carried = Math.min(along, Motor.speed[eid])
+  const push = carried + style.push * clamp(0.8 + gauss(m.rng) * 0.15 * (1.1 - Attr.dribbling[eid]), 0.5, 1.4)
   touch(sim, eid, cos(a) * push, sin(a) * push)
 }

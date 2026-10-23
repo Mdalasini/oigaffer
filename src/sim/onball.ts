@@ -12,7 +12,7 @@ import { believe, call, HEARING_RADIUS, type Belief } from './perception'
 import { heldFor, mustRelease } from './keeper'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { estimateXg, planShot, type ShotPlan } from './shooting'
-import { chooseDribble } from './dribble'
+import { beatChance, chooseDribble, DribbleMode, TAKE_ON_SECONDS, takeOn } from './dribble'
 import { chance } from './rng'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 
@@ -71,6 +71,8 @@ export function decideOnBall(sim: Sim, eid: number): void {
   const kind = c.Intent.kind[eid]
   if ((kind === IntentKind.Pass || kind === IntentKind.Shoot) && c.Plan.type[eid] >= 0) return
   if (m.ball.inHands) return decideInHands(sim, eid)
+  // Halfway through a cut past a defender: see it through.
+  if (kind === IntentKind.Carry && c.Intent.mode[eid] === DribbleMode.TakeOn && m.tick - c.Intent.since[eid] < TAKE_ON_SECONDS * TICK_RATE) return
   const bx = c.Pos.x[ball]
   const by = c.Pos.y[ball]
   const pressure = pressureAt(sim, eid, bx, by)
@@ -92,12 +94,24 @@ export function decideOnBall(sim: Sim, eid: number): void {
     setPlan(sim, eid, clear)
     return setIntent(sim, eid, IntentKind.Pass, -1, clear.x, clear.y)
   }
+  const style = chooseDribble(sim, eid, carry.x, carry.y, pass !== null && pass.success > 0.6)
+  if (style.cut) {
+    // Past the man with the ball, or lose it where it is.
+    const team = teamOf(sim, eid)
+    const beat = beatChance(sim, eid, style.cut.on)
+    const worth = beat * pitchValue(sim, team, style.cut.x, style.cut.y) - (1 - beat) * lossValue(sim, team, bx, by)
+    if (!pass || worth >= pass.score) {
+      setPlan(sim, eid, null)
+      takeOn(sim, eid, style.cut.on)
+      return setIntent(sim, eid, IntentKind.Carry, style.cut.on, style.cut.x, style.cut.y, DribbleMode.TakeOn)
+    }
+  }
   if (pass && (held >= MIN_HOLD || pressed) && (pass.score > carry.score + 0.004 || (pressed && pass.success > 0.5))) {
     setPlan(sim, eid, pass)
     return setIntent(sim, eid, IntentKind.Pass, pass.target, pass.x, pass.y)
   }
-  const style = chooseDribble(sim, eid, carry.x, carry.y, pass !== null && pass.success > 0.6)
   if (style.knockOn) {
+    c.Brain.takeOnKeen[eid] = 0
     setPlan(sim, eid, style.knockOn)
     return setIntent(sim, eid, IntentKind.Pass, eid, style.knockOn.x, style.knockOn.y)
   }

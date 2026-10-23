@@ -94,6 +94,8 @@ export function describeEvent(flag: Flag, e: SimEvent): string {
       return `call "${e.call}" ${name(e.by)} -> ${name(e.to)} about ${name(e.about)}`
     case 'tackle':
       return `${e.kind} tackle by ${name(e.by)} on ${name(e.on)}: ${e.outcome}${e.fromBehind ? ', from behind' : ''}${e.reckless ? ', reckless' : ''}`
+    case 'take-on':
+      return `take-on by ${name(e.by)} on ${name(e.on)}: ${e.beaten ? 'beaten' : 'read'}`
     case 'offside':
       return `OFFSIDE ${name(e.by)} at ${at(e.x, e.y)}`
     case 'foul':
