@@ -12,6 +12,7 @@ import { believe, call, HEARING_RADIUS, type Belief } from './perception'
 import { heldFor, mustRelease } from './keeper'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { estimateXg, planShot, type ShotPlan } from './shooting'
+import { chooseDribble } from './dribble'
 import { chance } from './rng'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 
@@ -83,8 +84,13 @@ export function decideOnBall(sim: Sim, eid: number): void {
     setPlan(sim, eid, pass)
     return setIntent(sim, eid, IntentKind.Pass, pass.target, pass.x, pass.y)
   }
+  const style = chooseDribble(sim, eid, carry.x, carry.y, pass !== null && pass.success > 0.6)
+  if (style.knockOn) {
+    setPlan(sim, eid, style.knockOn)
+    return setIntent(sim, eid, IntentKind.Pass, eid, style.knockOn.x, style.knockOn.y)
+  }
   setPlan(sim, eid, null)
-  setIntent(sim, eid, IntentKind.Carry, -1, carry.x, carry.y)
+  setIntent(sim, eid, IntentKind.Carry, -1, carry.x, carry.y, style.mode)
 }
 
 /** Where to run with the ball: forwards, bending away from opponents in the way. */

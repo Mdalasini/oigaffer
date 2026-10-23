@@ -8,7 +8,7 @@ import type { Sim } from '../sim/sim'
 import { snapshot, type Snapshot } from '../sim/snapshot'
 
 /** Per-entity values in a frame, in this order. */
-export const ENTITY_FIELDS = ['x', 'y', 'z', 'vx', 'vy', 'facing', 'intent', 'target'] as const
+export const ENTITY_FIELDS = ['x', 'y', 'z', 'vx', 'vy', 'facing', 'intent', 'target', 'mode'] as const
 /** Per-frame values ahead of the entity block, in this order. */
 export const FRAME_FIELDS = ['tick', 'phase', 'owner', 'possession', 'half'] as const
 
@@ -72,6 +72,7 @@ export class Recorder {
       f[k++] = Facing.a[eid]
       f[k++] = eid === sim.ball ? -1 : Intent.kind[eid]
       f[k++] = eid === sim.ball ? -1 : Intent.target[eid]
+      f[k++] = eid === sim.ball ? -1 : Intent.mode[eid]
     }
     this.events[this.head] = sim.m.events
     this.head = (this.head + 1) % this.capacity

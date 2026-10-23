@@ -3,7 +3,8 @@
 
 import { TICK_RATE } from '../sim/constants'
 import type { SimEvent } from '../sim/events'
-import { INTENT_NAMES, type IntentKind } from '../sim/intents'
+import { DRIBBLE_NAMES } from '../sim/dribble'
+import { INTENT_NAMES, IntentKind } from '../sim/intents'
 import { HALF_LENGTH, HALF_WIDTH } from '../sim/pitch'
 import { Phase, Restart } from '../sim/state'
 import type { Flag } from './flag'
@@ -139,8 +140,10 @@ function clampTick(r: FrameReader, tick: number) {
   return Math.max(r.firstTick, Math.min(r.lastTick, tick))
 }
 
-function intentName(kind: number) {
-  return kind < 0 ? '-' : (INTENT_NAMES[kind as IntentKind] ?? String(kind))
+function intentName(kind: number, mode: number) {
+  if (kind < 0) return '-'
+  const name = INTENT_NAMES[kind as IntentKind] ?? String(kind)
+  return kind === IntentKind.Carry ? `${name}/${DRIBBLE_NAMES[mode] ?? mode}` : name
 }
 
 function stateTable(flag: Flag, r: FrameReader, tick: number): string[] {
@@ -155,7 +158,7 @@ function stateTable(flag: Flag, r: FrameReader, tick: number): string[] {
   out.push(
     `  ball (${fx(bx)},${fx(by)}) z ${r.get(tick, 0, 'z').toFixed(2)}  vel (${fx(bvx, 5)},${fx(bvy, 5)}) ${Math.hypot(bvx, bvy).toFixed(1)} m/s  owner ${name(owner)}`,
   )
-  out.push('  who  role  pos             speed  head  intent       target  d-ball')
+  out.push('  who  role  pos             speed  head  intent         target  d-ball')
   for (let i = 1; i < flag.entities.length; i++) {
     const x = r.get(tick, i, 'x')
     const y = r.get(tick, i, 'y')
@@ -164,7 +167,7 @@ function stateTable(flag: Flag, r: FrameReader, tick: number): string[] {
     const target = r.get(tick, i, 'target')
     const mark = flag.subjects.includes(flag.labels[i]) ? '*' : ' '
     out.push(
-      ` ${mark}${flag.labels[i].padEnd(4)} ${flag.roles[i].padEnd(4)} (${fx(x)},${fx(y)})  ${speed.toFixed(1).padStart(5)}  ${String(head).padStart(4)}  ${intentName(r.get(tick, i, 'intent')).padEnd(12)} ${name(target).padEnd(6)}  ${Math.hypot(x - bx, y - by).toFixed(1).padStart(5)}`,
+      ` ${mark}${flag.labels[i].padEnd(4)} ${flag.roles[i].padEnd(4)} (${fx(x)},${fx(y)})  ${speed.toFixed(1).padStart(5)}  ${String(head).padStart(4)}  ${intentName(r.get(tick, i, 'intent'), r.get(tick, i, 'mode')).padEnd(14)} ${name(target).padEnd(6)}  ${Math.hypot(x - bx, y - by).toFixed(1).padStart(5)}`,
     )
   }
   return out
@@ -210,7 +213,7 @@ function trace(flag: Flag, r: FrameReader, who: string, from: number, to: number
   const i = flag.labels.indexOf(who)
   if (i < 0) return [`TRACE ${who}: no such player`]
   const name = (eid: number) => (eid < 0 ? '-' : flag.labels[flag.entities.indexOf(eid)])
-  const out = [`TRACE ${who} (${flag.roles[i]})`, '  t       pos             speed  head  intent       target  d-ball  ball-owner']
+  const out = [`TRACE ${who} (${flag.roles[i]})`, '  t       pos             speed  head  intent         target  d-ball  ball-owner']
   const step = Math.max(1, Math.round(every * TICK_RATE))
   for (let t = flag.flagTick + Math.round(from * TICK_RATE); t <= flag.flagTick + to * TICK_RATE; t += step) {
     if (!r.has(t)) continue
@@ -220,7 +223,7 @@ function trace(flag: Flag, r: FrameReader, who: string, from: number, to: number
     const head = Math.round((r.get(t, i, 'facing') * 180) / Math.PI)
     const d = Math.hypot(x - r.get(t, 0, 'x'), y - r.get(t, 0, 'y'))
     out.push(
-      `  ${rel(flag, t)}  (${fx(x)},${fx(y)})  ${speed.toFixed(1).padStart(5)}  ${String(head).padStart(4)}  ${intentName(r.get(t, i, 'intent')).padEnd(12)} ${name(r.get(t, i, 'target')).padEnd(6)}  ${d.toFixed(1).padStart(5)}   ${name(r.header(t, 'owner'))}`,
+      `  ${rel(flag, t)}  (${fx(x)},${fx(y)})  ${speed.toFixed(1).padStart(5)}  ${String(head).padStart(4)}  ${intentName(r.get(t, i, 'intent'), r.get(t, i, 'mode')).padEnd(14)} ${name(r.get(t, i, 'target')).padEnd(6)}  ${d.toFixed(1).padStart(5)}   ${name(r.header(t, 'owner'))}`,
     )
   }
   return out
