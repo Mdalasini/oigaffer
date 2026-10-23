@@ -4,9 +4,10 @@ import { TICK_RATE } from './constants'
 import type { SimEvent } from './events'
 import { IntentKind, setIntent } from './intents'
 import { keeperOf } from './keeper'
-import { newMatch } from './match'
+import { awardRestart, newMatch } from './match'
+import { setShotPlan } from './onball'
 import { revealAll } from './perception'
-import { HALF_LENGTH, PENALTY_SPOT_DISTANCE } from './pitch'
+import { HALF_LENGTH, HALF_WIDTH, PENALTY_SPOT_DISTANCE } from './pitch'
 import { book, refereeSystem } from './referee'
 import { restore, snapshot } from './snapshot'
 import { attackDir, roleOf, type Sim } from './sim'
@@ -51,6 +52,8 @@ function throughBall(sim: Sim, line: number, striker: number) {
   sim.m.ball.owner = passer
   revealAll(sim)
   // Pass straight to the striker's feet.
+  sim.m.events = []
+  sim.m.refSeen = 0
   kick(sim, passer, (striker * dir) / 2.2, 3 / 2.2, 0, 'pass', st)
   refereeSystem(sim)
   return { dir, st }
@@ -78,6 +81,7 @@ describe('offside', () => {
     sim.m.restart.kind = Restart.ThrowIn
     sim.m.phaseTick = sim.m.tick
     sim.m.events = []
+    sim.m.refSeen = 0
     kick(sim, sim.teams[0][6], 25 / 2.2, 3 / 2.2, 0, 'pass', st)
     refereeSystem(sim)
     expect(sim.m.offside.players).toEqual([])
@@ -91,8 +95,9 @@ describe('fouls and cards', () => {
     place(sim, fouler, x + 1, y)
     place(sim, sim.ball, x + 0.5, y)
     sim.m.events = [
-      { type: 'tackle', tick: sim.m.tick, by: fouler, on: fouled, kind: 'standing', outcome: 'foul', reckless: false, fromBehind: false, x, y, ...extra },
+      { type: 'tackle', tick: sim.m.tick, by: fouler, on: fouled, kind: 'standing', outcome: 'foul', reckless: false, fromBehind: false, x, y, onVx: 0, onVy: 0, ...extra },
     ]
+    sim.m.refSeen = 0
     refereeSystem(sim)
     return { fouled, fouler }
   }
@@ -162,5 +167,116 @@ describe('indirect free kicks', () => {
     const events = run(sim, 2)
     expect(events.some((e) => e.type === 'goal')).toBe(false)
     expect(events.find((e) => e.type === 'out')).toMatchObject({ restart: Restart.GoalKick })
+  })
+})
+
+describe('review regressions', () => {
+  test('a shot by a player flagged offside is an offside, not a goal', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const st = sim.teams[0][9]
+    place(sim, st, (HALF_LENGTH - 1) * dir, 0)
+    place(sim, sim.ball, (HALF_LENGTH - 0.6) * dir, 0)
+    place(sim, keeperOf(sim, 1), HALF_LENGTH * dir, 20)
+    sim.m.offside = { team: 0, players: [st] }
+    sim.m.ball.owner = st
+    sim.m.score = [0, 0]
+    sim.c.Brain.nextThink.fill(1e9)
+    // Shoots this tick, from a couple of metres: the ball would cross the line within the same step.
+    setShotPlan(sim, st, { x: HALF_LENGTH * dir, y: 0, z: 0.3, xg: 0.9 })
+    setIntent(sim, st, IntentKind.Shoot)
+    sim.c.Attr.shooting[st] = 1
+    for (let i = 0; i < 5; i++) step(sim)
+    expect(sim.m.score).toEqual([0, 0])
+    expect(sim.m.restart).toMatchObject({ kind: Restart.FreeKick, team: 1, indirect: true })
+  })
+
+  test('offside positions are taken where players stood when the ball was played', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const passer = sim.teams[0][6]
+    const mate = sim.teams[0][9]
+    place(sim, passer, 19.6 * dir, 0)
+    place(sim, sim.ball, 20 * dir, 0)
+    place(sim, mate, 20.5 * dir, 8)
+    ;[-25, 20, 25].forEach((y, i) => place(sim, sim.teams[1][1 + i], 20 * dir, y))
+    place(sim, keeperOf(sim, 1), 50 * dir, 0)
+    sim.m.ball.owner = passer
+    revealAll(sim)
+    sim.c.Brain.nextThink.fill(1e9)
+    for (const e of sim.players) setIntent(sim, e, IntentKind.Wait)
+    // Played forward at pace inside the step, so the ball has moved on by the end of the tick.
+    sim.c.Plan.type[passer] = 0
+    setIntent(sim, passer, IntentKind.Pass, mate, 40 * dir, 8)
+    sim.c.Plan.x[passer] = 40 * dir
+    sim.c.Plan.y[passer] = 8
+    sim.c.Plan.target[passer] = mate
+    step(sim)
+    expect(sim.m.events.some((e) => e.type === 'kick')).toBe(true)
+    expect(sim.m.offside.players).toContain(mate)
+  })
+
+  test('a stoppage clears who was offside', () => {
+    const sim = emptyPitch()
+    const st = sim.teams[0][9]
+    sim.m.offside = { team: 0, players: [st] }
+    awardRestart(sim, Restart.ThrowIn, 0, 0, HALF_WIDTH)
+    expect(sim.m.offside.players).toEqual([])
+  })
+
+  test('advantage comes back for the free kick when the other side wins the ball', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const [fouled, fouler, mate] = [sim.teams[0][9], sim.teams[1][2], sim.teams[0][8]]
+    const x = 20 * dir
+    place(sim, fouled, x, 0)
+    place(sim, fouler, x + 1, 0)
+    place(sim, mate, x + 0.5, 1.5)
+    place(sim, sim.ball, x + 0.5, 0)
+    sim.m.ball.owner = -1
+    sim.m.events = [{ type: 'tackle', tick: sim.m.tick, by: fouler, on: fouled, kind: 'standing', outcome: 'foul', reckless: false, fromBehind: false, x, y: 0, onVx: 0, onVy: 0 }]
+    sim.m.refSeen = 0
+    refereeSystem(sim)
+    expect(sim.m.phase as Phase).toBe(Phase.Play)
+    // The fouler picks it up instead.
+    sim.m.ball.owner = fouler
+    refereeSystem(sim)
+    expect(sim.m.restart).toMatchObject({ kind: Restart.FreeKick, team: 0 })
+  })
+
+  test('a foul that stops a fast break is judged on the pace before the contact', () => {
+    let booked = 0
+    for (let seed = 1; seed <= 20; seed++) {
+      const sim = emptyPitch()
+      sim.m.rng.s = seed
+      const dir = attackDir(sim, 0)
+      const [fouled, fouler] = [sim.teams[0][9], sim.teams[1][2]]
+      place(sim, fouled, -5 * dir, 0, 2.4 * dir, 0)
+      sim.m.events = [{ type: 'tackle', tick: sim.m.tick, by: fouler, on: fouled, kind: 'standing', outcome: 'foul', reckless: false, fromBehind: false, x: -5 * dir, y: 0, onVx: 8 * dir, onVy: 0 }]
+      sim.m.refSeen = 0
+      refereeSystem(sim)
+      if (sim.m.yellows[fouler]) booked++
+    }
+    expect(booked).toBeGreaterThan(5)
+  })
+
+  test('a save does not reset offside, and a teammate’s control refreshes it', () => {
+    const sim = emptyPitch()
+    const st = sim.teams[0][9]
+    sim.m.offside = { team: 0, players: [st] }
+    sim.m.events = [{ type: 'save', tick: sim.m.tick, by: keeperOf(sim, 1), kind: 'parry', speed: 20 }]
+    sim.m.refSeen = 0
+    refereeSystem(sim)
+    expect(sim.m.offside.players).toEqual([st])
+    // An onside teammate controls it, with the striker now behind the ball.
+    const dir = attackDir(sim, 0)
+    const mate = sim.teams[0][8]
+    place(sim, mate, 30 * dir, 0)
+    place(sim, sim.ball, 30 * dir, 0)
+    place(sim, st, 20 * dir, 0)
+    sim.m.events = [{ type: 'control', tick: sim.m.tick, by: mate, x: 30 * dir, y: 0, clean: true }]
+    sim.m.refSeen = 0
+    refereeSystem(sim)
+    expect(sim.m.offside.players).not.toContain(st)
   })
 })

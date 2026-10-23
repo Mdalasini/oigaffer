@@ -44,6 +44,9 @@ function enterPhase(sim: Sim, phase: Phase) {
 function setupRestart(sim: Sim, kind: Restart, team: number, x: number, y: number, taker: number, indirect = false) {
   placeBall(sim, x, y)
   sim.m.restart = { kind, team, x, y, taker, indirect }
+  // A stoppage ends the passage of play: nobody is still offside, no advantage pending.
+  sim.m.offside = { team: -1, players: [] }
+  sim.m.advantage.team = -1
   for (const eid of sim.players) setIntent(sim, eid, IntentKind.Hold)
   setIntent(sim, taker, IntentKind.TakeRestart)
   enterPhase(sim, kind === Restart.KickOff ? Phase.KickOff : Phase.Restart)

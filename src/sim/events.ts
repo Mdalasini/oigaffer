@@ -27,6 +27,9 @@ export type SimEvent =
       fromBehind: boolean
       x: number
       y: number
+      /** The fouled player's velocity just before the contact. */
+      onVx: number
+      onVy: number
     }
   /** The referee's decisions. */
   | { type: 'offside'; tick: number; by: number; x: number; y: number }

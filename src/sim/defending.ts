@@ -172,6 +172,8 @@ function resolve(sim: Sim, d: number, carrier: number, kind: TackleKind) {
     win = clamp(0.35 + 0.5 * skill + 0.3 * exposure, 0.05, 0.9) * (kind === TackleKind.Slide ? 0.8 : 1)
     foul = 0.04 + (fromBehind ? 0.35 : 0) + (kind === TackleKind.Slide ? 0.12 : 0) + 0.1 * A.aggression[d] - 0.08 * A.tackling[d]
   }
+  const onVx = c.Vel.x[carrier]
+  const onVy = c.Vel.y[carrier]
   const roll = next(m.rng)
   // A careless or reckless challenge is a foul whether or not it gets the ball.
   const reckless = kind === TackleKind.Slide && fromBehind
@@ -180,10 +182,10 @@ function resolve(sim: Sim, d: number, carrier: number, kind: TackleKind) {
     c.Vel.x[carrier] *= 0.3
     c.Vel.y[carrier] *= 0.3
     m.ball.owner = -1
-    return emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'foul', reckless, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball] })
+    return emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'foul', reckless, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball], onVx, onVy })
   }
   if (next(m.rng) < win) {
-    emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'won', reckless: false, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball] })
+    emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'won', reckless: false, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball], onVx, onVy })
     if (kind === TackleKind.Charge) {
       // Knocked off the ball: the carrier staggers and the ball runs on.
       stumble(sim, carrier)
@@ -198,7 +200,7 @@ function resolve(sim: Sim, d: number, carrier: number, kind: TackleKind) {
     const speed = kind === TackleKind.Slide ? range(m.rng, 6, 11) : range(m.rng, 3, 6)
     return kick(sim, d, cos(a) * speed, sin(a) * speed, 0, 'tackle')
   }
-  emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'missed', reckless: false, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball] })
+  emit(sim, { type: 'tackle', by: d, on: carrier, kind: TACKLE_NAMES[kind], outcome: 'missed', reckless: false, fromBehind, x: c.Pos.x[ball], y: c.Pos.y[ball], onVx, onVy })
   if (kind === TackleKind.Standing || kind === TackleKind.Charge) stumble(sim, d)
   // The beaten defender has turned the wrong way.
   c.Brain.noTouchUntil[d] = m.tick + Math.round(0.6 * TICK_RATE)

@@ -2,6 +2,7 @@
 // Watches the tick's events after the ball has moved and been played, and
 // stops play by awarding a restart.
 
+import { TICK_RATE } from './constants'
 import { emit, type EventOf } from './events'
 import { IntentKind, setIntent } from './intents'
 import { awardFreeKick } from './match'
@@ -14,6 +15,8 @@ import { Phase, Restart } from './state'
 const OFFSIDE_MARGIN = 0.1
 /** Fouls before a player is booked for persistent fouling. */
 const PERSISTENT = 3
+/** How long the referee waits to see if advantage comes to anything. */
+const ADVANTAGE_TICKS = Math.round(1.5 * TICK_RATE)
 
 /** Players of `team` in an offside position at the moment a teammate plays the ball. */
 function offsidePositions(sim: Sim, kicker: number): number[] {
@@ -39,19 +42,46 @@ function offsidePositions(sim: Sim, kicker: number): number[] {
   return out
 }
 
+/**
+ * Runs twice a tick: after players act (before the ball moves, so offside
+ * is judged where everyone was when the ball was played, and offences beat
+ * any goal or out-of-play call), and after possession is settled.
+ */
 export function refereeSystem(sim: Sim): void {
   const { m } = sim
-  for (const e of m.events) {
+  while (m.refSeen < m.events.length) {
+    const e = m.events[m.refSeen++]
     if (m.phase !== Phase.Play) return
     if (e.type === 'tackle' && e.outcome === 'foul') foul(sim, e)
-    else if (e.type === 'kick' || e.type === 'control' || e.type === 'save') played(sim, e.by, e.type === 'kick' ? e : null)
+    else if (e.type === 'kick') played(sim, e.by, e)
+    else if (e.type === 'control') played(sim, e.by, null)
+  }
+  if (m.phase === Phase.Play) adjudicateAdvantage(sim)
+}
+
+/** Advantage stands once the fouled side has the ball; otherwise it comes back for the free kick. */
+function adjudicateAdvantage(sim: Sim) {
+  const { m } = sim
+  const adv = m.advantage
+  if (adv.team < 0) return
+  const owner = m.ball.owner
+  if (owner >= 0 && teamOf(sim, owner) === adv.team) {
+    adv.team = -1
+    return
+  }
+  if ((owner >= 0 && teamOf(sim, owner) !== adv.team) || m.tick >= adv.until) {
+    const { team, x, y, by, on } = adv
+    adv.team = -1
+    emit(sim, { type: 'foul', by, on, x, y, award: 'free-kick' })
+    whistle(sim, Restart.FreeKick, team, x, y, false)
   }
 }
 
 /**
  * Someone played the ball. If they were in an offside position when a
- * teammate last played it, that is an offence; otherwise a deliberate kick
- * sets who is offside for the next phase, and an opponent's touch clears it.
+ * teammate last played it, that is an offence; otherwise their touch sets
+ * who is offside for the next phase, and an opponent's touch clears it. A
+ * keeper's save is not a touch that resets offside, so is not passed here.
  */
 function played(sim: Sim, eid: number, kick: EventOf<'kick'> | null) {
   const { m, c } = sim
@@ -70,7 +100,7 @@ function played(sim: Sim, eid: number, kick: EventOf<'kick'> | null) {
     kick !== null &&
     kick.tick === m.phaseTick &&
     (m.restart.kind === Restart.ThrowIn || m.restart.kind === Restart.GoalKick || m.restart.kind === Restart.Corner)
-  if (kick && kick.kind !== 'tackle' && !exempt) {
+  if (kick?.kind !== 'tackle' && !exempt) {
     off.team = team
     off.players = offsidePositions(sim, eid)
   }
@@ -84,19 +114,23 @@ function foul(sim: Sim, e: EventOf<'tackle'>) {
   m.fouls[fouler] = (m.fouls[fouler] ?? 0) + 1
   const card = judge(sim, e)
   const inBox = inPenaltyArea(sim, 1 - team, e.x, e.y)
-  // Play on if the fouled side still has the ball going forward and the foul was not worth stopping for.
+  // Wait and see in the opponents' half if a teammate is on hand to carry on; called back if nothing comes of it.
   const advantage = !inBox && card !== 'red' && e.x * attackDir(sim, team) > 0 && teammateNearBall(sim, team, fouled, 2.5)
   emit(sim, { type: 'foul', by: fouler, on: fouled, x: e.x, y: e.y, award: inBox ? 'penalty' : advantage ? 'advantage' : 'free-kick' })
   if (card) book(sim, fouler, card, cardReason(sim, e, card))
-  if (advantage) return
+  if (advantage) {
+    m.advantage = { team, x: clampX(e.x), y: clampY(e.y), until: m.tick + ADVANTAGE_TICKS, by: fouler, on: fouled }
+    return
+  }
   if (inBox) {
     const dir = attackDir(sim, team)
     return whistle(sim, Restart.Penalty, team, dir * (HALF_LENGTH - PENALTY_SPOT_DISTANCE), 0, false)
   }
-  const x = Math.max(-HALF_LENGTH + 0.5, Math.min(HALF_LENGTH - 0.5, e.x))
-  const y = Math.max(-HALF_WIDTH + 0.5, Math.min(HALF_WIDTH - 0.5, e.y))
-  whistle(sim, Restart.FreeKick, team, x, y, false)
+  whistle(sim, Restart.FreeKick, team, clampX(e.x), clampY(e.y), false)
 }
+
+const clampX = (x: number) => Math.max(-HALF_LENGTH + 0.5, Math.min(HALF_LENGTH - 0.5, x))
+const clampY = (y: number) => Math.max(-HALF_WIDTH + 0.5, Math.min(HALF_WIDTH - 0.5, y))
 
 type Card = 'yellow' | 'red' | null
 
@@ -132,15 +166,15 @@ function deniesGoal(sim: Sim, e: EventOf<'tackle'>): boolean {
     // A covering defender goal side of the ball means the chance was not clear.
     if ((c.Pos.x[o] - e.x) * dir > 0 && Math.abs(c.Pos.y[o] - e.y) < 12) return false
   }
-  return (c.Vel.x[e.on] * dir > 1)
+  // How they were moving before the contact, not after.
+  return e.onVx * dir > 1
 }
 
 /** Fouled in their own half running forward into space. */
 function stopsAttack(sim: Sim, e: EventOf<'tackle'>): boolean {
-  const { c } = sim
   const team = teamOf(sim, e.on)
   const dir = attackDir(sim, team)
-  return e.x * dir < 10 && c.Vel.x[e.on] * dir > 4
+  return e.x * dir < 10 && e.onVx * dir > 4
 }
 
 function inPenaltyArea(sim: Sim, defending: number, x: number, y: number): boolean {

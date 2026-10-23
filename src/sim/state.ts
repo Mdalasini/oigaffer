@@ -63,6 +63,10 @@ export interface MatchState {
   possession: number
   /** Players in an offside position when `team` last played the ball. */
   offside: { team: number; players: number[] }
+  /** A foul the referee is playing advantage on, until the fouled team has the ball or `until`; team -1 when none. */
+  advantage: { team: number; x: number; y: number; until: number; by: number; on: number }
+  /** How many of this tick's events the referee has looked at. */
+  refSeen: number
   /** Fouls and yellow cards per player id, and who has been sent off. */
   fouls: Record<number, number>
   yellows: Record<number, number>
@@ -87,6 +91,8 @@ export function createMatchState(cfg: MatchConfig): MatchState {
     ball: { owner: -1, inHands: false, lastTouch: -1, lastKick: '', indirectFrom: -1, backPassTeam: -1, lastTeam: -1, touchTick: -1 },
     possession: -1,
     offside: { team: -1, players: [] },
+    advantage: { team: -1, x: 0, y: 0, until: 0, by: -1, on: -1 },
+    refSeen: 0,
     fouls: {},
     yellows: {},
     sentOff: [],
