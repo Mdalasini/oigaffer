@@ -21,9 +21,10 @@ export function step(sim: Sim): void {
   updateScratch(sim)
   thinkSystem(sim)
   intentSystem(sim)
-  keeperSystem(sim)
   locomotionSystem(sim)
   separationSystem(sim)
   ballSystem(sim)
   possessionSystem(sim)
+  // Last, so keepers see every shot and header struck this tick.
+  keeperSystem(sim)
 }

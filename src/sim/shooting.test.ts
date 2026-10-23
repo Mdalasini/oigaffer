@@ -5,7 +5,8 @@ import { TICK_RATE } from './constants'
 import type { SimEvent } from './events'
 import { collideGoalFrame } from './goalframe'
 import { IntentKind } from './intents'
-import { keeperOf, keeperPosition, keeperSystem } from './keeper'
+import { canHandle, keeperOf, keeperPosition, keeperSystem } from './keeper'
+import { takeControl } from './actions'
 import { newMatch } from './match'
 import { decideOnBall } from './onball'
 import { revealAll } from './perception'
@@ -57,6 +58,13 @@ describe('goal frame', () => {
     expect(collideGoalFrame(from.x, from.y, from.z, b)).toBe(true)
     expect(b.vx).toBeLessThan(0)
     expect(b.x).toBeLessThan(HALF_LENGTH)
+  })
+
+  test('a glancing hit on the inside of the post is still a hit', () => {
+    const b: BallState = { x: 52.8, y: 3.52, z: 0.5, vx: 21, vy: 0, vz: 0 }
+    expect(collideGoalFrame(52.1, 3.52, 0.5, b)).toBe(true)
+    // Deflected inwards, into the goal mouth.
+    expect(b.vy).toBeLessThan(0)
   })
 
   test('a ball under the bar and between the posts touches nothing', () => {
@@ -176,9 +184,37 @@ describe('goalkeeping', () => {
     revealAll(sim)
     launchBall(sim, line + dir * 12, 0, 0, -dir * 6, 0, 0, 1)
     sim.m.ball.lastKick = 'pass'
+    sim.m.ball.backPassTeam = 1
     const events = run(sim, 2)
     expect(events.some((e) => e.type === 'save')).toBe(false)
     expect(events.find((e) => e.type === 'control')).toMatchObject({ by: gk })
+  })
+
+  test('a back pass the keeper miscontrols still cannot be picked up', () => {
+    const sim = emptyPitch()
+    const gk = keeperOf(sim, 1)
+    sim.m.ball.backPassTeam = 1
+    sim.m.ball.lastTeam = 1
+    takeControl(sim, gk, false, 1, 0)
+    expect(canHandle(sim, gk)).toBe(false)
+  })
+
+  test('a keeper reacts to a real header at goal', () => {
+    const sim = emptyPitch()
+    const dir = attackDir(sim, 0)
+    const striker = sim.teams[0][9]
+    const gk = keeperOf(sim, 1)
+    const gx = dir * HALF_LENGTH
+    place(sim, striker, gx - dir * 8, 0)
+    place(sim, gk, gx - dir * 1.5, 0)
+    revealAll(sim)
+    launchBall(sim, gx - dir * 8, -2.2, 1.9, 0, 9, 0.5, 0)
+    let dived = false
+    for (let i = 0; i < 20 && !dived; i++) {
+      step(sim)
+      dived = sim.c.Keeper.diveAt[gk] >= 0 || sim.c.Intent.kind[gk] === IntentKind.Dive
+    }
+    expect(dived).toBe(true)
   })
 
   test('a keeper reacts to a shot towards the corner by diving that way', () => {

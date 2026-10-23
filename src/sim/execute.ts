@@ -2,18 +2,18 @@
 // ball when the intent calls for it.
 
 import { touch } from './actions'
-import { FOOT_REACH, TICK_RATE } from './constants'
+import { CONTROL_HEIGHT, FOOT_REACH, TICK_RATE } from './constants'
 import { dist2, pressureAt } from './evaluate'
 import { IntentKind, setIntent } from './intents'
 import { intercept, topSpeed, type Intercept } from './movement'
-import { isDiving, isDown } from './keeper'
+import { isDiving, isDown, KEEPER_HEIGHT } from './keeper'
 import { maybeGiveAndGo, planOf, setPlan, shotPlanOf } from './onball'
 import { strikeShot } from './shooting'
 import { canStrike, strikePass } from './passing'
 import { believe, type Belief } from './perception'
 import { CENTRE_CIRCLE_RADIUS, HALF_LENGTH } from './pitch'
 import { kickOffTarget, shapeTarget, type Point } from './shape'
-import { attackDir, teamOf, type Sim } from './sim'
+import { attackDir, roleOf, teamOf, type Sim } from './sim'
 import { Phase } from './state'
 
 const TOUCH_INTERVAL = Math.round(0.3 * TICK_RATE)
@@ -41,7 +41,8 @@ export function intentSystem(sim: Sim): void {
         moveTo(sim, eid, pt.x, pt.y, holdSpeed(sim, eid, pt, top))
         break
       case IntentKind.Chase:
-        intercept(sim, eid, ic)
+        // A keeper goes for the ball where their hands can take it, as they were picked to.
+        intercept(sim, eid, ic, 0.2, roleOf(sim, eid) === 'GK' ? KEEPER_HEIGHT : CONTROL_HEIGHT)
         moveTo(sim, eid, ic.x, ic.y, top)
         break
       case IntentKind.Receive:

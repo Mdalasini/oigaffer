@@ -134,7 +134,7 @@ export function canHandle(sim: Sim, gk: number): boolean {
   if (isDown(sim, gk) || m.tick < c.Brain.noTouchUntil[gk]) return false
   if (!inOwnPenaltyArea(sim, team, c.Pos.x[ball], c.Pos.y[ball])) return false
   // No hands for a ball deliberately passed back by a teammate.
-  return !(m.ball.lastTeam === team && m.ball.lastKick === 'pass')
+  return m.ball.backPassTeam !== team
 }
 
 /** True if the ball is within the keeper's reach for hands. */
@@ -160,6 +160,7 @@ export function handle(sim: Sim, gk: number): void {
   m.ball.lastTouch = gk
   m.ball.lastTeam = teamOf(sim, gk)
   m.ball.lastKick = ''
+  m.ball.backPassTeam = -1
   m.ball.touchTick = m.tick
   m.possession = teamOf(sim, gk)
   if (chance(m.rng, hold)) {
