@@ -84,8 +84,8 @@ export function decideOnBall(sim: Sim, eid: number): void {
   const settled = held >= MIN_HOLD || xg > 0.15
   // In range, running on is only worth a better shot at the end of the run.
   const carryXg = estimateXg(sim, eid, carry.x, carry.y)
-  const carryWorth = carryXg > 0 ? Math.min(carry.score, carryXg) : carry.score
-  if (settled && xg > MIN_XG && xg * SHOT_BIAS >= Math.max(carryWorth, pass ? pass.score : -1)) {
+  if (carryXg > 0) carry.score = Math.min(carry.score, carryXg)
+  if (settled && xg > MIN_XG && xg * SHOT_BIAS >= Math.max(carry.score, pass ? pass.score : -1)) {
     setShotPlan(sim, eid, planShot(sim, eid, bx, by))
     return setIntent(sim, eid, IntentKind.Shoot)
   }
