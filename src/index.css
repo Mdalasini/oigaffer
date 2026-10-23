@@ -1,0 +1,30 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: #0d1a10;
+  color: #e6efe7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pitch {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: block;
+}
