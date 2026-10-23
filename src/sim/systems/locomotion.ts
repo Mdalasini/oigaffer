@@ -12,16 +12,25 @@ export function locomotionSystem(sim: Sim): void {
   for (const eid of query(sim.world, [Pos, Vel, Motor, Facing])) {
     const x = Pos.x[eid]
     const y = Pos.y[eid]
-    const dx = Motor.tx[eid] - x
-    const dy = Motor.ty[eid] - y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    // Arrive: never faster than what can still be braked to a stop at the target.
-    const want = dist < 0.1 ? 0 : Math.min(Motor.speed[eid], Math.sqrt(2 * BRAKING * 0.8 * dist))
-    const wx = dist > 0 ? (dx / dist) * want : 0
-    const wy = dist > 0 ? (dy / dist) * want : 0
     let vx = Vel.x[eid]
     let vy = Vel.y[eid]
     const speed = Math.sqrt(vx * vx + vy * vy)
+    let dx = Motor.tx[eid] - x
+    let dy = Motor.ty[eid] - y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist > 0) {
+      // Aim off against sideways momentum, so a player cutting across to a
+      // point gets there instead of circling it.
+      const along = (vx * dx + vy * dy) / dist
+      const lead = speed / (2 * BRAKING)
+      dx -= (vx - (along * dx) / dist) * lead
+      dy -= (vy - (along * dy) / dist) * lead
+    }
+    const aim = Math.sqrt(dx * dx + dy * dy)
+    // Arrive: never faster than what can still be braked to a stop at the target.
+    const want = dist < 0.1 ? 0 : Math.min(Motor.speed[eid], Math.sqrt(2 * BRAKING * 0.8 * dist))
+    const wx = aim > 0 ? (dx / aim) * want : 0
+    const wy = aim > 0 ? (dy / aim) * want : 0
     const ddx = wx - vx
     const ddy = wy - vy
     const dv = Math.sqrt(ddx * ddx + ddy * ddy)
