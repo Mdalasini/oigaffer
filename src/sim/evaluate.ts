@@ -151,6 +151,18 @@ export function pressureAt(sim: Sim, observer: number, x: number, y: number): nu
   return nearestOpponent(sim, observer, x, y, seen) < 0 ? Infinity : Math.sqrt((seen.x - x) * (seen.x - x) + (seen.y - y) * (seen.y - y))
 }
 
+/** Like `pressureAt`, but with each opponent carried on the way they are running for `ahead` seconds. */
+export function pressureAhead(sim: Sim, observer: number, x: number, y: number, ahead: number): number {
+  let best = Infinity
+  for (const o of sim.teams[1 - sim.c.Player.team[observer]]) {
+    believe(sim, observer, o, near)
+    const dx = near.x + near.vx * ahead - x
+    const dy = near.y + near.vy * ahead - y
+    best = Math.min(best, Math.sqrt(dx * dx + dy * dy))
+  }
+  return best
+}
+
 /** The opponent the observer believes is nearest (x, y), with their believed state in `out`; -1 if none. */
 export function nearestOpponent(sim: Sim, observer: number, x: number, y: number, out: Belief): number {
   let best = -1

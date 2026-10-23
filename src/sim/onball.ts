@@ -3,10 +3,10 @@
 // getting the ball out of their hands.
 
 import { TICK_RATE } from './constants'
-import { lossValue, pitchValue, pressureAt } from './evaluate'
+import { lossValue, pitchValue, pressureAhead, pressureAt } from './evaluate'
 import { atan2, clamp, cos, sin } from './fmath'
 import { IntentKind, setIntent } from './intents'
-import { intercept, type Intercept } from './movement'
+import { intercept, topSpeed, type Intercept } from './movement'
 import { bestPass, PassType, type PassPlan } from './passing'
 import { believe, call, HEARING_RADIUS, type Belief } from './perception'
 import { heldFor, mustRelease } from './keeper'
@@ -82,6 +82,9 @@ export function decideOnBall(sim: Sim, eid: number): void {
   // Players shoot a little more readily than the numbers say.
   // Straight off the first touch only for a big chance; otherwise settle it first.
   const settled = held >= MIN_HOLD || xg > 0.15
+  // In range, running on is only worth a better shot at the end of the run.
+  const carryXg = estimateXg(sim, eid, carry.x, carry.y)
+  if (carryXg > 0) carry.score = Math.min(carry.score, carryXg)
   if (settled && xg > MIN_XG && xg * SHOT_BIAS >= Math.max(carry.score, pass ? pass.score : -1)) {
     setShotPlan(sim, eid, planShot(sim, eid, bx, by))
     return setIntent(sim, eid, IntentKind.Shoot)
@@ -113,12 +116,15 @@ function bestCarry(sim: Sim, eid: number, pressure: number): { x: number; y: num
   const x = c.Pos.x[eid]
   const y = c.Pos.y[eid]
   const toGoal = atan2(-y, dir * HALF_LENGTH - x)
+  // Seconds to run the ball to the end of a carry, roughly.
+  const duration = CARRY_DISTANCE / (topSpeed(sim, eid) * 0.7)
   let best = { x, y, score: -Infinity }
   for (const turn of CARRY_ANGLES) {
     const a = toGoal + turn
     const tx = clamp(x + cos(a) * CARRY_DISTANCE, -HALF_LENGTH + 1, HALF_LENGTH - 1)
     const ty = clamp(y + sin(a) * CARRY_DISTANCE, -HALF_WIDTH + 1, HALF_WIDTH - 1)
-    const room = pressureAt(sim, eid, (x + tx) / 2, (y + ty) / 2)
+    // Room where opponents will be by then, on the way and at the end (often the keeper).
+    const room = Math.min(pressureAhead(sim, eid, (x + tx) / 2, (y + ty) / 2, duration / 2), pressureAhead(sim, eid, tx, ty, duration))
     const risk = clamp((4 - room) / 4, 0, 1) * 0.6 + clamp((3 - pressure) / 3, 0, 1) * 0.3
     const score = (1 - risk) * pitchValue(sim, team, tx, ty) - risk * lossValue(sim, team, tx, ty) - Math.abs(turn) * 0.002
     if (score > best.score) best = { x: tx, y: ty, score }

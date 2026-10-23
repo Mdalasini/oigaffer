@@ -110,6 +110,42 @@ describe('chance quality', () => {
     decideOnBall(sim, striker)
     expect(sim.c.Intent.kind[striker]).toBe(IntentKind.Shoot)
   })
+
+  test('a striker 10 m out shoots rather than dribbling at the keeper', () => {
+    // From a flagged moment: running on would only take them into the keeper's arms.
+    const sim = emptyPitch()
+    const striker = sim.teams[1][9]
+    const [keeper, left, right, chaser] = [0, 2, 3, 5].map((i) => sim.teams[0][i])
+    place(sim, striker, -40.9, 4.1, -2.8, 0.8)
+    place(sim, sim.ball, -41.5, 4.3)
+    place(sim, keeper, -49.7, 1.1)
+    place(sim, left, -47.8, -5.2, -1.3, 2.1)
+    place(sim, right, -47.7, 14.5, -0.8, -0.2)
+    place(sim, chaser, -39.6, 1.3, -6.2, 0.6)
+    sim.m.ball.owner = striker
+    sim.c.Brain.gotBall[striker] = -100
+    revealAll(sim)
+    decideOnBall(sim, striker)
+    expect(sim.c.Intent.kind[striker]).toBe(IntentKind.Shoot)
+  })
+
+  test('with a teammate better placed than the shot, the striker passes rather than running on', () => {
+    const sim = emptyPitch()
+    const striker = sim.teams[1][9]
+    const [keeper, left, right, chaser] = [0, 2, 3, 5].map((i) => sim.teams[0][i])
+    place(sim, striker, -40.9, 4.1, -2.8, 0.8)
+    place(sim, sim.ball, -41.5, 4.3)
+    place(sim, keeper, -49.7, 1.1)
+    place(sim, left, -47.8, -5.2, -1.3, 2.1)
+    place(sim, right, -47.7, 14.5, -0.8, -0.2)
+    place(sim, chaser, -39.6, 1.3, -6.2, 0.6)
+    place(sim, sim.teams[1][8], -45, 10)
+    sim.m.ball.owner = striker
+    sim.c.Brain.gotBall[striker] = -100
+    revealAll(sim)
+    decideOnBall(sim, striker)
+    expect(sim.c.Intent.kind[striker]).not.toBe(IntentKind.Carry)
+  })
 })
 
 describe('headers', () => {
