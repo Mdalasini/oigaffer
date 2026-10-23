@@ -3,6 +3,7 @@ import { groundKickSpeed, rollDistance } from './ballmotion'
 import { componentArrays } from './components'
 import { TICK_RATE } from './constants'
 import { awardRestart, newMatch } from './match'
+import { revealAll } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { shapeTarget } from './shape'
 import { attackDir, roleOf, type Sim } from './sim'
@@ -59,8 +60,10 @@ describe('shape', () => {
     const cb = sim.teams[1][2]
     sim.m.possession = 0
     sim.c.Pos.y[sim.ball] = 0
+    revealAll(sim)
     const centre = shapeTarget(sim, cb, { x: 0, y: 0 })
     sim.c.Pos.y[sim.ball] = 25
+    revealAll(sim)
     const wide = shapeTarget(sim, cb, { x: 0, y: 0 })
     expect(wide.y).toBeGreaterThan(centre.y + 5)
   })

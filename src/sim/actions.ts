@@ -1,7 +1,7 @@
 // Primitive ball actions. Everything that changes who touched the ball goes
 // through here so possession bookkeeping and events stay in one place.
 
-import type { KickKind } from './events'
+import { emit, type KickKind } from './events'
 import { DT } from './constants'
 import { IntentKind, setIntent } from './intents'
 import type { Sim } from './sim'
@@ -27,7 +27,7 @@ export function kick(sim: Sim, eid: number, vx: number, vy: number, vz: number, 
   m.ball.owner = -1
   recordTouch(sim, eid)
   c.Brain.noTouchUntil[eid] = m.tick + Math.round(KICK_RECOVERY / DT)
-  m.events.push({ type: 'kick', tick: m.tick, by: eid, kind, to, x: c.Pos.x[ball], y: c.Pos.y[ball] })
+  emit(sim, { type: 'kick', by: eid, kind, to, x: c.Pos.x[ball], y: c.Pos.y[ball] })
   if (to >= 0) setIntent(sim, to, IntentKind.Receive, eid)
 }
 
@@ -50,7 +50,7 @@ export function takeControl(sim: Sim, eid: number): void {
   c.Air.vz[ball] = 0
   m.ball.owner = eid
   recordTouch(sim, eid)
-  m.events.push({ type: 'control', tick: m.tick, by: eid, x: c.Pos.x[ball], y: c.Pos.y[ball] })
+  emit(sim, { type: 'control', by: eid, x: c.Pos.x[ball], y: c.Pos.y[ball] })
 }
 
 /** Puts a dead ball on a spot. */

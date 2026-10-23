@@ -62,6 +62,14 @@ function round(v: number): number {
   return Math.round(v * 1000) / 1000
 }
 
+/** The sim as it was at `tick`, rebuilt from the flag's keyframe with the current code. */
+export function simAt(flag: Flag, tick: number): Sim {
+  const sim = createSim(flag.config)
+  restore(sim, flag.keyframe.snap)
+  while (sim.m.tick < tick) step(sim)
+  return sim
+}
+
 export interface Resim {
   sim: Sim
   /** Frames from the current code, laid out like Flag.frames.data. */

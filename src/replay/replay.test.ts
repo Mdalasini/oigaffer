@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Game } from '../game/Game'
 import { TICK_RATE } from '../sim/constants'
 import { label } from '../sim/sim'
-import { resimulate, type Flag } from './flag'
+import { resimulate, simAt, type Flag } from './flag'
 import { frameValue } from './recorder'
 import { report } from './report'
 
@@ -42,13 +42,15 @@ describe('flags', () => {
     const game = new Game(CFG)
     play(game, 10)
     game.selected = [game.sim.teams[1][9]]
-    const text = report(game.flag('check the striker'))
+    const flag = game.flag('check the striker')
+    const text = report(flag, { simAtFlag: simAt(flag, flag.flagTick) })
     expect(text).toContain('Note: check the striker')
     expect(text).toContain('Subjects: A9')
     expect(text).toContain('STATE at')
     expect(text).toContain('MAP at')
     expect(text).toContain('TRACE A9 (ST)')
     expect(text).toMatch(/kick pass \w+ -> \w+/)
+    expect(text).toContain('BELIEFS of A9')
   })
 
   test('loading a flag shows the flagged tick with its subjects selected', () => {

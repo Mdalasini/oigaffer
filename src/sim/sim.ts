@@ -2,6 +2,7 @@ import { addComponent, addEntity, createWorld, type World } from 'bitecs'
 import { createComponents, type Components } from './components'
 import { FORMATIONS, type Formation, type Role } from './formation'
 import { clamp } from './fmath'
+import type { Listeners } from './events'
 import { createScratch, type Scratch } from './scratch'
 import { createMatchState, type MatchConfig, type MatchState } from './state'
 import { next, type Rng } from './rng'
@@ -18,6 +19,8 @@ export interface Sim {
   formations: [Formation, Formation]
   /** Per-tick derived caches. Not part of a snapshot; rebuilt every tick. */
   scratch: Scratch
+  /** Event subscriptions; code, not state, so never snapshotted. */
+  listeners: Listeners
 }
 
 export const DEFAULT_CONFIG: MatchConfig = { seed: 1, halfMinutes: 45, formations: ['4-3-3', '3-4-3'] }
@@ -46,6 +49,7 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
       rollAttributes(c, eid, slot.role, m.rng)
       // Stagger decisions so the 22 brains do not all think on the same tick.
       c.Brain.nextThink[eid] = teams[team].length
+      c.Brain.nextScan[eid] = teams[team].length * 4
       c.Brain.noTouchUntil[eid] = -1
       c.Brain.lastTouch[eid] = -1
       teams[team].push(eid)
@@ -62,6 +66,7 @@ export function createSim(cfg: MatchConfig = DEFAULT_CONFIG): Sim {
     teams,
     formations,
     scratch: createScratch(),
+    listeners: {},
   }
 }
 

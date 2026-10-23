@@ -6,6 +6,9 @@ export const MAX_ENTITIES = 32
 
 const f64 = () => new Float64Array(MAX_ENTITIES)
 const i32 = () => new Int32Array(MAX_ENTITIES)
+/** One value per (observer, target) pair, indexed observer * MAX_ENTITIES + target. */
+const pairF64 = () => new Float64Array(MAX_ENTITIES * MAX_ENTITIES)
+const pairI32 = () => new Int32Array(MAX_ENTITIES * MAX_ENTITIES)
 
 export function createComponents() {
   return {
@@ -38,7 +41,9 @@ export function createComponents() {
     Motor: { tx: f64(), ty: f64(), speed: f64(), faceX: f64(), faceY: f64(), hasFace: i32() },
     /** The player's current plan; see intents.ts. */
     Intent: { kind: i32(), target: i32(), x: f64(), y: f64(), since: i32() },
-    Brain: { nextThink: i32(), noTouchUntil: i32(), lastTouch: i32() },
+    Brain: { nextThink: i32(), noTouchUntil: i32(), lastTouch: i32(), nextScan: i32(), nextCall: i32() },
+    /** What each player last perceived of every other entity, and on which tick. */
+    Memory: { x: pairF64(), y: pairF64(), vx: pairF64(), vy: pairF64(), seen: pairI32() },
   }
 }
 

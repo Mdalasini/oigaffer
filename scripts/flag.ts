@@ -12,7 +12,7 @@
 import { readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { resimulate, type Flag } from '../src/replay/flag'
+import { resimulate, simAt, type Flag } from '../src/replay/flag'
 import { clock, report } from '../src/replay/report'
 
 const FLAGS_DIR = resolve(import.meta.dir, '../flags')
@@ -65,6 +65,7 @@ const opts = {
   to: num(values.to),
   every: num(values.every),
   trace: values.trace?.split(',').filter(Boolean),
+  simAtFlag: simAt(flag, flag.flagTick),
 }
 
 console.log(`File: ${path}`)

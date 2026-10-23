@@ -2,6 +2,7 @@
 // derived from the formation slot, the ball and whether the team has it.
 
 import { clamp } from './fmath'
+import { believe, type Belief } from './perception'
 import { HALF_LENGTH, HALF_WIDTH } from './pitch'
 import { attackDir, type Sim } from './sim'
 
@@ -10,14 +11,17 @@ export interface Point {
   y: number
 }
 
-/** Shape target for a player in world coordinates. */
+const ball: Belief = { x: 0, y: 0, vx: 0, vy: 0 }
+
+/** Shape target for a player in world coordinates, from where they believe the ball is. */
 export function shapeTarget(sim: Sim, eid: number, out: Point): Point {
-  const { Player, Pos } = sim.c
+  const { Player } = sim.c
   const team = Player.team[eid]
   const slot = sim.formations[team].slots[Player.slot[eid]]
   const dir = attackDir(sim, team)
-  const bx = Pos.x[sim.ball] * dir
-  const by = Pos.y[sim.ball] * dir
+  believe(sim, eid, sim.ball, ball)
+  const bx = ball.x * dir
+  const by = ball.y * dir
   const inPossession = sim.m.possession === team
 
   let ax: number

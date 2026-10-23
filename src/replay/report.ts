@@ -7,6 +7,8 @@ import { INTENT_NAMES, type IntentKind } from '../sim/intents'
 import { HALF_LENGTH, HALF_WIDTH } from '../sim/pitch'
 import { Phase, Restart } from '../sim/state'
 import type { Flag } from './flag'
+import { age, believe } from '../sim/perception'
+import type { Sim } from '../sim/sim'
 import { ENTITY_FIELDS, FRAME_FIELDS } from './recorder'
 
 const PHASES = Object.fromEntries(Object.entries(Phase).map(([k, v]) => [v, k]))
@@ -25,6 +27,8 @@ export interface ReportOptions {
   /** Frames to report instead of the recorded ones (from a re-simulation). */
   data?: number[]
   events?: SimEvent[]
+  /** The sim at the flagged tick, for the subjects' beliefs (see flag.simAt). */
+  simAtFlag?: Sim
 }
 
 export function clock(tick: number): string {
@@ -65,18 +69,20 @@ export class FrameReader {
 
 export function describeEvent(flag: Flag, e: SimEvent): string {
   const name = (eid: number) => (eid < 0 ? '-' : (flag.labels[flag.entities.indexOf(eid)] ?? `#${eid}`))
-  const at = `(${e.type === 'goal' || e.type === 'phase' ? '' : `${fx(e.x, 0)}, ${fx(e.y, 0)}`})`
+  const at = (x: number, y: number) => `(${x.toFixed(1)}, ${y.toFixed(1)})`
   switch (e.type) {
     case 'kick':
-      return `kick ${e.kind} ${name(e.by)}${e.to >= 0 ? ` -> ${name(e.to)}` : ''} at ${at}`
+      return `kick ${e.kind} ${name(e.by)}${e.to >= 0 ? ` -> ${name(e.to)}` : ''} at ${at(e.x, e.y)}`
     case 'control':
-      return `control ${name(e.by)} at ${at}`
+      return `control ${name(e.by)} at ${at(e.x, e.y)}`
     case 'out':
-      return `out: ${RESTARTS[e.restart]} to ${e.team === 0 ? 'Home' : 'Away'} at ${at}, last touch ${name(e.lastTouch)}`
+      return `out: ${RESTARTS[e.restart]} to ${e.team === 0 ? 'Home' : 'Away'} at ${at(e.x, e.y)}, last touch ${name(e.lastTouch)}`
     case 'goal':
       return `GOAL ${e.team === 0 ? 'Home' : 'Away'}, scorer ${name(e.scorer)}`
     case 'phase':
       return `phase -> ${PHASES[e.phase]}`
+    case 'call':
+      return `call "${e.call}" ${name(e.by)} -> ${name(e.to)} about ${name(e.about)}`
   }
 }
 
@@ -108,6 +114,10 @@ export function report(flag: Flag, opts: ReportOptions = {}): string {
   for (const who of traced) {
     out.push('')
     out.push(...trace(flag, r, who, opts.from ?? -6, opts.to ?? 3, opts.every ?? 0.5))
+    if (opts.simAtFlag) {
+      out.push('')
+      out.push(...beliefs(flag, opts.simAtFlag, who))
+    }
   }
   return out.join('\n')
 }
@@ -209,5 +219,30 @@ function trace(flag: Flag, r: FrameReader, who: string, from: number, to: number
       `  ${rel(flag, t)}  (${fx(x)},${fx(y)})  ${speed.toFixed(1).padStart(5)}  ${String(head).padStart(4)}  ${intentName(r.get(t, i, 'intent')).padEnd(12)} ${name(r.get(t, i, 'target')).padEnd(6)}  ${d.toFixed(1).padStart(5)}   ${name(r.header(t, 'owner'))}`,
     )
   }
+  return out
+}
+
+/** Where a player thinks everyone is, for entries that are stale or off by more than a metre. */
+function beliefs(flag: Flag, sim: Sim, who: string): string[] {
+  const i = flag.labels.indexOf(who)
+  if (i < 0) return []
+  const observer = flag.entities[i]
+  const out = [
+    `BELIEFS of ${who} at +0.0s, re-simulated (stale > 0.3 s or off > 1 m; the ball always shown)`,
+    '  who   believed        actual           off   age',
+  ]
+  const b = { x: 0, y: 0, vx: 0, vy: 0 }
+  for (let k = 0; k < flag.entities.length; k++) {
+    const target = flag.entities[k]
+    if (target === observer) continue
+    believe(sim, observer, target, b)
+    const ax = sim.c.Pos.x[target]
+    const ay = sim.c.Pos.y[target]
+    const off = Math.hypot(b.x - ax, b.y - ay)
+    const seconds = age(sim, observer, target)
+    if (k !== 0 && seconds <= 0.3 && off <= 1) continue
+    out.push(`  ${flag.labels[k].padEnd(5)} (${fx(b.x)},${fx(b.y)})  (${fx(ax)},${fx(ay)})  ${off.toFixed(1).padStart(5)}  ${seconds.toFixed(1)}s`)
+  }
+  if (out.length === 3) out.push('  (everyone else seen within 0.3 s and placed within 1 m)')
   return out
 }
