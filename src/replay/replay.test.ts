@@ -3,6 +3,7 @@ import { Game } from '../game/Game'
 import { TICK_RATE } from '../sim/constants'
 import { label } from '../sim/sim'
 import { resimulate, simAt, type Flag } from './flag'
+import { Phase } from '../sim/state'
 import { frameValue } from './recorder'
 import { report } from './report'
 
@@ -104,4 +105,12 @@ describe('review regressions', () => {
     expect(text).toContain('Home 4-3-3 attacks -x')
     expect(text).toContain('spans half time')
   })
+})
+
+test('rebuilding a tick after full time fails instead of hanging', () => {
+  const game = new Game({ ...CFG, halfMinutes: 0.05 })
+  play(game, 12)
+  expect(game.sim.m.phase).toBe(Phase.FullTime)
+  const flag = game.flag('')
+  expect(() => simAt(flag, game.sim.m.tick + 10)).toThrow()
 })

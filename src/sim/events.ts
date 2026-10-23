@@ -35,7 +35,10 @@ export function emit(sim: Sim, input: EventInput): void {
 export function on<T extends SimEventType>(sim: Sim, type: T, fn: Listener<T>): () => void {
   const list = (sim.listeners[type] ??= []) as Listener<T>[]
   list.push(fn)
-  return () => list.splice(list.indexOf(fn), 1)
+  return () => {
+    const i = list.indexOf(fn)
+    if (i >= 0) list.splice(i, 1)
+  }
 }
 
 /** Events of a type from the previous tick and this one so far, oldest first. */

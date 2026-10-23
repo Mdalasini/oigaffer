@@ -67,7 +67,11 @@ function round(v: number): number {
 export function simAt(flag: Flag, tick: number): Sim {
   const sim = createSim(flag.config)
   restore(sim, flag.keyframe.snap)
-  while (sim.m.tick < tick) step(sim)
+  while (sim.m.tick < tick) {
+    const before = sim.m.tick
+    step(sim)
+    if (sim.m.tick === before) throw new Error(`the match ends before tick ${tick}`)
+  }
   return sim
 }
 

@@ -135,6 +135,8 @@ describe('review regressions', () => {
     const [a, b] = sim.teams[0]
     call(sim, a, 'man-on', b, -1)
     expect(heard).toEqual(['first', 'second'])
+    off()
+    expect(sim.listeners.call).toHaveLength(1)
   })
 
   test('a snapshot with a different set of components is refused', () => {
