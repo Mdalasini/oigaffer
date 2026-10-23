@@ -260,6 +260,25 @@ describe('close support', () => {
     expect(gap).toBeGreaterThan(8)
   })
 
+  test('a forward held onside by the ball weighs where they would really stand, not their slot beyond it', () => {
+    const sim = emptyPitch()
+    const { dir, carrier } = attack(sim, 30)
+    place(sim, carrier, 20 * dir, 0)
+    place(sim, sim.ball, 20.4 * dir, 0)
+    // The back line has dropped behind the ball, so the ball is the onside line.
+    ;[-20, -8, 4, 16].forEach((y, i) => place(sim, sim.teams[1][1 + i], 10 * dir, y))
+    const striker = sim.teams[0][9]
+    const marker = sim.teams[1][6]
+    place(sim, striker, 19.9 * dir, 3)
+    // Standing on the spot the striker's slot is pulled back to.
+    place(sim, marker, 19.9 * dir, 0.5)
+    revealAll(sim)
+    decideSupport(sim, striker, carrier)
+    expect(sim.c.Intent.mode[striker]).toBe(SUPPORT)
+    const t = openPlayTarget(sim, striker, { x: 0, y: 0 })
+    expect(Math.hypot(t.x - sim.c.Pos.x[marker], t.y - sim.c.Pos.y[marker])).toBeGreaterThan(4)
+  })
+
   test('players far from the ball keep their place in the shape', () => {
     const sim = emptyPitch()
     const { carrier } = attack(sim, 30)

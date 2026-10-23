@@ -103,20 +103,20 @@ export function decideSupport(sim: Sim, eid: number, carrier: number): void {
   }
 
   // Close support: the few nearest the ball find space to take a pass in rather than hold their slot.
-  if (toCarrier < SUPPORT_RANGE && supportRank(sim, eid, carrier, toCarrier) < SUPPORTERS) {
+  if (toCarrier < SUPPORT_RANGE && supportRank(sim, eid, carrier, cx, cy, toCarrier) < SUPPORTERS) {
     const keep = c.Intent.kind[eid] === IntentKind.Hold && c.Intent.mode[eid] === SUPPORT
     if (supportSpot(sim, eid, cx, cy, line, keep, spot)) return setIntent(sim, eid, IntentKind.Hold, -1, spot.x, spot.y, SUPPORT)
   }
   setIntent(sim, eid, IntentKind.Hold)
 }
 
-/** How many outfield teammates are nearer the carrier than `eid`. */
-function supportRank(sim: Sim, eid: number, carrier: number, toCarrier: number): number {
-  const { Pos } = sim.c
+/** How many outfield teammates `eid` sees nearer the carrier, believed to be at (cx, cy), than themselves. */
+function supportRank(sim: Sim, eid: number, carrier: number, cx: number, cy: number, toCarrier: number): number {
   let rank = 0
   for (const mate of sim.teams[teamOf(sim, eid)]) {
     if (mate === eid || mate === carrier || roleOf(sim, mate) === 'GK') continue
-    if (hypot(Pos.x[mate] - Pos.x[carrier], Pos.y[mate] - Pos.y[carrier]) < toCarrier) rank++
+    believe(sim, eid, mate, near)
+    if (hypot(near.x - cx, near.y - cy) < toCarrier) rank++
   }
   return rank
 }
@@ -134,6 +134,8 @@ function supportSpot(sim: Sim, eid: number, cx: number, cy: number, line: number
   const dir = attackDir(sim, team)
   shapeTarget(sim, eid, slot)
   openLane(sim, eid, sim.m.ball.owner, slot)
+  // Judged where they would really stand: no further up than the onside line.
+  if (slot.x * dir > line - 0.5) slot.x = (line - 0.5) * dir
   // Their place in the shape is the spot to beat.
   let best = spotValue(sim, eid, cx, cy, slot.x, slot.y, dir) + SUPPORT_MARGIN
   let found = false
