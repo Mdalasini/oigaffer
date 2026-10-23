@@ -8,11 +8,26 @@ import { BALL_RADIUS, TICK_RATE } from './constants'
 import { clamp, cos, sin, atan2 } from './fmath'
 import { keeperOf } from './keeper'
 import { bestPass, launch, PassType, strikePass, type PassPlan } from './passing'
-import { CENTRE_CIRCLE_RADIUS, GOAL_AREA_DEPTH, GOAL_HEIGHT, GOAL_WIDTH, HALF_LENGTH, HALF_WIDTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH } from './pitch'
+import { CENTRE_CIRCLE_RADIUS, GOAL_AREA_DEPTH, GOAL_HEIGHT, GOAL_WIDTH, HALF_LENGTH, HALF_WIDTH, PENALTY_AREA_DEPTH, PENALTY_AREA_WIDTH, PENALTY_SPOT_DISTANCE } from './pitch'
 import { chance, gauss, next, range } from './rng'
-import { estimateXg, planShot, strikeShot } from './shooting'
+import { planShot, strikeShot } from './shooting'
 import { attackDir, roleOf, teamOf, type Sim } from './sim'
 import { Restart } from './state'
+
+/** Longest the taker waits beyond the delay for everyone to reach their spot. */
+export const MAX_SET_WAIT = 6 * TICK_RATE
+
+/** Everyone with a set-piece spot is (nearly) on it. */
+export function setPieceReady(sim: Sim): boolean {
+  const { c } = sim
+  for (const e of sim.players) {
+    if (!c.SetPiece.active[e]) continue
+    const dx = c.Pos.x[e] - c.SetPiece.x[e]
+    const dy = c.Pos.y[e] - c.SetPiece.y[e]
+    if (dx * dx + dy * dy > 2.5 * 2.5) return false
+  }
+  return true
+}
 
 /** How long players get to take up positions before the restart is taken. */
 export function restartDelay(kind: Restart, x: number, sim: Sim, team: number): number {
@@ -61,8 +76,17 @@ export function arrangeSetPiece(sim: Sim): void {
 
   if (kind === Restart.Penalty) {
     // Everyone but taker and keeper outside the box and arc, behind the ball.
+    // Outside the area and at least 9.15 m (the arc) from the spot, spread across the width.
     const spread = [...attackers, ...defenders]
-    spread.forEach((e, i) => set(sim, e, HALF_LENGTH - PENALTY_AREA_DEPTH - 2 - (i % 3) * 2, -16 + i * 1.6, dir))
+    const spot = HALF_LENGTH - PENALTY_SPOT_DISTANCE
+    spread.forEach((e, i) => {
+      const x = HALF_LENGTH - PENALTY_AREA_DEPTH - 2 - (i % 3) * 2
+      let y = -16 + i * 1.6
+      const dx = spot - x
+      const minY = Math.sqrt(Math.max(0, (CENTRE_CIRCLE_RADIUS + 1) * (CENTRE_CIRCLE_RADIUS + 1) - dx * dx))
+      if (Math.abs(y) < minY) y = (y < 0 ? -1 : 1) * minY
+      set(sim, e, x, y, dir)
+    })
     set(sim, gk, HALF_LENGTH - 0.2, 0, dir)
     return
   }
@@ -162,7 +186,8 @@ export function takeSetPiece(sim: Sim): void {
       return cross(sim, taker, true)
     case Restart.FreeKick: {
       const goalDist = Math.sqrt((targetX(sim, team) - bx) * (targetX(sim, team) - bx) + by * by)
-      if (!indirect && goalDist < 30 && Math.abs(by) < 20 && estimateXg(sim, taker, bx, by) > 0.03) return freeKickShot(sim, taker)
+      // In range and central enough, a direct free kick is a shot over or round the wall.
+      if (!indirect && goalDist < 28 && Math.abs(by) < 16) return freeKickShot(sim, taker)
       if (!indirect && goalDist < 35) return cross(sim, taker, false)
       break
     }

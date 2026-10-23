@@ -6,7 +6,7 @@ import { emit } from './events'
 import { IntentKind, setIntent } from './intents'
 import { bestPass, strikePass } from './passing'
 import { revealAll } from './perception'
-import { arrangeSetPiece, restartDelay, takeSetPiece } from './setpieces'
+import { arrangeSetPiece, MAX_SET_WAIT, restartDelay, setPieceReady, takeSetPiece } from './setpieces'
 import { kickOffTarget, type Point } from './shape'
 import { attackDir, createSim, roleOf, type Sim } from './sim'
 import { Phase, Restart, type MatchConfig } from './state'
@@ -130,6 +130,8 @@ export function matchSystem(sim: Sim): void {
       const dy = c.Pos.y[ball] - c.Pos.y[taker]
       const delay = m.phase === Phase.KickOff ? RESTART_DELAY : restartDelay(m.restart.kind, m.restart.x, sim, m.restart.team)
       if (elapsed < delay || dx * dx + dy * dy > FOOT_REACH * FOOT_REACH) return
+      // Wait for everyone to get to their set-piece spot, but not forever.
+      if (m.phase === Phase.Restart && !setPieceReady(sim) && elapsed < delay + MAX_SET_WAIT) return
       enterPhase(sim, Phase.Play)
       setIntent(sim, taker, IntentKind.Hold)
       if (m.restart.indirect) m.ball.indirectFrom = taker

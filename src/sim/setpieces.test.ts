@@ -114,3 +114,44 @@ describe('throw-ins and goal kicks', () => {
     expect(Math.abs(sim.c.SetPiece.x[striker])).toBeLessThan(HALF_LENGTH - PENALTY_AREA_DEPTH)
   })
 })
+
+describe('review regressions', () => {
+  test('a corner is not taken until the players going up have got there', () => {
+    const sim = newMatch(CFG)
+    const dir = attackDir(sim, 0)
+    awardRestart(sim, Restart.Corner, 0, dir * HALF_LENGTH, HALF_WIDTH)
+    const assigned = sim.players.filter((e) => sim.c.SetPiece.active[e])
+    const spots = assigned.map((e) => spot(sim, e))
+    const awarded = sim.m.tick
+    let kicked = false
+    let worst = 0
+    for (let i = 0; i < 20 * TICK_RATE && !kicked; i++) {
+      step(sim)
+      kicked = sim.m.events.some((e) => e.type === 'kick')
+      if (kicked) assigned.forEach((e, k) => (worst = Math.max(worst, Math.hypot(sim.c.Pos.x[e] - spots[k][0], sim.c.Pos.y[e] - spots[k][1]))))
+    }
+    expect(kicked).toBe(true)
+    // Either everyone made it, or the wait ran out.
+    expect(worst < 3 || sim.m.tick - awarded >= 10 * TICK_RATE).toBe(true)
+  })
+
+  test('a central direct free kick 20 m out is a shot', () => {
+    const sim = newMatch(CFG)
+    const dir = attackDir(sim, 0)
+    awardFreeKick(sim, Restart.FreeKick, 0, dir * (HALF_LENGTH - 20), 2, false)
+    const kick = run(sim, 16).find((e) => e.type === 'kick')
+    expect(kick).toMatchObject({ kind: 'shot' })
+  })
+
+  test('at a penalty nobody else is inside the arc', () => {
+    const sim = newMatch(CFG)
+    const dir = attackDir(sim, 0)
+    const spotX = dir * (HALF_LENGTH - PENALTY_SPOT_DISTANCE)
+    awardFreeKick(sim, Restart.Penalty, 0, spotX, 0, false)
+    for (const e of sim.players) {
+      if (e === sim.m.restart.taker || e === keeperOf(sim, 1)) continue
+      const [x, y] = spot(sim, e)
+      expect(Math.hypot(x - spotX, y)).toBeGreaterThanOrEqual(CENTRE_CIRCLE_RADIUS)
+    }
+  })
+})
